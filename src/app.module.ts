@@ -1,0 +1,90 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { GraphQLModule } from '@nestjs/graphql';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { typeOrmConfig } from './config/typeorm.config';
+import { RedisModule } from './config/redis.module';
+import { MailModule } from './modules/mail/mail.module';
+import { AppResolver } from './app.resolver';
+import { PassportModule } from '@nestjs/passport';
+import { JwtModule } from '@nestjs/jwt';
+import { jwtConfig } from './config/jwt.config';
+import { UsersModule } from './modules/users/users.module';
+import { AircraftModule } from './modules/aircraft/aircraft.module';
+import { ReservationsModule } from './modules/reservations/reservations.module';
+import { MaintenanceModule } from './modules/maintenance/maintenance.module';
+import { LicensesModule } from './modules/licenses/licenses.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FlightsModule } from './modules/flights/flights.module';
+import { IncidentsModule } from './modules/incidents/incidents.module';
+import { InstructionCoursesModule } from './modules/instruction-courses/instruction-courses.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { RolesModule } from './modules/roles/roles.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+
+    //JWT Configuration
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: jwtConfig,
+    }),
+
+    // Configuration TypeORM
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: typeOrmConfig,
+    }),
+
+    // Configuration GraphQL
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      autoSchemaFile: true,
+      playground: true,
+      path: process.env.GRAPHQL_ENDPOINT || '/graphql',
+    }),
+
+    // Configuration Redis
+    RedisModule,
+
+    // Mail Module
+    MailModule,
+
+    UsersModule,
+
+    AircraftModule,
+
+    ReservationsModule,
+
+    MaintenanceModule,
+
+    LicensesModule,
+
+    InvoicesModule,
+
+    NotificationsModule,
+
+    FlightsModule,
+
+    IncidentsModule,
+
+    InstructionCoursesModule,
+
+    ExpensesModule,
+
+    AuditModule,
+
+    RolesModule,
+  ],
+  providers: [AppResolver],
+})
+export class AppModule {}
