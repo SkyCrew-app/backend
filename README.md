@@ -1,98 +1,274 @@
-<div align="center" id="top"> 
-  <img src="./.github/app.gif" alt="Backend" />
+# ✈️ SkyCrew - AeroClub Management System
 
-  &#xa0;
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D14-brightgreen)](https://nodejs.org/)
+[![NestJS](https://img.shields.io/badge/backend-NestJS-e0234e)](https://nestjs.com/)
+[![React](https://img.shields.io/badge/frontend-React-61DAFB)](https://reactjs.org/)
 
-  <!-- <a href="https://backend.netlify.app">Demo</a> -->
-</div>
+---
 
-<h1 align="center">Backend</h1>
+## 📝 Description
 
-<p align="center">
-  <img alt="Github top language" src="https://img.shields.io/github/languages/top/{{YOUR_GITHUB_USERNAME}}/backend?color=56BEB8">
+**SkyCrew** is a comprehensive web-based application designed to streamline the management of an aeroclub. It offers real-time tracking of aircraft, reservation management, pilot certifications, maintenance tracking, and much more.
 
-  <img alt="Github language count" src="https://img.shields.io/github/languages/count/{{YOUR_GITHUB_USERNAME}}/backend?color=56BEB8">
+---
 
-  <img alt="Repository size" src="https://img.shields.io/github/repo-size/{{YOUR_GITHUB_USERNAME}}/backend?color=56BEB8">
+## 🌟 Features
 
-  <img alt="License" src="https://img.shields.io/github/license/{{YOUR_GITHUB_USERNAME}}/backend?color=56BEB8">
+- **🛩️ Real-time Fleet Tracking**: View aircraft availability, maintenance status, and flight history.
+- **📅 Aircraft Reservations**: Automated booking system with conflict detection and notifications.
+- **📖 Flight Logs & Maintenance Tracking**: Log flights and track maintenance history for each aircraft.
+- **🎓 Pilot Qualifications**: Manage pilot licenses, certifications, and track flight hours.
+- **👨‍🏫 Instructor Availability**: Plan instructor-led flights and manage availability.
+- **💰 Cost Tracking**: Monitor operational expenses and aircraft utilization.
+- **🔒 Security Audits**: Plan and log security inspections.
+- **💳 Billing & Payments**: Automatically generate invoices for members and process online payments.
 
-  <!-- <img alt="Github issues" src="https://img.shields.io/github/issues/{{YOUR_GITHUB_USERNAME}}/backend?color=56BEB8" /> -->
+---
 
-  <!-- <img alt="Github forks" src="https://img.shields.io/github/forks/{{YOUR_GITHUB_USERNAME}}/backend?color=56BEB8" /> -->
+## 🛠️ Tech Stack
 
-  <!-- <img alt="Github stars" src="https://img.shields.io/github/stars/{{YOUR_GITHUB_USERNAME}}/backend?color=56BEB8" /> -->
-</p>
+- **Backend**: [NestJS](https://nestjs.com/) 🐺, [GraphQL](https://graphql.org/) 🕸️, [TypeORM](https://typeorm.io/) 📚, [PostgreSQL](https://www.postgresql.org/) 🐘
+- **Frontend**: [React.js](https://reactjs.org/) ⚛️
+- **Database**: [PostgreSQL](https://www.postgresql.org/) 🐘
+- **Messaging & Notifications**: [Mailgun](https://www.mailgun.com/) ✉️, SMS 📱
+- **Background Processing**: [Bull](https://github.com/OptimalBits/bull) 🐂 (with [Redis](https://redis.io/) 🧰)
 
-<!-- Status -->
+---
 
-<!-- <h4 align="center"> 
-	🚧  Backend 🚀 Under construction...  🚧
-</h4> 
+## 📸 Screenshots
 
-<hr> -->
+![Dashboard Screenshot](https://via.placeholder.com/800x400.png?text=Dashboard+Screenshot)
+*An overview of the main dashboard displaying key metrics and notifications.*
 
-<p align="center">
-  <a href="#dart-about">About</a> &#xa0; | &#xa0; 
-  <a href="#sparkles-features">Features</a> &#xa0; | &#xa0;
-  <a href="#rocket-technologies">Technologies</a> &#xa0; | &#xa0;
-  <a href="#white_check_mark-requirements">Requirements</a> &#xa0; | &#xa0;
-  <a href="#checkered_flag-starting">Starting</a> &#xa0; | &#xa0;
-  <a href="#memo-license">License</a> &#xa0; | &#xa0;
-  <a href="https://github.com/{{YOUR_GITHUB_USERNAME}}" target="_blank">Author</a>
-</p>
+![Aircraft Tracking](https://via.placeholder.com/800x400.png?text=Aircraft+Tracking)
+*Real-time fleet tracking with detailed aircraft information.*
 
-<br>
+---
 
-## :dart: About ##
+## ⚙️ Installation
 
-Describe your project
+To set up the project locally, follow these steps:
 
-## :sparkles: Features ##
+### **Prerequisites**
 
-:heavy_check_mark: Feature 1;\
-:heavy_check_mark: Feature 2;\
-:heavy_check_mark: Feature 3;
+Ensure you have the following installed:
 
-## :rocket: Technologies ##
+- [Node.js](https://nodejs.org/) (v14 or above) 📦
+- [PostgreSQL](https://www.postgresql.org/) 🐘
+- [Redis](https://redis.io/) 🧰
+- [Git](https://git-scm.com/) 🔧
 
-The following tools were used in this project:
+### **Backend Setup**
 
-- [Expo](https://expo.io/)
-- [Node.js](https://nodejs.org/en/)
-- [React](https://pt-br.reactjs.org/)
-- [React Native](https://reactnative.dev/)
-- [TypeScript](https://www.typescriptlang.org/)
+1. **Clone the repository:**
 
-## :white_check_mark: Requirements ##
+   ```bash
+   git clone https://github.com/yourusername/aeroclub-management.git
+   cd aeroclub-management
+   ```
 
-Before starting :checkered_flag:, you need to have [Git](https://git-scm.com) and [Node](https://nodejs.org/en/) installed.
+2. **Install backend dependencies:**
 
-## :checkered_flag: Starting ##
+   ```bash
+   cd backend
+   npm install
+   ```
+
+3. **Set up environment variables:**
+
+   Create a `.env` file in the backend root directory:
+
+   ```env
+   DATABASE_HOST=localhost
+   DATABASE_PORT=5432
+   DATABASE_USERNAME=your_postgres_user
+   DATABASE_PASSWORD=your_postgres_password
+   DATABASE_NAME=aeroclub_db
+   JWT_SECRET=your_jwt_secret
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
+   MAILGUN_API_KEY=your_mailgun_api_key
+   MAILGUN_DOMAIN=your_mailgun_domain
+   ```
+
+4. **Run database migrations:**
+
+   ```bash
+   npm run typeorm migration:run
+   ```
+
+5. **Start the NestJS backend server:**
+
+   ```bash
+   npm run start:dev
+   ```
+
+### **Frontend Setup**
+
+1. **Navigate to the frontend directory:**
+
+   ```bash
+   cd ../frontend
+   ```
+
+2. **Install frontend dependencies:**
+
+   ```bash
+   npm install
+   ```
+
+3. **Start the React frontend development server:**
+
+   ```bash
+   npm start
+   ```
+
+### **Running Redis**
+
+Ensure Redis is running. You can use Docker to run Redis:
 
 ```bash
-# Clone this project
-$ git clone https://github.com/{{YOUR_GITHUB_USERNAME}}/backend
-
-# Access
-$ cd backend
-
-# Install dependencies
-$ yarn
-
-# Run the project
-$ yarn start
-
-# The server will initialize in the <http://localhost:3000>
+docker run -d -p 6379:6379 redis
 ```
 
-## :memo: License ##
+---
 
-This project is under license from MIT. For more details, see the [LICENSE](LICENSE.md) file.
+## 🎮 Usage
 
+Once both the backend and frontend are running, navigate to `http://localhost:3000` in your browser to access the AeroClub Management System.
 
-Made with :heart: by <a href="https://github.com/{{YOUR_GITHUB_USERNAME}}" target="_blank">{{YOUR_NAME}}</a>
+- **GraphQL Playground**: Access it at `http://localhost:3000/graphql` for testing API queries.
+- **Default Credentials**: Use `admin@example.com` with password `admin123` for initial access (if set up).
 
-&#xa0;
+---
 
-<a href="#top">Back to top</a>
+## 📚 API Documentation
+
+The backend exposes a **GraphQL API**. Explore the schema and run queries using the GraphQL Playground.
+
+### **Example Queries**
+
+#### 🧑‍✈️ Fetch All Users
+
+```graphql
+query {
+  getUsers {
+    id
+    first_name
+    last_name
+    email
+  }
+}
+```
+
+#### ✈️ Create a New Reservation
+
+```graphql
+mutation {
+  createReservation(
+    createReservationInput: {
+      aircraft_id: 1,
+      user_id: 1,
+      reservation_date: "2024-12-01",
+      start_time: "2024-12-01T10:00:00Z",
+      end_time: "2024-12-01T12:00:00Z"
+    }
+  ) {
+    id
+    aircraft {
+      registration_number
+    }
+    user {
+      first_name
+      last_name
+    }
+    start_time
+    end_time
+  }
+}
+```
+
+---
+
+## 🧪 Testing
+
+To run unit tests for the backend:
+
+```bash
+cd backend
+npm run test
+```
+
+---
+
+## 📅 Roadmap
+
+- [ ] **Multi-language Support**: Implement localization for broader reach.
+- [ ] **Mobile App Integration**: Develop companion apps for iOS and Android.
+- [ ] **Advanced Analytics**: Add reporting tools for data-driven decisions.
+- [ ] **Third-party Integrations**: Connect with maintenance and booking platforms.
+
+---
+
+## 🐛 Known Issues
+
+- **Email Notifications**: Some users may experience delays due to SMTP configurations.
+- **Timezone Discrepancies**: Reservation times may not adjust for different timezones.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. **Fork the Project**
+
+2. **Create a Feature Branch**
+
+   ```bash
+   git checkout -b feature/YourFeature
+   ```
+
+3. **Commit Your Changes**
+
+   ```bash
+   git commit -m 'Add Your Feature'
+   ```
+
+4. **Push to the Branch**
+
+   ```bash
+   git push origin feature/YourFeature
+   ```
+
+5. **Open a Pull Request**
+
+---
+
+## 📝 License
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgements
+
+- **NestJS Community**: For their comprehensive documentation and support.
+- **React Contributors**: For making frontend development intuitive.
+- **Aviation Enthusiasts**: Inspiring the creation of this management system.
+
+---
+
+## 📬 Contact
+
+For any inquiries or issues, feel free to reach out:
+
+- **Name**: Your Name
+- **Email**: [your.email@example.com](mailto:your.email@example.com)
+- **LinkedIn**: [Your LinkedIn Profile](https://linkedin.com/in/yourprofile)
+- **GitHub**: [YourUsername](https://github.com/yourusername)
+
+---
+
+*Made with ❤️ by MrBartou.*
