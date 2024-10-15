@@ -37,4 +37,20 @@ export class UsersService {
       await this.usersRepository.save(user);
     }
   }
+
+  async setPassword(email: string, password: string): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { email } });
+    if (!user) throw new Error('User not found');
+
+    user.password = password;
+    await this.usersRepository.save(user);
+  }
+
+  async confirmEmail(email: string): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { email } });
+    if (!user) throw new Error('User not found');
+
+    user.isEmailConfirmed = true;
+    await this.usersRepository.save(user);
+  }
 }

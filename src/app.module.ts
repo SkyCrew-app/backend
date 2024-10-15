@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { typeOrmConfig } from './config/typeorm.config';
 import { RedisModule } from './config/redis.module';
-import { MailModule } from './modules/mail/mail.module';
+import { MailerModule } from './modules/mail/mailer.module';
 import { AppResolver } from './app.resolver';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
@@ -24,6 +24,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AdministrationModule } from './modules/administration/administration.module';
 
 @Module({
   imports: [
@@ -62,7 +63,7 @@ import { AuthModule } from './modules/auth/auth.module';
     RedisModule,
 
     // Mail Module
-    MailModule,
+    MailerModule,
 
     UsersModule,
 
@@ -91,6 +92,8 @@ import { AuthModule } from './modules/auth/auth.module';
     RolesModule,
 
     AuthModule,
+
+    AdministrationModule,
   ],
   providers: [AppResolver],
 })
