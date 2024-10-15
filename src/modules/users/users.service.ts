@@ -1,6 +1,7 @@
+import * as bcrypt from 'bcrypt';
 import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
 
 @Injectable()
@@ -14,8 +15,26 @@ export class UsersService {
     return this.usersRepository.find();
   }
 
-  create(userData: Partial<User>): Promise<User> {
+  findOneByEmail(email: string): Promise<User> {
+    return this.usersRepository.findOne({ where: { email } });
+  }
+
+  async create(userData: Partial<User>): Promise<User> {
+    if (userData.password) {
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+      userData.password = hashedPassword;
+    }
+
     const newUser = this.usersRepository.create(userData);
     return this.usersRepository.save(newUser);
+  }
+
+  // Méthode pour stocker le secret 2FA dans la base de données
+  async set2FASecret(email: string, secret: string): Promise<void> {
+    const user = await this.findOneByEmail(email);
+    if (user) {
+      user.twoFactorAuthSecret = secret;
+      await this.usersRepository.save(user);
+    }
   }
 }
