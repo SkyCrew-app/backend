@@ -23,6 +23,7 @@ import { InstructionCoursesModule } from './modules/instruction-courses/instruct
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { RolesModule } from './modules/roles/roles.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -51,6 +52,10 @@ import { RolesModule } from './modules/roles/roles.module';
       autoSchemaFile: true,
       playground: true,
       path: process.env.GRAPHQL_ENDPOINT || '/graphql',
+      context: ({ req, res }: { req: Request; res: Response }) => ({
+        req,
+        res,
+      }),
     }),
 
     // Configuration Redis
@@ -84,6 +89,8 @@ import { RolesModule } from './modules/roles/roles.module';
     AuditModule,
 
     RolesModule,
+
+    AuthModule,
   ],
   providers: [AppResolver],
 })
