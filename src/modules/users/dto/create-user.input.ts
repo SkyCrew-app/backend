@@ -11,10 +11,10 @@ export class CreateUserInput {
   @Field()
   email: string;
 
-  @Field()
+  @Field({ nullable: true })
   password: string;
 
-  @Field()
+  @Field({ nullable: true })
   is2FAEnabled: boolean;
 
   @Field({ nullable: true })

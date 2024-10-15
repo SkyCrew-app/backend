@@ -25,13 +25,17 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Column()
-  @Field()
+  @Field({ nullable: true })
+  @Column({ nullable: true })
   password: string;
 
   @Field(() => Boolean)
   @Column({ default: false })
   is2FAEnabled: boolean;
+
+  @Field(() => Boolean)
+  @Column({ default: false })
+  isEmailConfirmed: boolean;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
