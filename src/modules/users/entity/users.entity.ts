@@ -25,6 +25,18 @@ export class User {
   @Column({ unique: true })
   email: string;
 
+  @Column()
+  @Field()
+  password: string;
+
+  @Field(() => Boolean)
+  @Column({ default: false })
+  is2FAEnabled: boolean;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  twoFactorAuthSecret: string;
+
   @Field({ nullable: true })
   @Column({ nullable: true })
   phone_number: string;
