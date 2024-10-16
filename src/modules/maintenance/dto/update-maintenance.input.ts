@@ -1,4 +1,5 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
+import { MaintenanceType } from '../entity/maintenance-type.enum';
 
 @InputType()
 export class UpdateMaintenanceInput {
@@ -9,10 +10,13 @@ export class UpdateMaintenanceInput {
   aircraft_id?: number;
 
   @Field({ nullable: true })
-  maintenance_date?: Date;
+  start_date?: Date;
 
   @Field({ nullable: true })
-  maintenance_type?: string;
+  end_date?: Date;
+
+  @Field(() => MaintenanceType, { nullable: true })
+  maintenance_type?: MaintenanceType;
 
   @Field({ nullable: true })
   description?: string;
@@ -25,4 +29,10 @@ export class UpdateMaintenanceInput {
 
   @Field(() => Int, { nullable: true })
   technician_id?: number;
+
+  @Field(() => [String], { nullable: true })
+  images_url?: string[];
+
+  @Field(() => [String], { nullable: true })
+  documents_url?: string[];
 }
