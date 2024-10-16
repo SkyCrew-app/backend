@@ -19,6 +19,13 @@ export class AircraftService {
     });
   }
 
+  findOne(aircraftId: number): Promise<Aircraft> {
+    return this.aircraftRepository.findOneOrFail({
+      where: { id: aircraftId },
+      relations: ['reservations', 'maintenances'],
+    });
+  }
+
   async create(
     createAircraftInput: CreateAircraftInput,
     filePaths: string[],
