@@ -22,6 +22,14 @@ export class Aircraft {
   @Column()
   year_of_manufacture: number;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  image_url: string;
+
+  @Field(() => [String], { nullable: true })
+  @Column('simple-array', { nullable: true })
+  documents_url: string[];
+
   @Field()
   @Column({ default: 'available' })
   availability_status: string;

@@ -24,7 +24,10 @@ export class UpdateAircraftInput {
   hourly_cost?: number;
 
   @Field({ nullable: true })
-  insurance_document_url?: string;
+  image_url?: string;
+
+  @Field(() => [String], { nullable: true })
+  documents_url: string[];
 
   @Field({ nullable: true })
   last_inspection_date?: Date;
