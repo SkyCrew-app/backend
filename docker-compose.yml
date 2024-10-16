@@ -10,7 +10,6 @@ services:
     depends_on:
       - db
       - redis
-      - rabbitmq
       - mailhog
     environment:
       - DB_HOST=db
@@ -20,7 +19,6 @@ services:
       - DB_NAME=mydb
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - RABBITMQ_URL=amqp://rabbitmq
       - MAIL_HOST=mailhog
       - MAIL_PORT=1025
       - MAIL_USER=null
@@ -43,12 +41,6 @@ services:
     image: redis:alpine
     ports:
       - '6379:6379'
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - '5672:5672'
-      - '15672:15672'
 
   mailhog:
     image: mailhog/mailhog
