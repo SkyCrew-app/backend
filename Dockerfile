@@ -10,6 +10,7 @@ RUN npm install
 
 # Copier tout le code source
 COPY . .
+COPY .env .env
 
 # Exposer le port de l'application
 EXPOSE 3000
