@@ -8,7 +8,7 @@ export class CreateReservationInput {
   @Field(() => Int)
   user_id: number;
 
-  @Field()
+  @Field({ nullable: true })
   reservation_date: Date;
 
   @Field()
@@ -25,4 +25,10 @@ export class CreateReservationInput {
 
   @Field(() => Float, { nullable: true })
   estimated_flight_hours?: number;
+
+  @Field({ nullable: true })
+  notes?: string;
+
+  @Field({ nullable: true })
+  status?: string;
 }
