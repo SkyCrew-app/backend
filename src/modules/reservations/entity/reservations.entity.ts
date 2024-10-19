@@ -1,7 +1,30 @@
-import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  ObjectType,
+  Field,
+  Int,
+  Float,
+  registerEnumType,
+} from '@nestjs/graphql';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  OneToOne,
+} from 'typeorm';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
+import { Flight } from 'src/modules/flights/entity/flights.entity';
+
+export enum ReservationStatus {
+  PENDING = 'pending',
+  CONFIRMED = 'confirmed',
+  CANCELLED = 'cancelled',
+}
+
+registerEnumType(ReservationStatus, {
+  name: 'ReservationStatus',
+});
 
 @ObjectType()
 @Entity('reservations')
@@ -11,15 +34,21 @@ export class Reservation {
   id: number;
 
   @Field(() => Aircraft)
-  @ManyToOne(() => Aircraft, (aircraft) => aircraft.reservations)
+  @ManyToOne(() => Aircraft, (aircraft) => aircraft.reservations, {
+    eager: false,
+  })
   aircraft: Aircraft;
 
   @Field(() => User)
-  @ManyToOne(() => User, (user) => user.reservations)
+  @ManyToOne(() => User, (user) => user.reservations, { eager: false })
   user: User;
 
-  @Field()
-  @Column()
+  @Field(() => Flight)
+  @OneToOne(() => Flight, (flight) => flight.reservation)
+  flight: Flight;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
   reservation_date: Date;
 
   @Field()
@@ -38,9 +67,13 @@ export class Reservation {
   @Column({ nullable: true })
   purpose: string;
 
-  @Field()
-  @Column({ default: 'confirmed' })
-  status: string;
+  @Field(() => ReservationStatus)
+  @Column({
+    type: 'enum',
+    enum: ReservationStatus,
+    default: ReservationStatus.CONFIRMED,
+  })
+  status: ReservationStatus;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
