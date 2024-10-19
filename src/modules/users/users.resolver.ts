@@ -30,4 +30,10 @@ export class UsersResolver {
       date_of_birth,
     });
   }
+
+  @Query(() => User)
+  @UseGuards(JwtAuthGuard)
+  userByEmail(@Args('email') email: string) {
+    return this.usersService.findOneByEmail(email);
+  }
 }
