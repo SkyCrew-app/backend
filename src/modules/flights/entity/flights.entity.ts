@@ -1,5 +1,11 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  OneToOne,
+} from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 
@@ -45,4 +51,8 @@ export class Flight {
   @Field(() => Boolean)
   @Column({ default: false })
   milestone_reached: boolean;
+
+  @Field(() => Reservation)
+  @OneToOne(() => Reservation, (reservation) => reservation.id)
+  reservation_id: Reservation;
 }
