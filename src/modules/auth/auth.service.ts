@@ -26,7 +26,6 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
-  // Générer un secret 2FA pour l'utilisateur
   async generate2FASecret(userEmail: string) {
     const secret = speakeasy.generateSecret({
       name: `SkyCrew (${userEmail})`,
@@ -34,13 +33,11 @@ export class AuthService {
 
     const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url);
 
-    // Enregistrer le secret dans la base de données pour cet utilisateur
     await this.usersService.set2FASecret(userEmail, secret.base32);
 
     return { secret: secret.base32, qrCodeUrl };
   }
 
-  // Vérifier le code 2FA soumis par l'utilisateur
   async verify2FACode(userEmail: string, token: string): Promise<boolean> {
     const user = await this.usersService.findOneByEmail(userEmail);
 
