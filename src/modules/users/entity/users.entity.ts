@@ -61,6 +61,18 @@ export class User {
   @Column({ nullable: true })
   total_flight_hours: number;
 
+  @Field(() => Boolean)
+  @Column({ default: true })
+  email_notifications_enabled: boolean;
+
+  @Field(() => Boolean)
+  @Column({ default: false })
+  sms_notifications_enabled: boolean;
+
+  @Field(() => Boolean)
+  @Column({ default: true })
+  newsletter_subscribed: boolean;
+
   @Field(() => [Role])
   @OneToMany(() => Role, (role) => role.users)
   roles: Role[];

@@ -25,6 +25,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdministrationModule } from './modules/administration/administration.module';
+import { GraphQLUpload } from 'graphql-upload-ts';
 
 @Module({
   imports: [
@@ -95,6 +96,12 @@ import { AdministrationModule } from './modules/administration/administration.mo
 
     AdministrationModule,
   ],
-  providers: [AppResolver],
+  providers: [
+    AppResolver,
+    {
+      provide: 'Upload',
+      useValue: GraphQLUpload,
+    },
+  ],
 })
 export class AppModule {}
