@@ -117,4 +117,8 @@ export class AircraftService {
     aircraft.availability_status = availabilityStatus;
     return this.aircraftRepository.save(aircraft);
   }
+
+  aircraftHistory(options?: any): Promise<Aircraft[]> {
+    return this.aircraftRepository.find(options);
+  }
 }
