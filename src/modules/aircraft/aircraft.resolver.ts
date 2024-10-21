@@ -21,15 +21,14 @@ export class AircraftResolver {
     @Args({ name: 'file', type: () => GraphQLUpload, nullable: true })
     file?: FileUpload,
     @Args({ name: 'image', type: () => GraphQLUpload, nullable: true })
-    image?: FileUpload, // Ajout de l'image
+    image?: FileUpload,
   ): Promise<Aircraft> {
     const filePaths = [];
     let imagePath = null;
 
-    // Gérer les fichiers de documents
     if (file) {
       const { createReadStream, filename } = await file;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp'); // Temporaire
+      const uploadDir = path.join(__dirname, '../../uploads/tmp');
       if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
 
       const filePath = path.join(uploadDir, filename);
@@ -46,7 +45,7 @@ export class AircraftResolver {
     // Gérer l'image
     if (image) {
       const { createReadStream, filename } = await image;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp'); // Temporaire
+      const uploadDir = path.join(__dirname, '../../uploads/tmp');
       if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
 
       imagePath = path.join(uploadDir, filename);
@@ -117,5 +116,17 @@ export class AircraftResolver {
       filePaths,
       imagePath,
     );
+  }
+
+  @Query(() => [Aircraft])
+  async getHistoryAircraft(): Promise<Aircraft[]> {
+    return this.aircraftService.aircraftHistory({
+      relations: [
+        'reservations',
+        'maintenances',
+        'reservations.user',
+        'maintenances.technician',
+      ],
+    });
   }
 }
