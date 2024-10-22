@@ -14,7 +14,7 @@ import {
 } from 'typeorm';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
-import { Flight } from 'src/modules/flights/entity/flights.entity';
+import { Flight } from '../../flights/entity/flights.entity';
 
 export enum ReservationStatus {
   PENDING = 'pending',
