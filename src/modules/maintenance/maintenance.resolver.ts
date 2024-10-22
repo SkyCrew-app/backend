@@ -16,14 +16,13 @@ export class MaintenanceResolver {
     @Args('createMaintenanceInput')
     createMaintenanceInput: CreateMaintenanceInput,
     @Args({ name: 'files', type: () => [GraphQLUpload], nullable: true })
-    files?: FileUpload[], // Documents
+    files?: FileUpload[],
     @Args({ name: 'images', type: () => [GraphQLUpload], nullable: true })
-    images?: FileUpload[], // Images
+    images?: FileUpload[],
   ): Promise<Maintenance> {
     const filePaths = [];
     const imagePaths = [];
 
-    // Gérer l'upload des documents
     if (files) {
       for (const file of files) {
         const { createReadStream, filename } = await file;
@@ -41,7 +40,6 @@ export class MaintenanceResolver {
       }
     }
 
-    // Gérer l'upload des images
     if (images) {
       for (const image of images) {
         const { createReadStream, filename } = await image;
@@ -66,20 +64,18 @@ export class MaintenanceResolver {
     );
   }
 
-  // Mutation pour mettre à jour une maintenance avec upload d'images et de documents
   @Mutation(() => Maintenance)
   async updateMaintenance(
     @Args('updateMaintenanceInput')
     updateMaintenanceInput: UpdateMaintenanceInput,
     @Args({ name: 'files', type: () => [GraphQLUpload], nullable: true })
-    files?: FileUpload[], // Documents
+    files?: FileUpload[],
     @Args({ name: 'images', type: () => [GraphQLUpload], nullable: true })
-    images?: FileUpload[], // Images
+    images?: FileUpload[],
   ): Promise<Maintenance> {
     const filePaths = [];
     const imagePaths = [];
 
-    // Gérer l'upload des documents
     if (files) {
       for (const file of files) {
         const { createReadStream, filename } = await file;
@@ -97,7 +93,6 @@ export class MaintenanceResolver {
       }
     }
 
-    // Gérer l'upload des images
     if (images) {
       for (const image of images) {
         const { createReadStream, filename } = await image;
@@ -122,7 +117,6 @@ export class MaintenanceResolver {
     );
   }
 
-  // Query pour récupérer une maintenance par ID
   @Query(() => Maintenance, { name: 'getMaintenance' })
   async getMaintenance(
     @Args('id', { type: () => Int }) id: number,
@@ -130,7 +124,6 @@ export class MaintenanceResolver {
     return this.maintenanceService.findOne(id);
   }
 
-  // Query pour récupérer toutes les maintenances d'un avion
   @Query(() => [Maintenance], { name: 'getMaintenancesByAircraft' })
   async getMaintenancesByAircraft(
     @Args('aircraftId', { type: () => Int }) aircraftId: number,
