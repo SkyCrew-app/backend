@@ -4,116 +4,143 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { MailerService } from '../mail/mailer.service';
+
+jest.mock('bcrypt');
 
 describe('UsersService', () => {
   let service: UsersService;
-  let repository: Repository<User>;
-
-  const mockUserRepository = {
-    findOne: jest.fn().mockResolvedValue({
-      id: 1,
-      first_name: 'John',
-      last_name: 'Doe',
-      email: 'john.doe@example.com',
-    }),
-    save: jest
-      .fn()
-      .mockResolvedValue({ id: 1, first_name: 'John', last_name: 'Doe' }),
-    create: jest
-      .fn()
-      .mockReturnValue({ id: 1, first_name: 'John', last_name: 'Doe' }),
-  };
+  let usersRepository: Partial<Repository<User>>;
+  let mailerService: Partial<MailerService>;
 
   beforeEach(async () => {
+    usersRepository = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findOne: jest.fn(),
+    };
+
+    mailerService = {
+      sendMail: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
-        {
-          provide: getRepositoryToken(User),
-          useValue: mockUserRepository,
-        },
+        { provide: getRepositoryToken(User), useValue: usersRepository },
+        { provide: MailerService, useValue: mailerService },
       ],
     }).compile();
 
     service = module.get<UsersService>(UsersService);
-    repository = module.get<Repository<User>>(getRepositoryToken(User));
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  it('should create a user and hash the password', async () => {
+    const createUserInput = {
+      first_name: 'John',
+      last_name: 'Doe',
+      email: 'john.doe@example.com',
+      password: 'plainpassword',
+      date_of_birth: new Date('1990-01-01'),
+    };
+
+    const hashedPassword = 'hashedpassword';
+
+    (bcrypt.hash as jest.Mock) = jest.fn().mockResolvedValue(hashedPassword);
+    (usersRepository.create as jest.Mock).mockReturnValue(createUserInput);
+    (usersRepository.save as jest.Mock).mockResolvedValue(createUserInput);
+
+    const result = await service.create(createUserInput);
+
+    expect(bcrypt.hash).toHaveBeenCalledWith('plainpassword', 10);
+    expect(usersRepository.create).toHaveBeenCalledWith({
+      ...createUserInput,
+      password: hashedPassword,
+    });
+    expect(usersRepository.save).toHaveBeenCalledWith(createUserInput);
+    expect(result).toEqual(createUserInput);
   });
 
-  it('should return a user by email', async () => {
-    const result = await service.findOneByEmail('john.doe@example.com');
+  it('should update user notification settings', async () => {
+    const user = {
+      id: 1,
+      email_notifications_enabled: false,
+      sms_notifications_enabled: false,
+      newsletter_subscribed: false,
+    } as User;
+
+    (usersRepository.findOne as jest.Mock).mockResolvedValue(user);
+    (usersRepository.save as jest.Mock).mockResolvedValue({
+      ...user,
+      email_notifications_enabled: true,
+      sms_notifications_enabled: true,
+      newsletter_subscribed: true,
+    });
+
+    const result = await service.updateNotificationSettings(
+      1,
+      true,
+      true,
+      true,
+    );
+
+    expect(usersRepository.findOne).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(usersRepository.save).toHaveBeenCalledWith({
+      ...user,
+      email_notifications_enabled: true,
+      sms_notifications_enabled: true,
+      newsletter_subscribed: true,
+    });
     expect(result).toEqual({
-      id: 1,
-      first_name: 'John',
-      last_name: 'Doe',
-      email: 'john.doe@example.com',
-    });
-    expect(mockUserRepository.findOne).toHaveBeenCalledWith({
-      where: { email: 'john.doe@example.com' },
+      ...user,
+      email_notifications_enabled: true,
+      sms_notifications_enabled: true,
+      newsletter_subscribed: true,
     });
   });
 
-  it('should create a new user with hashed password', async () => {
-    jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedPassword'); // Mock de bcrypt
-
-    const newUser = {
-      first_name: 'Jane',
-      last_name: 'Doe',
-      email: 'jane.doe@example.com',
-      password: 'plaintextpassword',
-    };
-
-    const result = await service.create(newUser);
-
-    expect(mockUserRepository.create).toHaveBeenCalledWith({
-      ...newUser,
-      password: 'hashedPassword',
-    });
-    expect(result).toEqual({ id: 1, first_name: 'John', last_name: 'Doe' });
-  });
-
-  it('should update the user password', async () => {
+  it('should update password', async () => {
     const user = {
       id: 1,
+      password: 'oldhashedpassword',
+      email: 'john.doe@example.com',
       first_name: 'John',
-      last_name: 'Doe',
-      email: 'john.doe@example.com',
-      password: 'oldPassword',
-    };
-    jest.spyOn(bcrypt, 'hash').mockResolvedValue('newHashedPassword');
-    mockUserRepository.findOne.mockResolvedValue(user);
+    } as User;
 
-    await service.setPassword('john.doe@example.com', 'newPassword');
+    (usersRepository.findOne as jest.Mock).mockResolvedValue(user);
+    (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+    (bcrypt.hash as jest.Mock).mockResolvedValue('newhashedpassword');
 
-    expect(mockUserRepository.save).toHaveBeenCalledWith({
+    (usersRepository.save as jest.Mock).mockResolvedValue({
       ...user,
-      password: 'newHashedPassword',
+      password: 'newhashedpassword',
     });
-  });
 
-  it('should throw an error if user is not found when updating password', async () => {
-    mockUserRepository.findOne.mockResolvedValue(null);
-    await expect(
-      service.setPassword('unknown@example.com', 'newPassword'),
-    ).rejects.toThrow('User not found');
-  });
+    const result = await service.updatePassword(
+      1,
+      'oldpassword',
+      'newpassword',
+    );
 
-  it('should confirm the user email', async () => {
-    const user = {
-      id: 1,
-      email: 'john.doe@example.com',
-      isEmailConfirmed: false,
-    };
-    mockUserRepository.findOne.mockResolvedValue(user);
-
-    await service.confirmEmail('john.doe@example.com');
-
-    expect(mockUserRepository.save).toHaveBeenCalledWith({
+    expect(bcrypt.compare).toHaveBeenCalledWith(
+      'oldpassword',
+      'oldhashedpassword',
+    );
+    expect(bcrypt.hash).toHaveBeenCalledWith('newpassword', 10);
+    expect(usersRepository.save).toHaveBeenCalledWith({
       ...user,
-      isEmailConfirmed: true,
+      password: 'newhashedpassword',
+    });
+    expect(mailerService.sendMail).toHaveBeenCalledWith(
+      'john.doe@example.com',
+      'Votre mot de passe a été modifié',
+      'Votre mot de passe a été modifié avec succès',
+      'change-password',
+      { first_name: 'John' },
+    );
+    expect(result).toEqual({
+      ...user,
+      password: 'newhashedpassword',
     });
   });
 });
