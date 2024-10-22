@@ -4,93 +4,168 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Reservation } from './entity/reservations.entity';
 import { Repository } from 'typeorm';
 import { MailerService } from '../mail/mailer.service';
+import { User } from '../users/entity/users.entity';
+import { Aircraft } from '../aircraft/entity/aircraft.entity';
+import { ReservationStatus } from './entity/reservations.entity';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+
+jest.mock('date-fns', () => ({
+  format: jest.fn(),
+}));
 
 describe('ReservationsService', () => {
   let service: ReservationsService;
-  let repository: Repository<Reservation>;
-
-  const mockReservationRepository = {
-    find: jest
-      .fn()
-      .mockResolvedValue([
-        { id: 1, start_time: '2023-10-20', end_time: '2023-10-21' },
-      ]),
-    findOne: jest.fn().mockResolvedValue({
-      id: 1,
-      start_time: '2023-10-20',
-      end_time: '2023-10-21',
-    }),
-    save: jest.fn().mockResolvedValue({
-      id: 1,
-      start_time: '2023-10-20',
-      end_time: '2023-10-21',
-    }),
-  };
-
-  const mockMailerService = {
-    sendMail: jest.fn().mockResolvedValue(true),
-  };
+  let reservationRepository: Partial<Repository<Reservation>>;
+  let userRepository: Partial<Repository<User>>;
+  let aircraftRepository: Partial<Repository<Aircraft>>;
+  let mailerService: Partial<MailerService>;
 
   beforeEach(async () => {
+    reservationRepository = {
+      findOne: jest.fn(),
+      find: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+    };
+    userRepository = {
+      findOne: jest.fn(),
+    };
+    aircraftRepository = {
+      findOne: jest.fn(),
+    };
+    mailerService = {
+      sendMail: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReservationsService,
         {
           provide: getRepositoryToken(Reservation),
-          useValue: mockReservationRepository,
+          useValue: reservationRepository,
         },
-        {
-          provide: MailerService,
-          useValue: mockMailerService,
-        },
+        { provide: getRepositoryToken(User), useValue: userRepository },
+        { provide: getRepositoryToken(Aircraft), useValue: aircraftRepository },
+        { provide: MailerService, useValue: mailerService },
       ],
     }).compile();
 
     service = module.get<ReservationsService>(ReservationsService);
-    repository = module.get<Repository<Reservation>>(
-      getRepositoryToken(Reservation),
-    );
   });
 
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
 
-  it('should return a list of reservations', async () => {
-    const result = await service.findAll();
-    expect(result).toEqual([
-      { id: 1, start_time: '2023-10-20', end_time: '2023-10-21' },
-    ]);
+  it('should create a reservation', async () => {
+    const createReservationInput = {
+      aircraft_id: 1,
+      start_time: new Date(),
+      end_time: new Date(),
+      user_id: 1,
+      reservation_date: new Date(),
+    };
+
+    const user = {
+      id: 1,
+      email: 'john.doe@example.com',
+      first_name: 'John',
+    } as User;
+    const aircraft = { id: 1, registration_number: 'ABC123' } as Aircraft;
+    const reservation = {
+      id: 1,
+      ...createReservationInput,
+      user,
+      aircraft,
+      flight: null,
+      estimated_flight_hours: 2,
+      purpose: 'Training',
+      status: ReservationStatus.PENDING,
+      notes: null,
+      flight_category: null,
+      calendar_integration_url: null,
+    } as Reservation;
+
+    (aircraftRepository.findOne as jest.Mock).mockResolvedValue(aircraft);
+    (userRepository.findOne as jest.Mock).mockResolvedValue(user);
+    (reservationRepository.find as jest.Mock).mockResolvedValue([]);
+    (reservationRepository.create as jest.Mock).mockReturnValue(reservation);
+    (reservationRepository.save as jest.Mock).mockResolvedValue(reservation);
+
+    const formattedStartDate = '1 janvier 2024, 10:00';
+    const formattedEndDate = '1 janvier 2024, 12:00';
+
+    // Mock de `format` pour retourner une date formatée
+    (format as jest.Mock)
+      .mockReturnValueOnce(formattedStartDate)
+      .mockReturnValueOnce(formattedEndDate);
+
+    const result = await service.create(createReservationInput);
+
+    expect(format).toHaveBeenCalledTimes(2);
+    expect(format).toHaveBeenCalledWith(
+      expect.any(Date),
+      'd MMMM yyyy, HH:mm',
+      { locale: fr },
+    );
+    expect(reservationRepository.save).toHaveBeenCalledWith(reservation);
+    expect(result).toEqual(reservation);
   });
 
-  it('should return a single reservation by ID', async () => {
-    const result = await service.findOne(1);
-    expect(result).toEqual({
+  it('should update a reservation', async () => {
+    const updateReservationInput = {
       id: 1,
-      start_time: '2023-10-20',
-      end_time: '2023-10-21',
-    });
-    expect(mockReservationRepository.findOne).toHaveBeenCalledWith({
+      aircraft_id: 1,
+      start_time: new Date(),
+      end_time: new Date(),
+      reservation_date: new Date(),
+    };
+
+    const user = {
+      id: 1,
+      email: 'john.doe@example.com',
+      first_name: 'John',
+    } as User;
+    const aircraft = { id: 1, registration_number: 'ABC123' } as Aircraft;
+    const reservation = {
+      id: 1,
+      ...updateReservationInput,
+      flight: null,
+      estimated_flight_hours: 2,
+      purpose: 'Training',
+      status: ReservationStatus.CONFIRMED,
+      notes: null,
+      flight_category: null,
+      calendar_integration_url: null,
+      aircraft,
+      user,
+    } as Reservation;
+
+    (reservationRepository.findOne as jest.Mock).mockResolvedValue(reservation);
+    (reservationRepository.save as jest.Mock).mockResolvedValue(reservation);
+
+    const result = await service.update(updateReservationInput);
+
+    expect(reservationRepository.findOne).toHaveBeenCalledWith({
       where: { id: 1 },
     });
+    expect(reservationRepository.save).toHaveBeenCalledWith(reservation);
+    expect(result).toEqual(reservation);
   });
 
-  // it('should create a new reservation', async () => {
-  //   const newReservation = { start_time: '2023-10-22', end_time: '2023-10-23' };
-  //   const result = await service.create(newReservation);
-  //   expect(result).toEqual({
-  //     id: 1,
-  //     start_time: '2023-10-20',
-  //     end_time: '2023-10-21',
-  //   });
-  //   expect(mockReservationRepository.save).toHaveBeenCalledWith(newReservation);
-  // });
+  it('should throw an error if the aircraft is not found', async () => {
+    (aircraftRepository.findOne as jest.Mock).mockResolvedValue(null);
 
-  // it('should send an email upon successful reservation creation', async () => {
-  //   await service.sendReservationConfirmationEmail(
-  //     { email: 'user@example.com' },
-  //     { id: 1 },
-  //   );
-  //   expect(mockMailerService.sendMail).toHaveBeenCalled();
-  // });
+    await expect(
+      service.create({
+        aircraft_id: 1,
+        start_time: new Date(),
+        end_time: new Date(),
+        user_id: 1,
+        reservation_date: new Date(),
+      }),
+    ).rejects.toThrow(`L'avion avec l'ID 1 n'existe pas.`);
+  });
 });
