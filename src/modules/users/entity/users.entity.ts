@@ -61,6 +61,10 @@ export class User {
   @Column({ nullable: true })
   total_flight_hours: number;
 
+  @Field({ nullable: false })
+  @Column({ default: 0 })
+  user_account_balance: number;
+
   @Field(() => Boolean)
   @Column({ default: true })
   email_notifications_enabled: boolean;
