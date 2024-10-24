@@ -30,6 +30,15 @@ export class CreateUserInput {
   date_of_birth?: Date;
 
   @Field({ nullable: true })
+  profile_picture?: string;
+
+  @Field({ nullable: true })
+  total_flight_hours?: number;
+
+  @Field({ nullable: false })
+  user_account_balance?: number;
+
+  @Field({ nullable: true })
   membership_start_date?: Date;
 
   @Field({ nullable: true })
