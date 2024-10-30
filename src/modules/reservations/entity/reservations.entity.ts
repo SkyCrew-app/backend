@@ -22,8 +22,23 @@ export enum ReservationStatus {
   CANCELLED = 'cancelled',
 }
 
+export enum FlightCategory {
+  LOCAL = 'local',
+  CROSS_COUNTRY = 'cross_country',
+  INSTRUCTION = 'instruction',
+  TOURISM = 'tourism',
+  TRAINING = 'training',
+  MAINTENANCE = 'maintenance',
+  PRIVATE = 'private',
+  CORPORATE = 'corporate',
+}
+
 registerEnumType(ReservationStatus, {
   name: 'ReservationStatus',
+});
+
+registerEnumType(FlightCategory, {
+  name: 'FlightCategory',
 });
 
 @ObjectType()
@@ -75,13 +90,17 @@ export class Reservation {
   })
   status: ReservationStatus;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
-  notes: string;
+  @Field(() => FlightCategory)
+  @Column({
+    type: 'enum',
+    enum: FlightCategory,
+    default: FlightCategory.LOCAL,
+  })
+  flight_category: FlightCategory;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
-  flight_category: string;
+  notes: string;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
