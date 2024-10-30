@@ -7,6 +7,7 @@ import { MailerService } from '../mail/mailer.service';
 import { User } from '../users/entity/users.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { ReservationStatus } from './entity/reservations.entity';
+import { FlightCategory } from './entity/reservations.entity';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -66,6 +67,7 @@ describe('ReservationsService', () => {
       end_time: new Date(),
       user_id: 1,
       reservation_date: new Date(),
+      flight_category: FlightCategory.LOCAL,
     };
 
     const user = {
@@ -84,7 +86,7 @@ describe('ReservationsService', () => {
       purpose: 'Training',
       status: ReservationStatus.PENDING,
       notes: null,
-      flight_category: null,
+      flight_category: FlightCategory.LOCAL,
       calendar_integration_url: null,
     } as Reservation;
 
@@ -121,6 +123,7 @@ describe('ReservationsService', () => {
       start_time: new Date(),
       end_time: new Date(),
       reservation_date: new Date(),
+      flight_category: FlightCategory.LOCAL,
     };
 
     const user = {
@@ -137,7 +140,7 @@ describe('ReservationsService', () => {
       purpose: 'Training',
       status: ReservationStatus.CONFIRMED,
       notes: null,
-      flight_category: null,
+      flight_category: FlightCategory.LOCAL,
       calendar_integration_url: null,
       aircraft,
       user,
@@ -165,6 +168,7 @@ describe('ReservationsService', () => {
         end_time: new Date(),
         user_id: 1,
         reservation_date: new Date(),
+        flight_category: FlightCategory.LOCAL,
       }),
     ).rejects.toThrow(`L'avion avec l'ID 1 n'existe pas.`);
   });

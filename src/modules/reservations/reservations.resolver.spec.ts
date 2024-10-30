@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReservationsResolver } from './reservations.resolver';
 import { ReservationsService } from './reservations.service';
+import { FlightCategory } from './entity/reservations.entity';
 
 describe('ReservationsResolver', () => {
   let resolver: ReservationsResolver;
@@ -37,6 +38,7 @@ describe('ReservationsResolver', () => {
       end_time: new Date(),
       user_id: 1,
       reservation_date: new Date(),
+      flight_category: FlightCategory.LOCAL,
     };
 
     const reservation = { id: 1, ...createReservationInput };
@@ -57,6 +59,7 @@ describe('ReservationsResolver', () => {
       aircraft_id: 1,
       start_time: new Date(),
       end_time: new Date(),
+      flight_category: FlightCategory.LOCAL,
     };
     const reservation = { id: 1, ...updateReservationInput };
 
