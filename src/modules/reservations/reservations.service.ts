@@ -56,7 +56,7 @@ export class ReservationsService {
       aircraft,
       user,
       ...createReservationInput,
-      status: ReservationStatus.PENDING,
+      status: ReservationStatus.CONFIRMED,
     });
 
     const formattedStartDate = format(
