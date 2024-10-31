@@ -3,6 +3,7 @@ import { AircraftService } from './aircraft.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Aircraft } from './entity/aircraft.entity';
+import { AvailabilityStatus } from './entity/aircraft.entity';
 import * as fs from 'fs';
 
 jest.mock('fs');
@@ -35,7 +36,7 @@ describe('AircraftService', () => {
       registration_number: 'ABC123',
       model: 'Cessna 172',
       year_of_manufacture: 2020,
-      availability_status: 'available',
+      availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'none',
       hourly_cost: 120,
     };
@@ -67,7 +68,7 @@ describe('AircraftService', () => {
       registration_number: 'ABC123',
       model: 'Cessna 172',
       year_of_manufacture: 2021,
-      availability_status: 'available',
+      availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'none',
       hourly_cost: 130,
     };

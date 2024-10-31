@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AircraftResolver } from './aircraft.resolver';
 import { AircraftService } from './aircraft.service';
+import { AvailabilityStatus } from './entity/aircraft.entity';
 
 describe('AircraftResolver', () => {
   let resolver: AircraftResolver;
@@ -36,7 +37,7 @@ describe('AircraftResolver', () => {
         registration_number: 'ABC123',
         model: 'Cessna 172',
         year_of_manufacture: 2020,
-        availability_status: 'available',
+        availability_status: AvailabilityStatus.AVAILABLE,
         maintenance_status: 'none',
         hourly_cost: 120,
         image_url: null,
@@ -60,7 +61,7 @@ describe('AircraftResolver', () => {
       registration_number: 'ABC123',
       model: 'Cessna 172',
       year_of_manufacture: 2020,
-      availability_status: 'available',
+      availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'none',
       hourly_cost: 120,
     };
@@ -96,7 +97,7 @@ describe('AircraftResolver', () => {
       registration_number: 'ABC123',
       model: 'Cessna 172',
       year_of_manufacture: 2021,
-      availability_status: 'available',
+      availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'none',
       hourly_cost: 130,
     };
