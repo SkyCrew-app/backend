@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Aircraft } from './entity/aircraft.entity';
 import { CreateAircraftInput } from './dto/create-aircraft.input';
+import { AvailabilityStatus } from './entity/aircraft.entity';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -109,7 +110,7 @@ export class AircraftService {
 
   async updateStatus(
     aircraftId: number,
-    availabilityStatus: string,
+    availabilityStatus: AvailabilityStatus,
   ): Promise<Aircraft> {
     const aircraft = await this.aircraftRepository.findOneOrFail({
       where: { id: aircraftId },

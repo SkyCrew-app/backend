@@ -1,5 +1,6 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
 import { IsOptional, IsString, IsNumber, IsInt } from 'class-validator';
+import { AvailabilityStatus } from '../entity/aircraft.entity';
 
 @InputType()
 export class CreateAircraftInput {
@@ -15,9 +16,8 @@ export class CreateAircraftInput {
   @IsInt()
   year_of_manufacture: number;
 
-  @Field()
-  @IsString()
-  availability_status: string;
+  @Field(() => AvailabilityStatus)
+  availability_status: AvailabilityStatus;
 
   @Field()
   @IsString()
