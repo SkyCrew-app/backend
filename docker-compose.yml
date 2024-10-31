@@ -27,6 +27,9 @@ services:
       - MAIL_FROM=no-reply@example.com
       - MAIL_SECURE=false
       - JWT_SECRET=yourSecretKey
+      - VONAGE_API_KEY=cca87708
+      - VONAGE_API_SECRET=v7ELYKhHUQ0u7bRQ
+      - WHATSAPP_FROM_NUMBER=14157386102
 
   db:
     image: postgres:14
