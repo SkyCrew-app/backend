@@ -7,6 +7,7 @@ import { UpdateReservationInput } from './dto/update-reservation.input';
 import { MailerService } from '../mail/mailer.service';
 import { User } from '../users/entity/users.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
+import { WhatsAppService } from 'src/utils/whatsapp.service';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -20,6 +21,7 @@ export class ReservationsService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Aircraft)
     private readonly aircraftRepository: Repository<Aircraft>,
+    private readonly whatsappService: WhatsAppService,
   ) {}
 
   async create(
@@ -68,6 +70,7 @@ export class ReservationsService {
       locale: fr,
     });
 
+    // Envoi de l'e-mail de confirmation
     await this.mailerService.sendMail(
       user.email,
       'Confirmation de votre réservation',
@@ -80,6 +83,10 @@ export class ReservationsService {
         end_time: formattedEndDate,
       },
     );
+
+    // Envoi de la notification WhatsApp
+    const message = `Bonjour ${user.first_name}, votre réservation pour l'avion ${aircraft.registration_number} a été confirmée. Vol prévu du ${formattedStartDate} au ${formattedEndDate}.`;
+    await this.whatsappService.sendWhatsAppMessage(user.phone_number, message);
 
     const savedReservation = await this.reservationRepository.save(reservation);
 
