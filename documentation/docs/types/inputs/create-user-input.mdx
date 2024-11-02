@@ -1,0 +1,139 @@
+---
+pagination_next: null
+pagination_prev: null
+id: create-user-input
+title: CreateUserInput
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+No description
+
+
+```graphql
+input CreateUserInput {
+  first_name: String!
+  last_name: String!
+  email: String!
+  password: String
+  is2FAEnabled: Boolean
+  twoFactorAuthSecret: String
+  phone_number: String
+  address: String
+  date_of_birth: DateTime!
+  profile_picture: String
+  total_flight_hours: Float
+  user_account_balance: Float!
+  membership_start_date: DateTime
+  membership_end_date: DateTime
+  is_instructor: Boolean
+}
+```
+
+
+
+
+### Fields
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>first_name</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>last_name</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>email</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>password</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>is2FAEnabled</b></code>](#)<Bullet />[`Boolean`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>twoFactorAuthSecret</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>phone_number</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>address</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>date_of_birth</b></code>](#)<Bullet />[`DateTime!`](/types/scalars/date-time.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>profile_picture</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>total_flight_hours</b></code>](#)<Bullet />[`Float`](/types/scalars/float.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>user_account_balance</b></code>](#)<Bullet />[`Float!`](/types/scalars/float.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>membership_start_date</b></code>](#)<Bullet />[`DateTime`](/types/scalars/date-time.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>membership_end_date</b></code>](#)<Bullet />[`DateTime`](/types/scalars/date-time.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateUserInput.<b>is_instructor</b></code>](#)<Bullet />[`Boolean`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+
+
+
+
+### Member Of
+
+[`createUserByAdmin`](/operations/mutations/create-user-by-admin.mdx)  <Badge class="badge badge--secondary" text="mutation"/>
+

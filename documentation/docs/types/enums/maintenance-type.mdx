@@ -1,0 +1,94 @@
+---
+pagination_next: null
+pagination_prev: null
+id: maintenance-type
+title: MaintenanceType
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+No description
+
+
+```graphql
+enum MaintenanceType {
+  INSPECTION
+  REPAIR
+  OVERHAUL
+  SOFTWARE_UPDATE
+  CLEANING
+  OTHER
+}
+```
+
+
+
+
+### Values
+
+#### [<code style={{ fontWeight: 'normal' }}>MaintenanceType.<b>INSPECTION</b></code>](#)  
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>MaintenanceType.<b>REPAIR</b></code>](#)  
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>MaintenanceType.<b>OVERHAUL</b></code>](#)  
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>MaintenanceType.<b>SOFTWARE_UPDATE</b></code>](#)  
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>MaintenanceType.<b>CLEANING</b></code>](#)  
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>MaintenanceType.<b>OTHER</b></code>](#)  
+
+
+
+
+
+
+
+### Member Of
+
+[`CreateMaintenanceInput`](/types/inputs/create-maintenance-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`Maintenance`](/types/objects/maintenance.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`UpdateMaintenanceInput`](/types/inputs/update-maintenance-input.mdx)  <Badge class="badge badge--secondary" text="input"/>
+
