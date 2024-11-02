@@ -51,7 +51,7 @@ import { GraphQLUpload } from 'graphql-upload-ts';
     // Configuration GraphQL
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: true,
+      autoSchemaFile: 'schema.gql',
       playground: true,
       path: process.env.GRAPHQL_ENDPOINT || '/graphql',
       context: ({ req, res }: { req: Request; res: Response }) => ({
