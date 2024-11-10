@@ -50,12 +50,12 @@ export class Reservation {
 
   @Field(() => Aircraft)
   @ManyToOne(() => Aircraft, (aircraft) => aircraft.reservations, {
-    eager: false,
+    eager: true,
   })
   aircraft: Aircraft;
 
   @Field(() => User)
-  @ManyToOne(() => User, (user) => user.reservations, { eager: false })
+  @ManyToOne(() => User, (user) => user.reservations, { eager: true })
   user: User;
 
   @Field(() => Flight)
