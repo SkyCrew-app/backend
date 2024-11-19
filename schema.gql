@@ -1,0 +1,300 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type Maintenance {
+  id: Int!
+  aircraft: Aircraft!
+  technician: User
+  start_date: DateTime!
+  end_date: DateTime!
+  maintenance_type: MaintenanceType
+  description: String
+  parts_changed: String
+  maintenance_cost: Float
+  images_url: [String!]
+  documents_url: [String!]
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+enum MaintenanceType {
+  INSPECTION
+  REPAIR
+  OVERHAUL
+  SOFTWARE_UPDATE
+  CLEANING
+  OTHER
+}
+
+type Aircraft {
+  id: Int!
+  registration_number: String!
+  model: String!
+  year_of_manufacture: Int!
+  image_url: String
+  documents_url: [String!]
+  availability_status: AvailabilityStatus!
+  maintenance_status: String!
+  hourly_cost: Float!
+  total_flight_hours: Float!
+  reservations: [Reservation!]!
+  maintenances: [Maintenance!]!
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  UNAVAILABLE
+  RESERVATED
+}
+
+type Flight {
+  id: Int!
+  reservation: Reservation!
+  user: User!
+  flight_hours: Float!
+  flight_type: String!
+  origin_airport: String!
+  destination_airport: String!
+  weather_conditions: String
+  number_of_passengers: Int!
+  milestone_reached: Boolean!
+  reservation_id: Reservation!
+}
+
+type Reservation {
+  id: Int!
+  aircraft: Aircraft!
+  user: User!
+  flight: Flight!
+  reservation_date: DateTime
+  start_time: DateTime!
+  end_time: DateTime!
+  estimated_flight_hours: Float
+  purpose: String
+  status: ReservationStatus!
+  flight_category: FlightCategory!
+  notes: String
+  calendar_integration_url: String
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum FlightCategory {
+  LOCAL
+  CROSS_COUNTRY
+  INSTRUCTION
+  TOURISM
+  TRAINING
+  MAINTENANCE
+  PRIVATE
+  CORPORATE
+}
+
+type License {
+  id: Int!
+  user: User!
+  license_type: String!
+  expiration_date: DateTime!
+  issue_date: DateTime!
+  certification_authority: String
+  is_valid: Boolean!
+}
+
+type Invoice {
+  id: Int!
+  user: User!
+  amount: Float!
+  invoice_date: DateTime!
+  payment_status: String!
+  payment_method: String
+  invoice_items: String
+  amount_paid: Float
+  balance_due: Float!
+  next_payment_due_date: DateTime
+}
+
+type Role {
+  id: Int!
+  role_name: String!
+  users: [User!]!
+}
+
+type User {
+  id: Int!
+  first_name: String!
+  last_name: String!
+  email: String!
+  password: String
+  is2FAEnabled: Boolean!
+  isEmailConfirmed: Boolean!
+  twoFactorAuthSecret: String
+  phone_number: String
+  address: String
+  date_of_birth: DateTime!
+  profile_picture: String
+  total_flight_hours: Float
+  user_account_balance: Float!
+  email_notifications_enabled: Boolean!
+  sms_notifications_enabled: Boolean!
+  newsletter_subscribed: Boolean!
+  roles: [Role!]!
+  reservations: [Reservation!]!
+  maintenances: [Maintenance!]
+  licenses: [License!]!
+  invoices: [Invoice!]!
+}
+
+type LoginResponse {
+  access_token: String!
+  is2FAEnabled: Boolean!
+}
+
+type Query {
+  hello: String!
+  getUsers: [User!]!
+  userByEmail(email: String!): User!
+  getAircrafts: [Aircraft!]!
+  getHistoryAircraft: [Aircraft!]!
+  reservations: [Reservation!]!
+  reservation(id: Int!): Reservation!
+  filteredReservations(start_date: String, end_date: String): [Reservation!]!
+  getMaintenance(id: Int!): Maintenance!
+  getMaintenancesByAircraft(aircraftId: Int!): [Maintenance!]!
+  getAllMaintenances: [Maintenance!]!
+  getEmailFromCookie: String!
+}
+
+type Mutation {
+  createUser(first_name: String!, last_name: String!, email: String!, password: String!, date_of_birth: DateTime!): User!
+  updateUser(updateUserInput: UpdateUserInput!, image: Upload): User!
+  toggle2FA(email: String!, is2FAEnabled: Boolean!): User!
+  updateNotificationSettings(email_notifications_enabled: Boolean!, sms_notifications_enabled: Boolean!, newsletter_subscribed: Boolean!): User!
+  updatePassword(currentPassword: String!, newPassword: String!): User!
+  createAircraft(createAircraftInput: CreateAircraftInput!, file: Upload, image: Upload): Aircraft!
+  updateAircraft(aircraftId: Int!, updateAircraftInput: CreateAircraftInput!, file: Upload, image: Upload): Aircraft!
+  createReservation(createReservationInput: CreateReservationInput!): Reservation!
+  updateReservation(updateReservationInput: UpdateReservationInput!): Reservation!
+  deleteReservation(id: Int!): Boolean!
+  createMaintenance(createMaintenanceInput: CreateMaintenanceInput!, files: [Upload!], images: [Upload!]): Maintenance!
+  updateMaintenance(updateMaintenanceInput: UpdateMaintenanceInput!, files: [Upload!], images: [Upload!]): Maintenance!
+  login(loginInput: LoginInput!): LoginResponse!
+  generate2FASecret(email: String!): String!
+  verify2FA(email: String!, token: String!): Boolean!
+  logout: Boolean!
+  createUserByAdmin(createUserInput: CreateUserInput!): User!
+  confirmEmailAndSetPassword(token: String!, password: String!): Boolean!
+}
+
+input UpdateUserInput {
+  first_name: String
+  last_name: String
+  email: String
+  password: String
+  profile_picture: String
+  phone_number: String
+  address: String
+  date_of_birth: DateTime
+  membership_start_date: DateTime
+  membership_end_date: DateTime
+  is_instructor: Boolean
+}
+
+"""The `Upload` scalar type represents a file upload."""
+scalar Upload
+
+input CreateAircraftInput {
+  registration_number: String!
+  model: String!
+  year_of_manufacture: Int!
+  availability_status: AvailabilityStatus!
+  maintenance_status: String!
+  hourly_cost: Float!
+  image_url: String
+  documents_url: [String!]
+  last_inspection_date: DateTime
+  current_location: String
+}
+
+input CreateReservationInput {
+  aircraft_id: Int!
+  user_id: Int!
+  reservation_date: DateTime
+  start_time: DateTime!
+  end_time: DateTime!
+  purpose: String
+  flight_category: FlightCategory!
+  estimated_flight_hours: Float
+  notes: String
+  status: String
+}
+
+input UpdateReservationInput {
+  id: Int!
+  aircraft_id: Int
+  user_id: Int
+  reservation_date: DateTime
+  start_time: DateTime
+  end_time: DateTime
+  purpose: String
+  flight_category: FlightCategory!
+  estimated_flight_hours: Float
+  notes: String
+}
+
+input CreateMaintenanceInput {
+  aircraft_id: Int!
+  start_date: DateTime!
+  end_date: DateTime!
+  maintenance_type: MaintenanceType
+  description: String
+  parts_changed: String
+  maintenance_cost: Float
+  technician_id: Int
+  images_url: [String!]
+  documents_url: [String!]
+}
+
+input UpdateMaintenanceInput {
+  id: Int!
+  aircraft_id: Int
+  start_date: DateTime
+  end_date: DateTime
+  maintenance_type: MaintenanceType
+  description: String
+  parts_changed: String
+  maintenance_cost: Float
+  technician_id: Int
+  images_url: [String!]
+  documents_url: [String!]
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+input CreateUserInput {
+  first_name: String!
+  last_name: String!
+  email: String!
+  password: String
+  is2FAEnabled: Boolean
+  twoFactorAuthSecret: String
+  phone_number: String
+  address: String
+  date_of_birth: DateTime!
+  profile_picture: String
+  total_flight_hours: Float
+  user_account_balance: Float!
+  membership_start_date: DateTime
+  membership_end_date: DateTime
+  is_instructor: Boolean
+}

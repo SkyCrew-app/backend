@@ -1,0 +1,65 @@
+---
+pagination_next: null
+pagination_prev: null
+id: boolean
+title: Boolean
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+The `Boolean` scalar type represents `true` or `false`.
+
+
+```graphql
+scalar Boolean
+```
+
+
+
+
+
+
+
+
+### Returned By
+
+[`confirmEmailAndSetPassword`](/operations/mutations/confirm-email-and-set-password.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`deleteReservation`](/operations/mutations/delete-reservation.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`logout`](/operations/mutations/logout.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`verify2FA`](/operations/mutations/verify-2-fa.mdx)  <Badge class="badge badge--secondary" text="mutation"/>
+
+### Member Of
+
+[`CreateUserInput`](/types/inputs/create-user-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`Flight`](/types/objects/flight.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`include`](/operations/directives/include.mdx)  <Badge class="badge badge--secondary" text="directive"/><Bullet />[`License`](/types/objects/license.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`LoginResponse`](/types/objects/login-response.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`skip`](/operations/directives/skip.mdx)  <Badge class="badge badge--secondary" text="directive"/><Bullet />[`toggle2FA`](/operations/mutations/toggle-2-fa.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`updateNotificationSettings`](/operations/mutations/update-notification-settings.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`UpdateUserInput`](/types/inputs/update-user-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`User`](/types/objects/user.mdx)  <Badge class="badge badge--secondary" text="object"/>
+

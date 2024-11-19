@@ -1,0 +1,119 @@
+---
+pagination_next: null
+pagination_prev: null
+id: flight
+title: Flight
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+No description
+
+
+```graphql
+type Flight {
+  id: Int!
+  reservation: Reservation!
+  user: User!
+  flight_hours: Float!
+  flight_type: String!
+  origin_airport: String!
+  destination_airport: String!
+  weather_conditions: String
+  number_of_passengers: Int!
+  milestone_reached: Boolean!
+  reservation_id: Reservation!
+}
+```
+
+
+
+
+### Fields
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>id</b></code>](#)<Bullet />[`Int!`](/types/scalars/int.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>reservation</b></code>](#)<Bullet />[`Reservation!`](/types/objects/reservation.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>user</b></code>](#)<Bullet />[`User!`](/types/objects/user.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>flight_hours</b></code>](#)<Bullet />[`Float!`](/types/scalars/float.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>flight_type</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>origin_airport</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>destination_airport</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>weather_conditions</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>number_of_passengers</b></code>](#)<Bullet />[`Int!`](/types/scalars/int.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>milestone_reached</b></code>](#)<Bullet />[`Boolean!`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>Flight.<b>reservation_id</b></code>](#)<Bullet />[`Reservation!`](/types/objects/reservation.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+
+
+
+
+### Member Of
+
+[`Reservation`](/types/objects/reservation.mdx)  <Badge class="badge badge--secondary" text="object"/>
+

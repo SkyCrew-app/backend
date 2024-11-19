@@ -1,0 +1,61 @@
+---
+pagination_next: null
+pagination_prev: null
+id: date-time
+title: DateTime
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+
+
+```graphql
+scalar DateTime
+```
+
+
+
+
+
+
+
+
+### Member Of
+
+[`CreateAircraftInput`](/types/inputs/create-aircraft-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`CreateMaintenanceInput`](/types/inputs/create-maintenance-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`CreateReservationInput`](/types/inputs/create-reservation-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`createUser`](/operations/mutations/create-user.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`CreateUserInput`](/types/inputs/create-user-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`Invoice`](/types/objects/invoice.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`License`](/types/objects/license.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Maintenance`](/types/objects/maintenance.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Reservation`](/types/objects/reservation.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`UpdateMaintenanceInput`](/types/inputs/update-maintenance-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`UpdateReservationInput`](/types/inputs/update-reservation-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`UpdateUserInput`](/types/inputs/update-user-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`User`](/types/objects/user.mdx)  <Badge class="badge badge--secondary" text="object"/>
+

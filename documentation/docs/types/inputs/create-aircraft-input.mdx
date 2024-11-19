@@ -1,0 +1,114 @@
+---
+pagination_next: null
+pagination_prev: null
+id: create-aircraft-input
+title: CreateAircraftInput
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+No description
+
+
+```graphql
+input CreateAircraftInput {
+  registration_number: String!
+  model: String!
+  year_of_manufacture: Int!
+  availability_status: AvailabilityStatus!
+  maintenance_status: String!
+  hourly_cost: Float!
+  image_url: String
+  documents_url: [String!]
+  last_inspection_date: DateTime
+  current_location: String
+}
+```
+
+
+
+
+### Fields
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>registration_number</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>model</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>year_of_manufacture</b></code>](#)<Bullet />[`Int!`](/types/scalars/int.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>availability_status</b></code>](#)<Bullet />[`AvailabilityStatus!`](/types/enums/availability-status.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="enum"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>maintenance_status</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>hourly_cost</b></code>](#)<Bullet />[`Float!`](/types/scalars/float.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>image_url</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>documents_url</b></code>](#)<Bullet />[`[String!]`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="list"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>last_inspection_date</b></code>](#)<Bullet />[`DateTime`](/types/scalars/date-time.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>CreateAircraftInput.<b>current_location</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+
+
+
+
+### Member Of
+
+[`createAircraft`](/operations/mutations/create-aircraft.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`updateAircraft`](/operations/mutations/update-aircraft.mdx)  <Badge class="badge badge--secondary" text="mutation"/>
+

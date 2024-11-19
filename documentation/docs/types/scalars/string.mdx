@@ -1,0 +1,65 @@
+---
+pagination_next: null
+pagination_prev: null
+id: string
+title: String
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+The `String` scalar type represents textual data, represented as UTF-8 character sequences. The String type is most often used by GraphQL to represent free-form human-readable text.
+
+
+```graphql
+scalar String
+```
+
+
+
+
+
+
+
+
+### Returned By
+
+[`generate2FASecret`](/operations/mutations/generate-2-fasecret.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`getEmailFromCookie`](/operations/queries/get-email-from-cookie.mdx)  <Badge class="badge badge--secondary" text="query"/><Bullet />[`hello`](/operations/queries/hello.mdx)  <Badge class="badge badge--secondary" text="query"/>
+
+### Member Of
+
+[`Aircraft`](/types/objects/aircraft.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`confirmEmailAndSetPassword`](/operations/mutations/confirm-email-and-set-password.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`CreateAircraftInput`](/types/inputs/create-aircraft-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`CreateMaintenanceInput`](/types/inputs/create-maintenance-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`CreateReservationInput`](/types/inputs/create-reservation-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`createUser`](/operations/mutations/create-user.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`CreateUserInput`](/types/inputs/create-user-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`deprecated`](/types/directives/deprecated.mdx)  <Badge class="badge badge--secondary" text="directive"/><Bullet />[`filteredReservations`](/operations/queries/filtered-reservations.mdx)  <Badge class="badge badge--secondary" text="query"/><Bullet />[`Flight`](/types/objects/flight.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`generate2FASecret`](/operations/mutations/generate-2-fasecret.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`Invoice`](/types/objects/invoice.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`License`](/types/objects/license.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`LoginInput`](/types/inputs/login-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`LoginResponse`](/types/objects/login-response.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Maintenance`](/types/objects/maintenance.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Reservation`](/types/objects/reservation.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Role`](/types/objects/role.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`specifiedBy`](/types/directives/specified-by.mdx)  <Badge class="badge badge--secondary" text="directive"/><Bullet />[`toggle2FA`](/operations/mutations/toggle-2-fa.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`UpdateMaintenanceInput`](/types/inputs/update-maintenance-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`updatePassword`](/operations/mutations/update-password.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`UpdateReservationInput`](/types/inputs/update-reservation-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`UpdateUserInput`](/types/inputs/update-user-input.mdx)  <Badge class="badge badge--secondary" text="input"/><Bullet />[`User`](/types/objects/user.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`userByEmail`](/operations/queries/user-by-email.mdx)  <Badge class="badge badge--secondary" text="query"/><Bullet />[`verify2FA`](/operations/mutations/verify-2-fa.mdx)  <Badge class="badge badge--secondary" text="mutation"/>
+

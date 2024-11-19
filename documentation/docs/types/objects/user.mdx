@@ -1,0 +1,178 @@
+---
+pagination_next: null
+pagination_prev: null
+id: user
+title: User
+---
+
+
+
+
+export const Bullet = () => <><span style={{ fontWeight: 'normal', fontSize: '.5em', color: 'var(--ifm-color-secondary-darkest)' }}>&nbsp;●&nbsp;</span></>
+
+export const SpecifiedBy = (props) => <>Specification<a className="link" style={{ fontSize:'1.5em', paddingLeft:'4px' }} target="_blank" href={props.url} title={'Specified by ' + props.url}>⎘</a></>
+
+export const Badge = (props) => <><span className={props.class}>{props.text}</span></>
+
+import { useState } from 'react';
+
+export const Details = ({ dataOpen, dataClose, children, startOpen = false }) => {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <details {...(open ? { open: true } : {})} className="details" style={{ border:'none', boxShadow:'none', background:'var(--ifm-background-color)' }}>
+      <summary
+        onClick={(e) => {
+          e.preventDefault();
+          setOpen((open) => !open);
+        }}
+        style={{ listStyle:'none' }}
+      >
+      {open ? dataOpen : dataClose}
+      </summary>
+      {open && children}
+    </details>
+  );
+};
+
+
+
+
+
+
+
+
+No description
+
+
+```graphql
+type User {
+  id: Int!
+  first_name: String!
+  last_name: String!
+  email: String!
+  password: String
+  is2FAEnabled: Boolean!
+  isEmailConfirmed: Boolean!
+  twoFactorAuthSecret: String
+  phone_number: String
+  address: String
+  date_of_birth: DateTime!
+  profile_picture: String
+  total_flight_hours: Float
+  user_account_balance: Float!
+  email_notifications_enabled: Boolean!
+  sms_notifications_enabled: Boolean!
+  newsletter_subscribed: Boolean!
+  roles: [Role!]!
+  reservations: [Reservation!]!
+  maintenances: [Maintenance!]
+  licenses: [License!]!
+  invoices: [Invoice!]!
+}
+```
+
+
+
+
+### Fields
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>id</b></code>](#)<Bullet />[`Int!`](/types/scalars/int.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>first_name</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>last_name</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>email</b></code>](#)<Bullet />[`String!`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>password</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>is2FAEnabled</b></code>](#)<Bullet />[`Boolean!`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>isEmailConfirmed</b></code>](#)<Bullet />[`Boolean!`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>twoFactorAuthSecret</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>phone_number</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>address</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>date_of_birth</b></code>](#)<Bullet />[`DateTime!`](/types/scalars/date-time.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>profile_picture</b></code>](#)<Bullet />[`String`](/types/scalars/string.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>total_flight_hours</b></code>](#)<Bullet />[`Float`](/types/scalars/float.mdx) <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>user_account_balance</b></code>](#)<Bullet />[`Float!`](/types/scalars/float.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>email_notifications_enabled</b></code>](#)<Bullet />[`Boolean!`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>sms_notifications_enabled</b></code>](#)<Bullet />[`Boolean!`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>newsletter_subscribed</b></code>](#)<Bullet />[`Boolean!`](/types/scalars/boolean.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="scalar"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>roles</b></code>](#)<Bullet />[`[Role!]!`](/types/objects/role.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>reservations</b></code>](#)<Bullet />[`[Reservation!]!`](/types/objects/reservation.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>maintenances</b></code>](#)<Bullet />[`[Maintenance!]`](/types/objects/maintenance.mdx) <Badge class="badge badge--secondary" text="list"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>licenses</b></code>](#)<Bullet />[`[License!]!`](/types/objects/license.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+#### [<code style={{ fontWeight: 'normal' }}>User.<b>invoices</b></code>](#)<Bullet />[`[Invoice!]!`](/types/objects/invoice.mdx) <Badge class="badge badge--secondary" text="non-null"/> <Badge class="badge badge--secondary" text="object"/> 
+
+
+
+
+
+
+
+### Returned By
+
+[`createUser`](/operations/mutations/create-user.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`createUserByAdmin`](/operations/mutations/create-user-by-admin.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`getUsers`](/operations/queries/get-users.mdx)  <Badge class="badge badge--secondary" text="query"/><Bullet />[`toggle2FA`](/operations/mutations/toggle-2-fa.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`updateNotificationSettings`](/operations/mutations/update-notification-settings.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`updatePassword`](/operations/mutations/update-password.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`updateUser`](/operations/mutations/update-user.mdx)  <Badge class="badge badge--secondary" text="mutation"/><Bullet />[`userByEmail`](/operations/queries/user-by-email.mdx)  <Badge class="badge badge--secondary" text="query"/>
+
+### Member Of
+
+[`Flight`](/types/objects/flight.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Invoice`](/types/objects/invoice.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`License`](/types/objects/license.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Maintenance`](/types/objects/maintenance.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Reservation`](/types/objects/reservation.mdx)  <Badge class="badge badge--secondary" text="object"/><Bullet />[`Role`](/types/objects/role.mdx)  <Badge class="badge badge--secondary" text="object"/>
+
