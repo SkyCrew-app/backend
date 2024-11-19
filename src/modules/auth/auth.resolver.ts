@@ -39,7 +39,7 @@ export class AuthResolver {
 
     return {
       access_token: this.authService.login(user),
-      is2FAEnabled: user.is2FAEnabled,
+      is2FAEnabled: !!user.twoFactorAuthSecret,
     };
   }
 
