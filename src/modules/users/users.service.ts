@@ -7,6 +7,7 @@ import { UpdateUserInput } from './dto/update-user.input';
 import { MailerService } from '../mail/mailer.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class UsersService {
@@ -20,17 +21,35 @@ export class UsersService {
     return this.usersRepository.find();
   }
 
+  findOneById(id: number): Promise<User> {
+    return this.usersRepository.findOne({
+      where: { id },
+      relations: ['reservations', 'licenses'],
+    });
+  }
+
   findOneByEmail(email: string): Promise<User> {
     return this.usersRepository.findOne({ where: { email } });
   }
 
   async create(userData: Partial<User>): Promise<User> {
-    if (userData.password) {
-      const hashedPassword = await bcrypt.hash(userData.password, 10);
-      userData.password = hashedPassword;
-    }
+    const generatedPassword = uuidv4();
+    const token = uuidv4();
+    const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+    userData.password = hashedPassword;
 
-    const newUser = this.usersRepository.create(userData);
+    const newUser = this.usersRepository.create({
+      ...userData,
+      validation_token: token,
+    });
+    const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${token}`;
+    await this.emailService.sendMail(
+      newUser.email,
+      'Bienvenue sur notre plateforme',
+      'Bienvenue sur notre plateforme, veuillez cliquer sur le lien suivant pour confirmer votre adresse email',
+      'confirmation-email',
+      { name: newUser.first_name, confirmationUrl },
+    );
     return this.usersRepository.save(newUser);
   }
 
@@ -50,14 +69,6 @@ export class UsersService {
     await this.usersRepository.save(user);
   }
 
-  async confirmEmail(email: string): Promise<void> {
-    const user = await this.usersRepository.findOne({ where: { email } });
-    if (!user) throw new Error('User not found');
-
-    user.isEmailConfirmed = true;
-    await this.usersRepository.save(user);
-  }
-
   async updateUser(
     updateUserInput: UpdateUserInput,
     imagePath: string | null,
@@ -71,7 +82,6 @@ export class UsersService {
       '../../uploads/users',
       String(user.id),
     );
-
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
     }
@@ -87,7 +97,7 @@ export class UsersService {
     await this.emailService.sendMail(
       user.email,
       'Vos informations ont été mises à jour',
-      'Vos informations ont été mises à jour avec succès',
+      'Vos informations ont été mises à jour avec succès.',
       'update-user',
       { first_name: user.first_name },
     );
@@ -152,6 +162,23 @@ export class UsersService {
       'change-password',
       { first_name },
     );
+    return this.usersRepository.save(user);
+  }
+
+  async confirmEmailAndSetPassword(
+    token: string,
+    password: string,
+  ): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      where: { validation_token: token },
+    });
+    if (!user) throw new Error('User not found');
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    user.password = hashedPassword;
+    user.isEmailConfirmed = true;
+    user.validation_token = null;
+
     return this.usersRepository.save(user);
   }
 }

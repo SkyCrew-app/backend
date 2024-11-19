@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args, Context } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Context, Int } from '@nestjs/graphql';
 import { UsersService } from './users.service';
 import { User } from './entity/users.entity';
 import { UseGuards } from '@nestjs/common';
@@ -7,7 +7,6 @@ import { UpdateUserInput } from './dto/update-user.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import * as path from 'path';
 import * as fs from 'fs';
-import { existsSync, mkdirSync } from 'fs';
 
 @Resolver(() => User)
 export class UsersResolver {
@@ -24,14 +23,12 @@ export class UsersResolver {
     @Args('first_name') first_name: string,
     @Args('last_name') last_name: string,
     @Args('email') email: string,
-    @Args('password') password: string,
     @Args('date_of_birth') date_of_birth: Date,
   ) {
     return this.usersService.create({
       first_name,
       last_name,
       email,
-      password,
       date_of_birth,
     });
   }
@@ -54,7 +51,9 @@ export class UsersResolver {
     if (image) {
       const { createReadStream, filename } = await image;
       const uploadDir = path.join(__dirname, '../../uploads/tmp');
-      if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
 
       imagePath = path.join(uploadDir, filename);
       const stream = createReadStream();
@@ -108,5 +107,19 @@ export class UsersResolver {
       currentPassword,
       newPassword,
     );
+  }
+
+  @Query(() => User)
+  @UseGuards(JwtAuthGuard)
+  async getUserDetails(@Args('id', { type: () => Int }) id: number) {
+    return this.usersService.findOneById(id);
+  }
+
+  @Mutation(() => User)
+  async confirmEmailAndSetPassword(
+    @Args('token') token: string,
+    @Args('password') password: string,
+  ) {
+    return this.usersService.confirmEmailAndSetPassword(token, password);
   }
 }
