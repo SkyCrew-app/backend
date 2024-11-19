@@ -12,13 +12,13 @@ export class CreateUserInput {
   email: string;
 
   @Field({ nullable: true })
-  password: string;
+  password?: string;
 
   @Field({ nullable: true })
-  is2FAEnabled: boolean;
+  is2FAEnabled?: boolean;
 
   @Field({ nullable: true })
-  twoFactorAuthSecret: string;
+  twoFactorAuthSecret?: string;
 
   @Field({ nullable: true })
   phone_number?: string;
@@ -26,8 +26,8 @@ export class CreateUserInput {
   @Field({ nullable: true })
   address?: string;
 
-  @Field({ nullable: false })
-  date_of_birth?: Date;
+  @Field()
+  date_of_birth: Date;
 
   @Field({ nullable: true })
   profile_picture?: string;

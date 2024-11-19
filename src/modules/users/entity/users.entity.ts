@@ -77,6 +77,10 @@ export class User {
   @Column({ default: true })
   newsletter_subscribed: boolean;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  validation_token: string;
+
   @Field(() => [Role])
   @OneToMany(() => Role, (role) => role.users)
   roles: Role[];
