@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { typeOrmConfig } from './config/typeorm.config';
 import { RedisModule } from './config/redis.module';
-import { MailModule } from './modules/mail/mail.module';
+import { MailerModule } from './modules/mail/mailer.module';
 import { AppResolver } from './app.resolver';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
@@ -23,6 +23,9 @@ import { InstructionCoursesModule } from './modules/instruction-courses/instruct
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { RolesModule } from './modules/roles/roles.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { AdministrationModule } from './modules/administration/administration.module';
+import { GraphQLUpload } from 'graphql-upload-ts';
 
 @Module({
   imports: [
@@ -51,13 +54,17 @@ import { RolesModule } from './modules/roles/roles.module';
       autoSchemaFile: true,
       playground: true,
       path: process.env.GRAPHQL_ENDPOINT || '/graphql',
+      context: ({ req, res }: { req: Request; res: Response }) => ({
+        req,
+        res,
+      }),
     }),
 
     // Configuration Redis
     RedisModule,
 
     // Mail Module
-    MailModule,
+    MailerModule,
 
     UsersModule,
 
@@ -84,7 +91,17 @@ import { RolesModule } from './modules/roles/roles.module';
     AuditModule,
 
     RolesModule,
+
+    AuthModule,
+
+    AdministrationModule,
   ],
-  providers: [AppResolver],
+  providers: [
+    AppResolver,
+    {
+      provide: 'Upload',
+      useValue: GraphQLUpload,
+    },
+  ],
 })
 export class AppModule {}

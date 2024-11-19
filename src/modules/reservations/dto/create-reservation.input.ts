@@ -1,4 +1,5 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
+import { FlightCategory } from '../entity/reservations.entity';
 
 @InputType()
 export class CreateReservationInput {
@@ -8,7 +9,7 @@ export class CreateReservationInput {
   @Field(() => Int)
   user_id: number;
 
-  @Field()
+  @Field({ nullable: true })
   reservation_date: Date;
 
   @Field()
@@ -20,9 +21,15 @@ export class CreateReservationInput {
   @Field({ nullable: true })
   purpose?: string;
 
-  @Field({ nullable: true })
-  flight_category?: string;
+  @Field(() => FlightCategory)
+  flight_category: FlightCategory;
 
   @Field(() => Float, { nullable: true })
   estimated_flight_hours?: number;
+
+  @Field({ nullable: true })
+  notes?: string;
+
+  @Field({ nullable: true })
+  status?: string;
 }

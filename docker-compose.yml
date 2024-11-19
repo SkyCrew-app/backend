@@ -5,12 +5,12 @@ services:
     volumes:
       - .:/usr/src/app
       - /usr/src/app/node_modules
+      - ./.env:/app/.env
     ports:
       - '3000:3000'
     depends_on:
       - db
       - redis
-      - rabbitmq
       - mailhog
     environment:
       - DB_HOST=db
@@ -20,13 +20,13 @@ services:
       - DB_NAME=mydb
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - RABBITMQ_URL=amqp://rabbitmq
       - MAIL_HOST=mailhog
       - MAIL_PORT=1025
       - MAIL_USER=null
       - MAIL_PASSWORD=null
       - MAIL_FROM=no-reply@example.com
       - MAIL_SECURE=false
+      - JWT_SECRET=yourSecretKey
 
   db:
     image: postgres:14
@@ -43,12 +43,6 @@ services:
     image: redis:alpine
     ports:
       - '6379:6379'
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - '5672:5672'
-      - '15672:15672'
 
   mailhog:
     image: mailhog/mailhog

@@ -27,6 +27,22 @@ export class User {
 
   @Field({ nullable: true })
   @Column({ nullable: true })
+  password: string;
+
+  @Field(() => Boolean)
+  @Column({ default: false })
+  is2FAEnabled: boolean;
+
+  @Field(() => Boolean)
+  @Column({ default: false })
+  isEmailConfirmed: boolean;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  twoFactorAuthSecret: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
   phone_number: string;
 
   @Field({ nullable: true })
@@ -44,6 +60,26 @@ export class User {
   @Field({ nullable: true })
   @Column({ nullable: true })
   total_flight_hours: number;
+
+  @Field({ nullable: false })
+  @Column({ default: 0 })
+  user_account_balance: number;
+
+  @Field(() => Boolean)
+  @Column({ default: true })
+  email_notifications_enabled: boolean;
+
+  @Field(() => Boolean)
+  @Column({ default: false })
+  sms_notifications_enabled: boolean;
+
+  @Field(() => Boolean)
+  @Column({ default: true })
+  newsletter_subscribed: boolean;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  validation_token: string;
 
   @Field(() => [Role])
   @OneToMany(() => Role, (role) => role.users)

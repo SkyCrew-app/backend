@@ -1,4 +1,5 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
+import { AvailabilityStatus } from '../entity/aircraft.entity';
 
 @InputType()
 export class UpdateAircraftInput {
@@ -14,8 +15,8 @@ export class UpdateAircraftInput {
   @Field(() => Int, { nullable: true })
   year_of_manufacture?: number;
 
-  @Field({ nullable: true })
-  availability_status?: string;
+  @Field(() => AvailabilityStatus, { nullable: true })
+  availability_status?: AvailabilityStatus;
 
   @Field({ nullable: true })
   maintenance_status?: string;
@@ -24,7 +25,10 @@ export class UpdateAircraftInput {
   hourly_cost?: number;
 
   @Field({ nullable: true })
-  insurance_document_url?: string;
+  image_url?: string;
+
+  @Field(() => [String], { nullable: true })
+  documents_url: string[];
 
   @Field({ nullable: true })
   last_inspection_date?: Date;
