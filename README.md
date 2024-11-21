@@ -104,33 +104,54 @@ Ensure you have the following installed:
    npm run start:dev
    ```
 
-### **Frontend Setup**
+### **Backend Setup (Docker)**
 
-1. **Navigate to the frontend directory:**
+1. **Clone the repository:**
 
    ```bash
-   cd ../frontend
+   git clone https://github.com/yourusername/aeroclub-management.git
+   cd aeroclub-management
    ```
 
-2. **Install frontend dependencies:**
+2. **Install backend dependencies:**
 
    ```bash
+   cd backend
    npm install
    ```
 
-3. **Start the React frontend development server:**
+3. **Set up environment variables:**
 
-   ```bash
-   npm start
+   Create a `.env` file in the backend root directory:
+
+   ```env
+   DB_HOST=db
+   DB_PORT=5432
+   DB_USER=root
+   DB_PASSWORD=password
+   DB_NAME=mydb
+   REDIS_HOST=redis
+   REDIS_PORT=6379
+   GRAPHQL_ENDPOINT=/graphql
+   MAIL_HOST=mailhog
+   MAIL_PORT=1025
+   MAIL_USER=null
+   MAIL_PASSWORD=null
+   MAIL_FROM=no-reply@skycrew.fr
+   MAIL_SECURE=false
+   JWT_SECRET=uAsLYpaZSV3guAj-e-biupo-5eVfIHq-69DRZog9ZTs
+   JWT_EXPIRES_IN=3600
+   FRONTEND_URL=http://localhost:8080
+   VONAGE_API_KEY=
+   VONAGE_API_SECRET=
+   WHATSAPP_FROM_NUMBER=
    ```
 
-### **Running Redis**
+4. **Run docker compose:**
 
-Ensure Redis is running. You can use Docker to run Redis:
-
-```bash
-docker run -d -p 6379:6379 redis
-```
+   ```bash
+   docker-compose up -d
+   ```
 
 ---
 
