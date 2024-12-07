@@ -52,6 +52,12 @@ export class ReservationsService {
       throw new Error(`L'utilisateur avec l'ID ${user_id} n'existe pas.`);
     }
 
+    if (user.licenses.length == 0) {
+      throw new Error(
+        `L'utilisateur n'as pas de licences pour réserver cet avion`,
+      );
+    }
+
     const reservation = this.reservationRepository.create({
       aircraft,
       user,

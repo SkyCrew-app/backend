@@ -109,9 +109,9 @@ export class User {
   @OneToMany(() => Maintenance, (maintenance) => maintenance.technician)
   maintenances: Maintenance[];
 
-  @Field(() => [License])
-  @OneToMany(() => License, (license) => license.user)
-  licenses: License[];
+  @Field(() => [License], { nullable: true })
+  @OneToMany(() => License, (license) => license.user, { cascade: true })
+  licenses?: License[];
 
   @Field(() => [Invoice])
   @OneToMany(() => Invoice, (invoice) => invoice.user)
