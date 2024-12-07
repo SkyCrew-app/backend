@@ -81,6 +81,22 @@ export class User {
   @Column({ nullable: true })
   validation_token: string;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  language: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  speed_unit: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  distance_unit: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  timezone: string;
+
   @Field(() => [Role])
   @OneToMany(() => Role, (role) => role.users)
   roles: Role[];
