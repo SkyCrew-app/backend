@@ -29,7 +29,10 @@ export class UsersService {
   }
 
   findOneByEmail(email: string): Promise<User> {
-    return this.usersRepository.findOne({ where: { email } });
+    return this.usersRepository.findOne({
+      where: { email },
+      relations: ['reservations', 'licenses'],
+    });
   }
 
   async create(userData: Partial<User>): Promise<User> {

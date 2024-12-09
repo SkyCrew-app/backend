@@ -88,6 +88,22 @@ export class User {
   @Column({ nullable: true })
   validation_token: string;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  language: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  speed_unit: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  distance_unit: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  timezone: string;
+
   @Field(() => [Role])
   @ManyToMany(() => Role, (role) => role.users)
   @JoinTable()
@@ -101,9 +117,9 @@ export class User {
   @OneToMany(() => Maintenance, (maintenance) => maintenance.technician)
   maintenances: Maintenance[];
 
-  @Field(() => [License])
-  @OneToMany(() => License, (license) => license.user)
-  licenses: License[];
+  @Field(() => [License], { nullable: true })
+  @OneToMany(() => License, (license) => license.user, { cascade: true })
+  licenses?: License[];
 
   @Field(() => [Invoice])
   @OneToMany(() => Invoice, (invoice) => invoice.user)

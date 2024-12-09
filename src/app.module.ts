@@ -26,6 +26,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdministrationModule } from './modules/administration/administration.module';
 import { GraphQLUpload } from 'graphql-upload-ts';
+import { ArticleModule } from './modules/article/article.module';
 
 @Module({
   imports: [
@@ -95,6 +96,8 @@ import { GraphQLUpload } from 'graphql-upload-ts';
     AuthModule,
 
     AdministrationModule,
+
+    ArticleModule,
   ],
   providers: [
     AppResolver,
