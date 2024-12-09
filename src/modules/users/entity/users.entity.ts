@@ -1,5 +1,12 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  OneToMany,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { Maintenance } from '../../maintenance/entity/maintenance.entity';
 import { License } from '../../licenses/entity/licenses.entity';
@@ -82,7 +89,8 @@ export class User {
   validation_token: string;
 
   @Field(() => [Role])
-  @OneToMany(() => Role, (role) => role.users)
+  @ManyToMany(() => Role, (role) => role.users)
+  @JoinTable()
   roles: Role[];
 
   @Field(() => [Reservation])

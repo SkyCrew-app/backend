@@ -10,10 +10,10 @@ export class Role {
   id: number;
 
   @Field()
-  @Column()
+  @Column({ unique: true })
   role_name: string;
 
-  @Field(() => [User])
-  @ManyToMany(() => User, (user) => user.roles)
-  users: User[];
+  @Field(() => [User], { nullable: true })
+  @ManyToMany(() => User, (user) => user.roles, { nullable: true })
+  users?: User[];
 }
