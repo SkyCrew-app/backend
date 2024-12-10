@@ -4,8 +4,7 @@ import {
   Column,
   PrimaryGeneratedColumn,
   OneToMany,
-  ManyToMany,
-  JoinTable,
+  ManyToOne,
 } from 'typeorm';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { Maintenance } from '../../maintenance/entity/maintenance.entity';
@@ -104,10 +103,9 @@ export class User {
   @Column({ nullable: true })
   timezone: string;
 
-  @Field(() => [Role])
-  @ManyToMany(() => Role, (role) => role.users)
-  @JoinTable()
-  roles: Role[];
+  @Field(() => Role, { nullable: true })
+  @ManyToOne(() => Role, (role) => role.users, { nullable: true })
+  role: Role;
 
   @Field(() => [Reservation])
   @OneToMany(() => Reservation, (reservation) => reservation.user)
