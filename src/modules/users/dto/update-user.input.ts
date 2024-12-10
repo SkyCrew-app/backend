@@ -46,4 +46,7 @@ export class UpdateUserInput {
 
   @Field({ nullable: true })
   timezone?: string;
+
+  @Field({ nullable: true })
+  roleId?: number;
 }

@@ -18,20 +18,22 @@ export class UsersService {
   ) {}
 
   findAll(): Promise<User[]> {
-    return this.usersRepository.find();
+    return this.usersRepository.find({
+      relations: ['role'],
+    });
   }
 
   findOneById(id: number): Promise<User> {
     return this.usersRepository.findOne({
       where: { id },
-      relations: ['reservations', 'licenses'],
+      relations: ['reservations', 'licenses', 'role'],
     });
   }
 
   findOneByEmail(email: string): Promise<User> {
     return this.usersRepository.findOne({
       where: { email },
-      relations: ['reservations', 'licenses'],
+      relations: ['reservations', 'licenses', 'role'],
     });
   }
 

@@ -1,5 +1,11 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  OneToMany,
+  ManyToOne,
+} from 'typeorm';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { Maintenance } from '../../maintenance/entity/maintenance.entity';
 import { License } from '../../licenses/entity/licenses.entity';
@@ -97,9 +103,9 @@ export class User {
   @Column({ nullable: true })
   timezone: string;
 
-  @Field(() => [Role])
-  @OneToMany(() => Role, (role) => role.users)
-  roles: Role[];
+  @Field(() => Role, { nullable: true })
+  @ManyToOne(() => Role, (role) => role.users, { nullable: true })
+  role: Role;
 
   @Field(() => [Reservation])
   @OneToMany(() => Reservation, (reservation) => reservation.user)
