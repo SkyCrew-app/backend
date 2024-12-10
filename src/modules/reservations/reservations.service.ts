@@ -9,6 +9,12 @@ import { User } from '../users/entity/users.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { AdministrationService } from '../administration/administration.service';
+import {
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 
 @Injectable()
 export class ReservationsService {
@@ -20,6 +26,7 @@ export class ReservationsService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Aircraft)
     private readonly aircraftRepository: Repository<Aircraft>,
+    private readonly administrationService: AdministrationService,
   ) {}
 
   async create(
@@ -32,7 +39,9 @@ export class ReservationsService {
       where: { id: aircraft_id },
     });
     if (!aircraft) {
-      throw new Error(`L'avion avec l'ID ${aircraft_id} n'existe pas.`);
+      throw new NotFoundException(
+        `L'avion avec l'ID ${aircraft_id} n'existe pas.`,
+      );
     }
 
     const conflictingReservations = await this.reservationRepository.find({
@@ -44,16 +53,45 @@ export class ReservationsService {
     });
 
     if (conflictingReservations.length > 0) {
-      throw new Error('Cet avion est déjà réservé pour les dates spécifiées.');
+      throw new ConflictException(
+        'Cet avion est déjà réservé pour les dates spécifiées.',
+      );
     }
 
-    const user = await this.userRepository.findOne({ where: { id: user_id } });
+    const user = await this.userRepository.findOne({
+      where: { id: user_id },
+      relations: ['licenses'],
+    });
+
     if (!user) {
-      throw new Error(`L'utilisateur avec l'ID ${user_id} n'existe pas.`);
+      throw new NotFoundException(
+        `L'utilisateur avec l'ID ${user_id} n'existe pas.`,
+      );
+    }
+
+    const administration = await this.administrationService.findAll();
+    if (!administration) {
+      throw new NotFoundException(
+        "Aucune configuration d'administration trouvée",
+      );
+    }
+
+    const authorizedLicenses = administration[0].pilotLicenses;
+
+    const userLicenses = user.licenses.map((license) => license.license_type);
+
+    const hasLicense = authorizedLicenses.some((license) =>
+      userLicenses.includes(license),
+    );
+
+    if (!hasLicense) {
+      throw new BadRequestException(
+        `L'utilisateur n'as pas de licences pour réserver cet avion`,
+      );
     }
 
     if (user.licenses.length == 0) {
-      throw new Error(
+      throw new BadRequestException(
         `L'utilisateur n'as pas de licences pour réserver cet avion`,
       );
     }
