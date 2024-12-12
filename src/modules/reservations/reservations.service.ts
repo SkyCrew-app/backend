@@ -127,6 +127,13 @@ export class ReservationsService {
 
     const savedReservation = await this.reservationRepository.save(reservation);
 
+    const startTime = new Date(start_time);
+    const endTime = new Date(end_time);
+    const hoursReserved =
+      (endTime.getTime() - startTime.getTime()) / 1000 / 60 / 60;
+    user.total_flight_hours = (user.total_flight_hours || 0) + hoursReserved;
+    await this.userRepository.save(user);
+
     return savedReservation;
   }
 
@@ -238,5 +245,12 @@ export class ReservationsService {
     queryBuilder.leftJoinAndSelect('reservation.user', 'user');
 
     return await queryBuilder.getMany();
+  }
+
+  async findUserReservations(userId: number): Promise<Reservation[]> {
+    return this.reservationRepository.find({
+      where: { user: { id: userId } },
+      relations: ['aircraft', 'user'],
+    });
   }
 }
