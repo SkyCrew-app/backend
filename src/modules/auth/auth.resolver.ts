@@ -26,14 +26,14 @@ export class AuthResolver {
     res.cookie('email', user.email, {
       httpOnly: true,
       secure: false,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 1000 * 60 * 60,
     });
 
     res.cookie('token', await this.authService.login(user), {
       httpOnly: true,
       secure: false,
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 1000 * 60 * 60,
     });
 
