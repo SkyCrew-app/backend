@@ -32,6 +32,8 @@ async function bootstrap() {
   app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
   app.useGlobalPipes(new ValidationPipe());
-  await app.listen(3000);
+  await app.listen(3000, () => {
+    console.log(`🚀 Application is running on: http://localhost:3000`);
+  });
 }
 bootstrap();
