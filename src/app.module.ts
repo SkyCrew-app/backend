@@ -4,7 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { typeOrmConfig } from './config/typeorm.config';
-import { RedisModule } from './config/redis.module';
+// import { RedisModule } from './config/redis.module';
 import { MailerModule } from './modules/mail/mailer.module';
 import { AppResolver } from './app.resolver';
 import { PassportModule } from '@nestjs/passport';
@@ -62,7 +62,7 @@ import { ArticleModule } from './modules/article/article.module';
     }),
 
     // Configuration Redis
-    RedisModule,
+    // RedisModule,
 
     // Mail Module
     MailerModule,
