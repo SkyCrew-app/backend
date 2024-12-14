@@ -75,4 +75,8 @@ export class Administration {
   @Field()
   @Column({ type: 'enum', enum: ['self-service', 'staff-only', 'external'] })
   fuelManagement: 'self-service' | 'staff-only' | 'external';
+
+  @Field()
+  @Column({ type: 'boolean', nullable: false, default: false })
+  isMaintenanceActive: boolean;
 }

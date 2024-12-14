@@ -36,4 +36,9 @@ export class AdministrationResolver {
   delete(@Args('id', { type: () => Int }) id: number) {
     return this.administrationService.remove(id);
   }
+
+  @Query(() => Boolean, { name: 'getMaintenance' })
+  getMaintenance() {
+    return this.administrationService.getMaintenance();
+  }
 }

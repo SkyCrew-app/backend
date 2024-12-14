@@ -52,4 +52,7 @@ export class CreateAdministrationInput {
 
   @Field()
   fuelManagement: 'self-service' | 'staff-only' | 'external';
+
+  @Field()
+  isMaintenanceActive: boolean;
 }

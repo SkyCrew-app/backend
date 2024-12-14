@@ -49,4 +49,12 @@ export class AdministrationService {
     await this.administrationRepository.remove(administration);
     return true;
   }
+
+  async getMaintenance(): Promise<boolean> {
+    const isMaintenanceActive = this.administrationRepository.findOne({
+      where: { id: 1 },
+    });
+
+    return (await isMaintenanceActive).isMaintenanceActive;
+  }
 }
