@@ -25,14 +25,14 @@ export class AuthResolver {
     // Définir le cookie dans la réponse
     res.cookie('email', user.email, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'strict',
       maxAge: 1000 * 60 * 60,
     });
 
     res.cookie('token', await this.authService.login(user), {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: false,
       sameSite: 'strict',
       maxAge: 1000 * 60 * 60,
     });
