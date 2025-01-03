@@ -38,6 +38,14 @@ export class Aircraft {
   @Column()
   year_of_manufacture: number;
 
+  @Field(() => Int)
+  @Column({ nullable: true })
+  maxAltitude: number;
+
+  @Field(() => Int)
+  @Column({ nullable: true })
+  cruiseSpeed: number;
+
   @Field({ nullable: true })
   @Column({ nullable: true })
   image_url: string;
