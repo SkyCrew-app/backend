@@ -250,7 +250,7 @@ export class ReservationsService {
   async findUserReservations(userId: number): Promise<Reservation[]> {
     return this.reservationRepository.find({
       where: { user: { id: userId } },
-      relations: ['aircraft', 'user'],
+      relations: ['aircraft', 'user', 'flights'],
     });
   }
 }
