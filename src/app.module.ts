@@ -4,7 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { typeOrmConfig } from './config/typeorm.config';
-import { RedisModule } from './config/redis.module';
+// import { RedisModule } from './config/redis.module';
 import { MailerModule } from './modules/mail/mailer.module';
 import { AppResolver } from './app.resolver';
 import { PassportModule } from '@nestjs/passport';
@@ -26,6 +26,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdministrationModule } from './modules/administration/administration.module';
 import { GraphQLUpload } from 'graphql-upload-ts';
+import { ArticleModule } from './modules/article/article.module';
 
 @Module({
   imports: [
@@ -61,7 +62,7 @@ import { GraphQLUpload } from 'graphql-upload-ts';
     }),
 
     // Configuration Redis
-    RedisModule,
+    // RedisModule,
 
     // Mail Module
     MailerModule,
@@ -95,6 +96,8 @@ import { GraphQLUpload } from 'graphql-upload-ts';
     AuthModule,
 
     AdministrationModule,
+
+    ArticleModule,
   ],
   providers: [
     AppResolver,

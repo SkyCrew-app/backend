@@ -10,26 +10,38 @@ export class License {
   id: number;
 
   @Field(() => User)
-  @ManyToOne(() => User, (user) => user.licenses)
+  @ManyToOne(() => User, (user) => user.licenses, { eager: true })
   user: User;
 
   @Field()
   @Column()
   license_type: string;
 
-  @Field()
-  @Column()
-  expiration_date: Date;
+  @Field(() => Date, { nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
+  issue_date?: Date;
 
-  @Field()
-  @Column()
-  issue_date: Date;
+  @Field(() => Date, { nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
+  expiration_date?: Date;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
-  certification_authority: string;
+  certification_authority?: string;
 
   @Field(() => Boolean)
   @Column({ default: true })
   is_valid: boolean;
+
+  @Field({ defaultValue: 'active' })
+  @Column({ default: 'active' })
+  status: 'active' | 'expired' | 'pending';
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  license_number: string;
+
+  @Field(() => [String], { nullable: true })
+  @Column('simple-array', { nullable: true })
+  documents_url?: string[];
 }

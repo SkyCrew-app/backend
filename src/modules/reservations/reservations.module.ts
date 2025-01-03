@@ -6,11 +6,15 @@ import { Reservation } from './entity/reservations.entity';
 import { MailerModule } from '../mail/mailer.module';
 import { User } from '../users/entity/users.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
+import { AdministrationModule } from '../administration/administration.module';
+import { FlightsModule } from '../flights/flights.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Reservation, User, Aircraft]),
     MailerModule,
+    AdministrationModule,
+    FlightsModule,
   ],
   providers: [ReservationsService, ReservationsResolver],
   exports: [ReservationsService],

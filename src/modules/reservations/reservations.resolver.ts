@@ -50,4 +50,11 @@ export class ReservationsResolver {
   ): Promise<Reservation[]> {
     return this.reservationService.findFilteredReservations(startDate, endDate);
   }
+
+  @Query(() => [Reservation], { name: 'userReservations' })
+  async getUserReservations(
+    @Args('userId', { type: () => Int }) userId: number,
+  ): Promise<Reservation[]> {
+    return this.reservationService.findUserReservations(userId);
+  }
 }

@@ -1,10 +1,17 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  OneToMany,
+  ManyToOne,
+} from 'typeorm';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { Maintenance } from '../../maintenance/entity/maintenance.entity';
 import { License } from '../../licenses/entity/licenses.entity';
 import { Invoice } from '../../invoices/entity/invoices.entity';
 import { Role } from '../../roles/entity/roles.entity';
+import { Flight } from 'src/modules/flights/entity/flights.entity';
 
 @ObjectType()
 @Entity('users')
@@ -81,9 +88,25 @@ export class User {
   @Column({ nullable: true })
   validation_token: string;
 
-  @Field(() => [Role])
-  @OneToMany(() => Role, (role) => role.users)
-  roles: Role[];
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  language: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  speed_unit: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  distance_unit: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  timezone: string;
+
+  @Field(() => Role, { nullable: true })
+  @ManyToOne(() => Role, (role) => role.users, { nullable: true })
+  role: Role;
 
   @Field(() => [Reservation])
   @OneToMany(() => Reservation, (reservation) => reservation.user)
@@ -93,11 +116,15 @@ export class User {
   @OneToMany(() => Maintenance, (maintenance) => maintenance.technician)
   maintenances: Maintenance[];
 
-  @Field(() => [License])
-  @OneToMany(() => License, (license) => license.user)
-  licenses: License[];
+  @Field(() => [License], { nullable: true })
+  @OneToMany(() => License, (license) => license.user, { cascade: true })
+  licenses?: License[];
 
   @Field(() => [Invoice])
   @OneToMany(() => Invoice, (invoice) => invoice.user)
   invoices: Invoice[];
+
+  @Field(() => [Flight])
+  @OneToMany(() => Flight, (flight) => flight.user)
+  flights: any;
 }

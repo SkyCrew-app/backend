@@ -1,9 +1,10 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
+import { FlightCategory } from '../../reservations/entity/reservations.entity';
 
 @InputType()
 export class CreateFlightInput {
-  @Field(() => Int)
-  reservation_id: number;
+  @Field(() => Int, { nullable: true })
+  reservation_id?: number;
 
   @Field(() => Int)
   user_id: number;
@@ -11,14 +12,14 @@ export class CreateFlightInput {
   @Field(() => Float)
   flight_hours: number;
 
-  @Field()
-  flight_type: string;
+  @Field(() => FlightCategory)
+  flight_type: FlightCategory;
 
   @Field()
-  origin_airport: string;
+  origin_icao: string;
 
   @Field()
-  destination_airport: string;
+  destination_icao: string;
 
   @Field({ nullable: true })
   weather_conditions?: string;
@@ -27,5 +28,14 @@ export class CreateFlightInput {
   number_of_passengers: number;
 
   @Field({ nullable: true })
-  milestone_reached?: boolean;
+  encoded_polyline?: string;
+
+  @Field(() => Float, { nullable: true })
+  distance_km?: number;
+
+  @Field(() => Float, { nullable: true })
+  estimated_flight_time?: number;
+
+  @Field(() => [String], { nullable: true })
+  waypoints: string[];
 }

@@ -34,4 +34,19 @@ export class UpdateUserInput {
 
   @Field({ nullable: true })
   is_instructor?: boolean;
+
+  @Field({ nullable: true })
+  language?: string;
+
+  @Field({ nullable: true })
+  speed_unit?: string;
+
+  @Field({ nullable: true })
+  distance_unit?: string;
+
+  @Field({ nullable: true })
+  timezone?: string;
+
+  @Field({ nullable: true })
+  roleId?: number;
 }
