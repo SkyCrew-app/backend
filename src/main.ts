@@ -16,7 +16,7 @@ async function bootstrap() {
   app.use(cookieParser());
 
   app.enableCors({
-    origin: ['https://staging.skycrew.fr', 'http://localhost:3000'],
+    origin: ['https://staging.skycrew.fr', 'http://localhost:8080'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
