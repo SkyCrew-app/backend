@@ -18,10 +18,10 @@ export class UpdateFlightInput {
   flight_type?: string;
 
   @Field({ nullable: true })
-  origin_airport?: string;
+  origin_icao?: string;
 
   @Field({ nullable: true })
-  destination_airport?: string;
+  destination_icao?: string;
 
   @Field({ nullable: true })
   weather_conditions?: string;
@@ -31,4 +31,22 @@ export class UpdateFlightInput {
 
   @Field({ nullable: true })
   milestone_reached?: boolean;
+
+  @Field({ nullable: true })
+  encoded_polyline?: string;
+
+  @Field(() => Float, { nullable: true })
+  distance_km?: number;
+
+  @Field(() => Int, { nullable: true })
+  max_altitude?: number;
+
+  @Field(() => Float, { nullable: true })
+  estimated_flight_time?: number;
+
+  @Field({ nullable: true })
+  map_file?: string;
+
+  @Field(() => [String], { nullable: true })
+  waypoints?: string[];
 }
