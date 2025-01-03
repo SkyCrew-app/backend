@@ -11,6 +11,7 @@ import { Maintenance } from '../../maintenance/entity/maintenance.entity';
 import { License } from '../../licenses/entity/licenses.entity';
 import { Invoice } from '../../invoices/entity/invoices.entity';
 import { Role } from '../../roles/entity/roles.entity';
+import { Flight } from 'src/modules/flights/entity/flights.entity';
 
 @ObjectType()
 @Entity('users')
@@ -122,4 +123,8 @@ export class User {
   @Field(() => [Invoice])
   @OneToMany(() => Invoice, (invoice) => invoice.user)
   invoices: Invoice[];
+
+  @Field(() => [Flight])
+  @OneToMany(() => Flight, (flight) => flight.user)
+  flights: any;
 }
