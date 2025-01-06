@@ -10,7 +10,7 @@ import {
   Column,
   PrimaryGeneratedColumn,
   ManyToOne,
-  OneToOne,
+  OneToMany,
 } from 'typeorm';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
@@ -58,9 +58,11 @@ export class Reservation {
   @ManyToOne(() => User, (user) => user.reservations, { eager: true })
   user: User;
 
-  @Field(() => Flight)
-  @OneToOne(() => Flight, (flight) => flight.reservation)
-  flight: Flight;
+  @Field(() => [Flight], { nullable: true })
+  @OneToMany(() => Flight, (flight) => flight.reservation, {
+    nullable: true,
+  })
+  flights: Flight[];
 
   @Field({ nullable: true })
   @Column({ nullable: true })
@@ -105,4 +107,8 @@ export class Reservation {
   @Field({ nullable: true })
   @Column({ nullable: true })
   calendar_integration_url: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  number_of_passengers: number;
 }

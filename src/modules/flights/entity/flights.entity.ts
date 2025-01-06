@@ -1,11 +1,5 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import {
-  Entity,
-  Column,
-  PrimaryGeneratedColumn,
-  ManyToOne,
-  OneToOne,
-} from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 
@@ -16,12 +10,18 @@ export class Flight {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Field(() => Reservation)
-  @ManyToOne(() => Reservation, (reservation) => reservation.id)
+  @Field(() => Reservation, { nullable: true })
+  @ManyToOne(() => Reservation, (reservation) => reservation.flights, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
   reservation: Reservation;
 
   @Field(() => User)
-  @ManyToOne(() => User, (user) => user.id)
+  @ManyToOne(() => User, (user) => user.flights, {
+    onDelete: 'CASCADE',
+    nullable: false,
+  })
   user: User;
 
   @Field(() => Float)
@@ -34,25 +34,42 @@ export class Flight {
 
   @Field()
   @Column()
-  origin_airport: string;
+  origin_icao: string;
 
   @Field()
   @Column()
-  destination_airport: string;
+  destination_icao: string;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
   weather_conditions: string;
 
-  @Field(() => Int)
+  @Field(() => Int, { nullable: true })
   @Column()
-  number_of_passengers: number;
+  number_of_passengers?: number;
 
-  @Field(() => Boolean)
-  @Column({ default: false })
-  milestone_reached: boolean;
+  @Field({ nullable: true })
+  @Column({ type: 'text', nullable: true })
+  encoded_polyline: string;
 
-  @Field(() => Reservation)
-  @OneToOne(() => Reservation, (reservation) => reservation.id)
-  reservation_id: Reservation;
+  @Field(() => Float, { nullable: true })
+  @Column('float', { nullable: true })
+  distance_km: number;
+
+  @Field(() => Float, { nullable: true })
+  @Column('float', { nullable: true })
+  estimated_flight_time: number;
+
+  @Field(() => String, { nullable: true })
+  @Column('jsonb', { nullable: true })
+  waypoints: string;
+
+  @Field(() => String, { nullable: true })
+  departure_airport_info?: string;
+
+  @Field(() => String, { nullable: true })
+  arrival_airport_info?: string;
+
+  @Field(() => [String], { nullable: true })
+  detailed_waypoints?: string[];
 }

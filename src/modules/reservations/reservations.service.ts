@@ -15,6 +15,7 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class ReservationsService {
@@ -27,6 +28,7 @@ export class ReservationsService {
     @InjectRepository(Aircraft)
     private readonly aircraftRepository: Repository<Aircraft>,
     private readonly administrationService: AdministrationService,
+    private readonly paymentService: PaymentsService,
   ) {}
 
   async create(
@@ -96,6 +98,18 @@ export class ReservationsService {
       );
     }
 
+    const startTime = new Date(start_time);
+    const endTime = new Date(end_time);
+    const hoursReserved =
+      (endTime.getTime() - startTime.getTime()) / 1000 / 60 / 60;
+    const totalCost = hoursReserved * aircraft.hourly_cost;
+
+    if (user.user_account_balance < totalCost) {
+      throw new BadRequestException(
+        `Solde insuffisant pour réserver cet avion`,
+      );
+    }
+
     const reservation = this.reservationRepository.create({
       aircraft,
       user,
@@ -127,10 +141,12 @@ export class ReservationsService {
 
     const savedReservation = await this.reservationRepository.save(reservation);
 
-    const startTime = new Date(start_time);
-    const endTime = new Date(end_time);
-    const hoursReserved =
-      (endTime.getTime() - startTime.getTime()) / 1000 / 60 / 60;
+    this.paymentService.createWithdrawal({
+      user_id: user.id,
+      amount: totalCost,
+      payment_method: 'account_balance',
+    });
+
     user.total_flight_hours = (user.total_flight_hours || 0) + hoursReserved;
     await this.userRepository.save(user);
 
@@ -250,7 +266,7 @@ export class ReservationsService {
   async findUserReservations(userId: number): Promise<Reservation[]> {
     return this.reservationRepository.find({
       where: { user: { id: userId } },
-      relations: ['aircraft', 'user'],
+      relations: ['aircraft', 'user', 'flights'],
     });
   }
 }
