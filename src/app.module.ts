@@ -27,6 +27,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AdministrationModule } from './modules/administration/administration.module';
 import { GraphQLUpload } from 'graphql-upload-ts';
 import { ArticleModule } from './modules/article/article.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -98,6 +99,8 @@ import { ArticleModule } from './modules/article/article.module';
     AdministrationModule,
 
     ArticleModule,
+
+    PaymentsModule,
   ],
   providers: [
     AppResolver,
