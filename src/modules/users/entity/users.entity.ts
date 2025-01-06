@@ -12,6 +12,7 @@ import { License } from '../../licenses/entity/licenses.entity';
 import { Invoice } from '../../invoices/entity/invoices.entity';
 import { Role } from '../../roles/entity/roles.entity';
 import { Flight } from 'src/modules/flights/entity/flights.entity';
+import { Payment } from 'src/modules/payments/entity/payments.entity';
 
 @ObjectType()
 @Entity('users')
@@ -69,7 +70,7 @@ export class User {
   total_flight_hours: number;
 
   @Field({ nullable: false })
-  @Column({ default: 0 })
+  @Column('decimal', { precision: 10, scale: 2, default: 0 })
   user_account_balance: number;
 
   @Field(() => Boolean)
@@ -127,4 +128,8 @@ export class User {
   @Field(() => [Flight])
   @OneToMany(() => Flight, (flight) => flight.user)
   flights: any;
+
+  @Field(() => [Payment])
+  @OneToMany(() => Payment, (payment) => payment.user)
+  payments: Payment[];
 }
