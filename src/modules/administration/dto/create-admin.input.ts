@@ -1,4 +1,5 @@
 import { InputType, Field, Float, Int } from '@nestjs/graphql';
+import { Taxonomies } from '../types/taxonomies';
 
 @InputType()
 export class CreateAdministrationInput {
@@ -55,4 +56,13 @@ export class CreateAdministrationInput {
 
   @Field()
   isMaintenanceActive: boolean;
+
+  @Field()
+  maintenanceMessage: string;
+
+  @Field()
+  maintenanceTime: Date;
+
+  @Field()
+  taxonomies: Taxonomies;
 }

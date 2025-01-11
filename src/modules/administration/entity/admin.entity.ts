@@ -1,5 +1,6 @@
 import { Field, Float, Int, ObjectType } from '@nestjs/graphql';
 import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Taxonomies } from '../types/taxonomies';
 
 @Entity('admin')
 @ObjectType()
@@ -79,4 +80,16 @@ export class Administration {
   @Field()
   @Column({ type: 'boolean', nullable: false, default: false })
   isMaintenanceActive: boolean;
+
+  @Field()
+  @Column({ type: 'text', nullable: true })
+  maintenanceMessage: string;
+
+  @Field()
+  @Column({ type: 'timestamp', nullable: true })
+  maintenanceTime: Date;
+
+  @Field(() => Taxonomies)
+  @Column('jsonb', { nullable: true })
+  taxonomies: Taxonomies;
 }
