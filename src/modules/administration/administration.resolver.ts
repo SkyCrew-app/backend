@@ -37,8 +37,19 @@ export class AdministrationResolver {
     return this.administrationService.remove(id);
   }
 
-  @Query(() => Boolean, { name: 'getMaintenance' })
-  getMaintenance() {
+  @Query(() => Boolean, { name: 'getSiteStatus' })
+  getSiteStatus() {
     return this.administrationService.getMaintenance();
+  }
+
+  @Query(() => String, { name: 'getMaintenanceDetails' })
+  async getMaintenanceDetails() {
+    const details = await this.administrationService.getMaintenanceDetails();
+    return JSON.stringify(details);
+  }
+
+  @Mutation(() => Boolean, { name: 'setSiteStatus' })
+  setSiteStatus() {
+    return this.administrationService.setMaintenance();
   }
 }
