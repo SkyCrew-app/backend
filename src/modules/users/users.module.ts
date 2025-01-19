@@ -1,13 +1,20 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { UsersResolver } from './users.resolver';
+import { UsersResolver, UserProgressResolver } from './users.resolver';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
 import { MailerModule } from '../mail/mailer.module';
+import { UserProgress } from './entity/user-progress.entity';
+import { Lesson } from '../e-learning/entity/lesson.entity';
+import { EvalModule } from '../eval/eval.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User]), MailerModule],
-  providers: [UsersService, UsersResolver],
+  imports: [
+    TypeOrmModule.forFeature([User, UserProgress, Lesson]),
+    MailerModule,
+    forwardRef(() => EvalModule),
+  ],
+  providers: [UsersService, UsersResolver, UserProgressResolver],
   exports: [UsersService],
 })
 export class UsersModule {}

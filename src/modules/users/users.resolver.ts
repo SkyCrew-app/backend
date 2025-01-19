@@ -7,6 +7,9 @@ import { UpdateUserInput } from './dto/update-user.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import * as path from 'path';
 import * as fs from 'fs';
+import { EvalService } from '../eval/eval.service';
+import { Evaluation } from '../eval/entity/evaluation.entity';
+import { UserProgress } from './entity/user-progress.entity';
 
 @Resolver(() => User)
 export class UsersResolver {
@@ -121,5 +124,53 @@ export class UsersResolver {
     @Args('password') password: string,
   ) {
     return this.usersService.confirmEmailAndSetPassword(token, password);
+  }
+}
+
+@Resolver(() => UserProgress)
+export class UserProgressResolver {
+  constructor(
+    private readonly evalService: EvalService,
+    private readonly usersService: UsersService,
+  ) {}
+
+  @Query(() => [Evaluation], { name: 'getUserProgressByEvaluation' })
+  async getUserProgressByEvaluation(
+    @Args('userId') userId: number,
+  ): Promise<any[]> {
+    return this.evalService.getUserEvaluationResults(userId);
+  }
+
+  @Query(() => Number, { name: 'getCourseProgress' })
+  async getCourseProgress(
+    @Args('userId') userId: number,
+    @Args('courseId') courseId: number,
+  ): Promise<number> {
+    return this.usersService.getCourseProgress(userId, courseId);
+  }
+
+  @Mutation(() => Boolean, { name: 'markLessonStarted' })
+  async markLessonStarted(
+    @Args('userId') userId: number,
+    @Args('lessonId') lessonId: number,
+  ): Promise<boolean> {
+    await this.usersService.markLessonStarted(userId, lessonId);
+    return true;
+  }
+
+  @Mutation(() => Boolean, { name: 'markLessonCompleted' })
+  async markLessonCompleted(
+    @Args('userId') userId: number,
+    @Args('lessonId') lessonId: number,
+  ): Promise<boolean> {
+    await this.usersService.markLessonCompleted(userId, lessonId);
+    return true;
+  }
+
+  @Query(() => [UserProgress], { name: 'getUserEvaluationResults' })
+  async getUserEvaluationResults(
+    @Args('userId') userId: number,
+  ): Promise<UserProgress[]> {
+    return this.usersService.getEvaluationResults(userId);
   }
 }

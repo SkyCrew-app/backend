@@ -81,11 +81,11 @@ export class Administration {
   @Column({ type: 'boolean', nullable: false, default: false })
   isMaintenanceActive: boolean;
 
-  @Field()
+  @Field({ nullable: true })
   @Column({ type: 'text', nullable: true })
   maintenanceMessage: string;
 
-  @Field()
+  @Field({ nullable: true })
   @Column({ type: 'timestamp', nullable: true })
   maintenanceTime: Date;
 
