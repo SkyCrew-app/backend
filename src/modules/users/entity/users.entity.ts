@@ -13,6 +13,8 @@ import { Invoice } from '../../invoices/entity/invoices.entity';
 import { Role } from '../../roles/entity/roles.entity';
 import { Flight } from 'src/modules/flights/entity/flights.entity';
 import { Payment } from 'src/modules/payments/entity/payments.entity';
+import { Answer } from '../../eval/entity/answer.entity';
+import { UserProgress } from './user-progress.entity';
 
 @ObjectType()
 @Entity('users')
@@ -132,4 +134,12 @@ export class User {
   @Field(() => [Payment])
   @OneToMany(() => Payment, (payment) => payment.user)
   payments: Payment[];
+
+  @Field(() => [Answer])
+  @OneToMany(() => Answer, (answer) => answer.user, { cascade: true })
+  answers: Answer[];
+
+  @OneToMany(() => UserProgress, (progress) => progress.user)
+  @Field(() => [UserProgress])
+  userProgresses: UserProgress[];
 }
