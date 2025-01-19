@@ -28,6 +28,9 @@ import { AdministrationModule } from './modules/administration/administration.mo
 import { GraphQLUpload } from 'graphql-upload-ts';
 import { ArticleModule } from './modules/article/article.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { EvalModule } from './modules/eval/eval.module';
+import { ELearningModule } from './modules/e-learning/e-learning.module';
+import GraphQLJSON from 'graphql-type-json';
 
 @Module({
   imports: [
@@ -56,6 +59,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
       autoSchemaFile: true,
       playground: true,
       path: process.env.GRAPHQL_ENDPOINT || '/graphql',
+      resolvers: { JSON: GraphQLJSON },
       context: ({ req, res }: { req: Request; res: Response }) => ({
         req,
         res,
@@ -101,6 +105,10 @@ import { PaymentsModule } from './modules/payments/payments.module';
     ArticleModule,
 
     PaymentsModule,
+
+    ELearningModule,
+
+    EvalModule,
   ],
   providers: [
     AppResolver,
