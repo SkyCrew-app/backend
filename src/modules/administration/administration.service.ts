@@ -49,4 +49,37 @@ export class AdministrationService {
     await this.administrationRepository.remove(administration);
     return true;
   }
+
+  async getMaintenance(): Promise<boolean> {
+    const isMaintenanceActive = this.administrationRepository.findOne({
+      where: { id: 1 },
+    });
+
+    return (await isMaintenanceActive).isMaintenanceActive;
+  }
+
+  async getMaintenanceDetails(): Promise<{
+    maintenanceTime: Date;
+    maintenanceMessage: string;
+  }> {
+    const administration = await this.administrationRepository.findOne({
+      where: { id: 1 },
+    });
+    if (!administration) {
+      throw new NotFoundException('Administration with ID 1 not found');
+    }
+    return {
+      maintenanceTime: administration.maintenanceTime,
+      maintenanceMessage: administration.maintenanceMessage,
+    };
+  }
+
+  async setMaintenance(): Promise<boolean> {
+    const administration = await this.administrationRepository.findOne({
+      where: { id: 1 },
+    });
+    administration.isMaintenanceActive = !administration.isMaintenanceActive;
+    await this.administrationRepository.save(administration);
+    return administration.isMaintenanceActive;
+  }
 }

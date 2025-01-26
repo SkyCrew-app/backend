@@ -1,6 +1,6 @@
 import * as bcrypt from 'bcrypt';
 import { Injectable } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { IsNull, Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
 import { UpdateUserInput } from './dto/update-user.input';
@@ -8,6 +8,8 @@ import { MailerService } from '../mail/mailer.service';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { UserProgress } from './entity/user-progress.entity';
+import { Lesson } from '../e-learning/entity/lesson.entity';
 
 @Injectable()
 export class UsersService {
@@ -15,6 +17,10 @@ export class UsersService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private emailService: MailerService,
+    @InjectRepository(UserProgress)
+    private readonly userProgressRepository: Repository<UserProgress>,
+    @InjectRepository(Lesson)
+    private readonly lessonRepository: Repository<Lesson>,
   ) {}
 
   findAll(): Promise<User[]> {
@@ -185,5 +191,69 @@ export class UsersService {
     user.validation_token = null;
 
     return this.usersRepository.save(user);
+  }
+
+  async getCourseProgress(userId: number, courseId: number): Promise<number> {
+    const totalLessons = await this.lessonRepository.count({
+      where: { module: { course: { id: courseId } } },
+    });
+    const completedLessons = await this.userProgressRepository.count({
+      where: {
+        user: { id: userId },
+        lesson: { module: { course: { id: courseId } } },
+        completed: true,
+      },
+    });
+
+    if (totalLessons === 0) return 0;
+    return (completedLessons / totalLessons) * 100;
+  }
+
+  async markLessonStarted(userId: number, lessonId: number): Promise<void> {
+    let progress = await this.userProgressRepository.findOne({
+      where: { user: { id: userId }, lesson: { id: lessonId } },
+    });
+
+    if (!progress) {
+      progress = this.userProgressRepository.create({
+        user: { id: userId },
+        lesson: { id: lessonId },
+        completed: false,
+      });
+      await this.userProgressRepository.save(progress);
+    }
+  }
+
+  async markLessonCompleted(userId: number, lessonId: number): Promise<void> {
+    await this.userProgressRepository.update(
+      { user: { id: userId }, lesson: { id: lessonId } },
+      { completed: true, completed_at: new Date() },
+    );
+  }
+
+  async saveEvaluationResult(
+    userId: number,
+    evaluationId: number,
+    score: number,
+    passed: boolean,
+  ): Promise<void> {
+    const newProgress = this.userProgressRepository.create({
+      user: { id: userId } as any,
+      evaluation: { id: evaluationId } as any,
+      completed_at: new Date(),
+      completed: true,
+      score,
+      passed,
+    });
+    await this.userProgressRepository.save(newProgress);
+  }
+
+  async getEvaluationResults(userId: number): Promise<any[]> {
+    const results = await this.userProgressRepository.find({
+      where: { user: { id: userId }, evaluation: { id: Not(IsNull()) } },
+      relations: ['evaluation', 'evaluation.module'],
+    });
+
+    return results;
   }
 }
