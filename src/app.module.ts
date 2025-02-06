@@ -30,7 +30,9 @@ import { ArticleModule } from './modules/article/article.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { EvalModule } from './modules/eval/eval.module';
 import { ELearningModule } from './modules/e-learning/e-learning.module';
+import { CronService } from './modules/cron/cron.service';
 import GraphQLJSON from 'graphql-type-json';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -109,6 +111,8 @@ import GraphQLJSON from 'graphql-type-json';
     ELearningModule,
 
     EvalModule,
+
+    ScheduleModule.forRoot(),
   ],
   providers: [
     AppResolver,
@@ -116,6 +120,7 @@ import GraphQLJSON from 'graphql-type-json';
       provide: 'Upload',
       useValue: GraphQLUpload,
     },
+    CronService,
   ],
 })
 export class AppModule {}
