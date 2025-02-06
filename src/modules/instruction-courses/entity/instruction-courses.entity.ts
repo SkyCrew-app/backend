@@ -1,6 +1,15 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  OneToMany,
+} from 'typeorm';
 import { User } from '../../users/entity/users.entity';
+import { CourseStatus } from '../enum/course-status.enum';
+import { CourseComment } from './course-comment.entity';
+import { CourseCompetency } from './course-competency.entity';
 
 @ObjectType()
 @Entity('instruction_courses')
@@ -18,18 +27,40 @@ export class InstructionCourse {
   student: User;
 
   @Field()
-  @Column()
-  course_date: Date;
+  @Column({ type: 'timestamp' })
+  startTime: Date;
+
+  @Field({ nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
+  endTime?: Date;
+
+  @Field(() => CourseStatus)
+  @Column({
+    type: 'enum',
+    enum: CourseStatus,
+    default: CourseStatus.SCHEDULED,
+  })
+  status: CourseStatus;
+
+  @Field({ nullable: true })
+  @Column({ type: 'text', nullable: true })
+  feedback?: string;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
-  feedback: string;
+  rating?: number;
 
-  @Field({ nullable: true })
-  @Column({ nullable: true })
-  skills_taught: string;
+  @Field(() => [CourseCompetency], { nullable: true })
+  @OneToMany(() => CourseCompetency, (competency) => competency.course, {
+    cascade: true,
+    eager: true,
+  })
+  competencies?: CourseCompetency[];
 
-  @Field()
-  @Column()
-  course_level: string;
+  @Field(() => [CourseComment], { nullable: true })
+  @OneToMany(() => CourseComment, (comment) => comment.course, {
+    cascade: true,
+    eager: true,
+  })
+  comments?: CourseComment[];
 }
