@@ -27,6 +27,7 @@
     "migration:revert": "npm run typeorm -- migration:revert"
   },
   "dependencies": {
+    "@apollo/server": "^4.11.3",
     "@golevelup/nestjs-rabbitmq": "^3.6.1",
     "@nestjs/apollo": "^13.0.1",
     "@nestjs/common": "^10.4.4",
@@ -37,6 +38,7 @@
     "@nestjs/microservices": "^11.0.1",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/schedule": "^5.0.1",
     "@nestjs/swagger": "^11.0.2",
     "@nestjs/typeorm": "^11.0.0",
     "@paypal/checkout-server-sdk": "^1.0.3",
