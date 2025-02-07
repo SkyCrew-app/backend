@@ -28,7 +28,7 @@ export class AuthResolver {
       httpOnly: true,
       secure: false,
       sameSite: 'lax' as const,
-      maxAge: 3600000,
+      maxAge: 7200000,
       path: '/',
     };
 

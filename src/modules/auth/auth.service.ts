@@ -27,7 +27,7 @@ export class AuthService {
       sub: user.id,
       role: user.role.role_name,
     };
-    return this.jwtService.sign(payload);
+    return this.jwtService.sign(payload, { expiresIn: '2h' });
   }
 
   async generate2FASecret(userEmail: string) {
