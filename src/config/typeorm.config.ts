@@ -7,6 +7,6 @@ export const typeOrmConfig = (): TypeOrmModuleOptions => ({
   synchronize: true,
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   ssl: {
-    rejectUnauthorized: true,
+    rejectUnauthorized: false,
   },
 });
