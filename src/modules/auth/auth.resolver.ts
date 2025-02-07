@@ -22,23 +22,21 @@ export class AuthResolver {
       throw new Error('Invalid credentials');
     }
 
-    // Définir le cookie dans la réponse
-    res.cookie('email', user.email, {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax',
-      maxAge: 1000 * 60 * 60,
-    });
+    const token = await this.authService.login(user);
 
-    res.cookie('token', await this.authService.login(user), {
+    const cookieOptions = {
       httpOnly: true,
       secure: false,
-      sameSite: 'lax',
-      maxAge: 1000 * 60 * 60,
-    });
+      sameSite: 'lax' as const,
+      maxAge: 3600000,
+      path: '/',
+    };
+
+    res.cookie('email', user.email, cookieOptions);
+    res.cookie('token', token, cookieOptions);
 
     return {
-      access_token: this.authService.login(user),
+      access_token: token,
       is2FAEnabled: !!user.twoFactorAuthSecret,
     };
   }
