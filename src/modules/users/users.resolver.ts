@@ -125,6 +125,18 @@ export class UsersResolver {
   ) {
     return this.usersService.confirmEmailAndSetPassword(token, password);
   }
+
+  @Query(() => User)
+  @UseGuards(JwtAuthGuard)
+  me(@Context() context): { id: number; email: string } {
+    if (!context.req.user) {
+      throw new Error('Utilisateur non authentifié');
+    }
+    return {
+      id: context.req.user.id,
+      email: context.req.user.email,
+    };
+  }
 }
 
 @Resolver(() => UserProgress)
