@@ -1,10 +1,9 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { typeOrmConfig } from './config/typeorm.config';
-// import { RedisModule } from './config/redis.module';
 import { MailerModule } from './modules/mail/mailer.module';
 import { AppResolver } from './app.resolver';
 import { PassportModule } from '@nestjs/passport';
@@ -33,6 +32,11 @@ import { ELearningModule } from './modules/e-learning/e-learning.module';
 import { CronService } from './modules/cron/cron.service';
 import GraphQLJSON from 'graphql-type-json';
 import { ScheduleModule } from '@nestjs/schedule';
+import { MetricsService } from './modules/metrics/metrics.service';
+import { MetricsMiddleware } from './modules/metrics/metrics.middleware';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { GraphQLMetricsPlugin } from './modules/metrics/plugins/metrics.plugin';
+import { DatabaseMetricsInterceptor } from './common/interceptors/database.interceptor';
 
 @Module({
   imports: [
@@ -40,7 +44,6 @@ import { ScheduleModule } from '@nestjs/schedule';
       isGlobal: true,
     }),
 
-    //JWT Configuration
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -48,30 +51,51 @@ import { ScheduleModule } from '@nestjs/schedule';
       useFactory: jwtConfig,
     }),
 
-    // Configuration TypeORM
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: typeOrmConfig,
-    }),
+    MetricsModule,
 
-    // Configuration GraphQL
-    GraphQLModule.forRoot<ApolloDriverConfig>({
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule, MetricsModule],
+      inject: [ConfigService, MetricsService],
+      useFactory: (
+        configService: ConfigService,
+        metricsService: MetricsService,
+      ) => {
+        const config = typeOrmConfig(configService);
+        const interceptor = new DatabaseMetricsInterceptor(metricsService);
+
+        return {
+          ...config,
+          logging: false,
+          logger: 'advanced-console',
+          subscribers: [],
+          entityEventSubscribers: [],
+          beforeQueryExecution: (event) =>
+            interceptor.beforeQuery(event.queryRunner),
+          afterQueryExecution: (event) =>
+            interceptor.afterQuery(event.queryRunner),
+        };
+      },
+    }),
+    GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: true,
-      playground: true,
-      path: process.env.GRAPHQL_ENDPOINT || '/graphql',
-      resolvers: { JSON: GraphQLJSON },
-      context: ({ req, res }: { req: Request; res: Response }) => ({
-        req,
-        res,
+      imports: [MetricsModule],
+      inject: [MetricsService, GraphQLMetricsPlugin],
+      useFactory: (
+        metricsService: MetricsService,
+        metricsPlugin: GraphQLMetricsPlugin,
+      ) => ({
+        autoSchemaFile: true,
+        playground: true,
+        path: process.env.GRAPHQL_ENDPOINT || '/graphql',
+        resolvers: { JSON: GraphQLJSON },
+        plugins: [metricsPlugin],
+        context: ({ req, res }: { req: Request; res: Response }) => ({
+          req,
+          res,
+        }),
       }),
     }),
 
-    // Configuration Redis
-    // RedisModule,
-
-    // Mail Module
     MailerModule,
 
     UsersModule,
@@ -121,6 +145,11 @@ import { ScheduleModule } from '@nestjs/schedule';
       useValue: GraphQLUpload,
     },
     CronService,
+    GraphQLMetricsPlugin,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(MetricsMiddleware).forRoutes('*');
+  }
+}
