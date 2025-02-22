@@ -6,6 +6,7 @@ import { CourseComment } from './entity/course-comment.entity';
 import { InstructionCoursesService } from './instruction-courses.service';
 import { InstructionCoursesResolver } from './instruction-courses.resolver';
 import { UsersModule } from '../users/users.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UsersModule } from '../users/users.module';
       CourseComment,
     ]),
     UsersModule,
+    NotificationsModule,
   ],
   providers: [InstructionCoursesService, InstructionCoursesResolver],
   exports: [InstructionCoursesService],

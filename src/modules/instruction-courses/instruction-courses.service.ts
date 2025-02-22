@@ -15,6 +15,7 @@ import { UpdateCourseInstructionInput } from './dto/update-course.input';
 import { AddCompetencyInput } from './dto/add-competency.input';
 import { AddCommentInput } from './dto/add-comment.input';
 import { UsersService } from '../users/users.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class InstructionCoursesService {
@@ -26,6 +27,7 @@ export class InstructionCoursesService {
     @InjectRepository(CourseComment)
     private readonly commentRepository: Repository<CourseComment>,
     private readonly userService: UsersService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async checkScheduleConflict(
@@ -84,6 +86,23 @@ export class InstructionCoursesService {
       instructor,
       student,
     });
+
+    await this.notificationsService.create({
+      user_id: studentId,
+      notification_type: 'COURSE_CREATED',
+      notification_date: new Date(),
+      message: `Votre cours avec l'instructeur ${instructorId} a été créé.`,
+      is_read: false,
+    });
+
+    await this.notificationsService.create({
+      user_id: instructorId,
+      notification_type: 'COURSE_CREATED',
+      notification_date: new Date(),
+      message: `Votre cours avec l'étudiant ${studentId} a été créé.`,
+      is_read: false,
+    });
+
     return this.courseRepository.save(course);
   }
 
@@ -178,6 +197,15 @@ export class InstructionCoursesService {
       );
     }
     competency.validated = true;
+
+    await this.notificationsService.create({
+      user_id: competency.course.student.id,
+      notification_type: 'COMPETENCY_VALIDATED',
+      notification_date: new Date(),
+      message: `Une compétence a été validée dans votre cours.`,
+      is_read: false,
+    });
+
     return this.competencyRepository.save(competency);
   }
 
@@ -190,6 +218,14 @@ export class InstructionCoursesService {
       creationDate: new Date(),
       author: { id: input.author },
       course,
+    });
+
+    await this.notificationsService.create({
+      user_id: course.student.id,
+      notification_type: 'COURSE_COMMENT',
+      notification_date: new Date(),
+      message: `Un commentaire a été ajouté à votre cours.`,
+      is_read: false,
     });
 
     return this.commentRepository.save(comment);
