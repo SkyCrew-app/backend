@@ -6,6 +6,7 @@ import { Flight } from './entity/flights.entity';
 import { CreateFlightInput } from './dto/create-flight.input';
 import { UpdateFlightInput } from './dto/update-flight.input';
 import { Reservation } from '../reservations/entity/reservations.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import axios from 'axios';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class FlightsService {
     private flightsRepository: Repository<Flight>,
     @InjectRepository(Reservation)
     private reservationsRepository: Repository<Reservation>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createFlightByUser(
@@ -46,6 +48,14 @@ export class FlightsService {
       reservation: reservation ? { id: reservation_id } : null,
       user: { id: user_id },
       waypoints: JSON.stringify(otherFields.waypoints || []),
+    });
+
+    await this.notificationsService.create({
+      user_id: user_id,
+      notification_type: 'FLIGHT_CREATED',
+      notification_date: new Date(),
+      message: `Votre plan de vol de ${flight.origin_icao} à ${flight.destination_icao} a été créé`,
+      is_read: false,
     });
 
     return this.flightsRepository.save(flight);
@@ -140,6 +150,14 @@ export class FlightsService {
         weather_conditions: `Departure: ${weatherDeparture.weather[0]?.description}, Arrival: ${weatherArrival.weather[0]?.description}`,
         waypoints: JSON.stringify(waypoints),
         number_of_passengers: reservation.number_of_passengers || 1,
+      });
+
+      await this.notificationsService.create({
+        user_id: user_id,
+        notification_type: 'FLIGHT_CREATED',
+        notification_date: new Date(),
+        message: `Votre plan de vol de ${flight.origin_icao} à ${flight.destination_icao} a été créé`,
+        is_read: false,
       });
 
       return this.flightsRepository.save(flight);
