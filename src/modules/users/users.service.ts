@@ -10,6 +10,7 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { UserProgress } from './entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class UsersService {
@@ -21,6 +22,7 @@ export class UsersService {
     private readonly userProgressRepository: Repository<UserProgress>,
     @InjectRepository(Lesson)
     private readonly lessonRepository: Repository<Lesson>,
+    private readonly notificationService: NotificationsService,
   ) {}
 
   findAll(): Promise<User[]> {
@@ -70,6 +72,22 @@ export class UsersService {
       user.twoFactorAuthSecret = secret;
       await this.usersRepository.save(user);
     }
+
+    await this.emailService.sendMail(
+      user.email,
+      'Authentification à deux facteurs activée',
+      "L'authentification à deux facteurs a été activée avec succès",
+      '2fa-enabled',
+      { first_name: user.first_name },
+    );
+
+    await this.notificationService.create({
+      user_id: user.id,
+      notification_type: '2FA_ENABLED',
+      notification_date: new Date(),
+      message: 'Authentification à deux facteurs activée',
+      is_read: false,
+    });
   }
 
   async setPassword(email: string, password: string): Promise<void> {
@@ -112,6 +130,14 @@ export class UsersService {
       'update-user',
       { first_name: user.first_name },
     );
+
+    await this.notificationService.create({
+      user_id: user.id,
+      notification_type: 'USER_UPDATED',
+      notification_date: new Date(),
+      message: 'Vos informations ont été mises à jour',
+      is_read: false,
+    });
 
     return this.usersRepository.save(user);
   }

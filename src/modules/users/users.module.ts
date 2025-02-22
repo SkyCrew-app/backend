@@ -7,12 +7,14 @@ import { MailerModule } from '../mail/mailer.module';
 import { UserProgress } from './entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
 import { EvalModule } from '../eval/eval.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, UserProgress, Lesson]),
     MailerModule,
     forwardRef(() => EvalModule),
+    NotificationsModule,
   ],
   providers: [UsersService, UsersResolver, UserProgressResolver],
   exports: [UsersService],
