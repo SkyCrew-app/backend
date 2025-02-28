@@ -5,6 +5,7 @@ import { LicensesService } from '../licenses/licenses.service';
 import { InstructionCourse } from '../instruction-courses/entity/instruction-courses.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ReservationsService } from '../reservations/reservations.service';
+import { FinancialService } from '../financial/financial.service';
 import {
   Reservation,
   ReservationStatus,
@@ -19,6 +20,7 @@ export class CronService {
     private readonly licensesService: LicensesService,
     private readonly notificationsService: NotificationsService,
     private readonly reservationsService: ReservationsService,
+    private readonly financialService: FinancialService,
   ) {}
 
   // Vérification quotidienne des statuts des cours
@@ -182,5 +184,47 @@ export class CronService {
     }
 
     this.logger.log('Fin de la vérification des réservations pour demain.');
+  }
+
+  // Exécution le 1er jour de chaque mois à 00:00 (heure de Paris)
+  @Cron('0 0 1 * *', { timeZone: 'Europe/Paris' })
+  async generateMonthlyFinancialReport() {
+    this.logger.log('Démarrage de l’agrégation financière mensuelle.');
+
+    const currentDate = new Date();
+    const startOfMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      1,
+    );
+
+    const endOfMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      0,
+    );
+
+    const totalRevenue = await this.financialService.aggregateRevenuesForPeriod(
+      startOfMonth,
+      endOfMonth,
+    );
+    const totalExpense = await this.financialService.aggregateExpensesForPeriod(
+      startOfMonth,
+      endOfMonth,
+    );
+    const netProfit = totalRevenue - totalExpense;
+
+    const reportDate = startOfMonth;
+
+    await this.financialService.createFinancialReport({
+      report_date: reportDate,
+      total_revenue: totalRevenue,
+      total_expense: totalExpense,
+      net_profit: netProfit,
+      recommendations: null,
+      average_revenue_per_member: null,
+    });
+
+    this.logger.log('Rapport financier mensuel généré avec succès.');
   }
 }
