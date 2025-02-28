@@ -19,7 +19,6 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { FlightsModule } from './modules/flights/flights.module';
 import { IncidentsModule } from './modules/incidents/incidents.module';
 import { InstructionCoursesModule } from './modules/instruction-courses/instruction-courses.module';
-import { ExpensesModule } from './modules/expenses/expenses.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -37,6 +36,7 @@ import { MetricsMiddleware } from './modules/metrics/metrics.middleware';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { GraphQLMetricsPlugin } from './modules/metrics/plugins/metrics.plugin';
 import { DatabaseMetricsInterceptor } from './common/interceptors/database.interceptor';
+import { FinancialModule } from './modules/financial/financial.module';
 
 @Module({
   imports: [
@@ -118,8 +118,6 @@ import { DatabaseMetricsInterceptor } from './common/interceptors/database.inter
 
     InstructionCoursesModule,
 
-    ExpensesModule,
-
     AuditModule,
 
     RolesModule,
@@ -135,6 +133,8 @@ import { DatabaseMetricsInterceptor } from './common/interceptors/database.inter
     ELearningModule,
 
     EvalModule,
+
+    FinancialModule,
 
     ScheduleModule.forRoot(),
   ],
