@@ -2,24 +2,21 @@ import { InputType, Field, Int, Float } from '@nestjs/graphql';
 
 @InputType()
 export class CreateExpenseInput {
-  @Field(() => Int)
-  aircraft_id: number;
+  @Field()
+  expense_date: Date;
 
   @Field(() => Float)
   amount: number;
 
   @Field()
-  expense_type: string;
-
-  @Field()
-  expense_date: Date;
+  category: string;
 
   @Field({ nullable: true })
-  supplier?: string;
+  sub_category?: string;
 
   @Field({ nullable: true })
-  receipt_url?: string;
+  description?: string;
 
-  @Field({ nullable: true })
-  expense_category?: string;
+  @Field(() => Int, { nullable: true })
+  aircraft_id?: number;
 }
