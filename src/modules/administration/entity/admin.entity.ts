@@ -92,4 +92,8 @@ export class Administration {
   @Field(() => Taxonomies)
   @Column('jsonb', { nullable: true })
   taxonomies: Taxonomies;
+
+  @Field({ nullable: true })
+  @Column({ type: 'float', nullable: true })
+  fuelPrice: number;
 }

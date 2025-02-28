@@ -46,6 +46,10 @@ export class Aircraft {
   @Column({ nullable: true })
   cruiseSpeed: number;
 
+  @Field(() => Int)
+  @Column({ nullable: true })
+  consumption: number;
+
   @Field({ nullable: true })
   @Column({ nullable: true })
   image_url: string;
