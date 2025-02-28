@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, MoreThan } from 'typeorm';
+import { Repository, LessThan, MoreThan, Between } from 'typeorm';
 import { Reservation, ReservationStatus } from './entity/reservations.entity';
 import { CreateReservationInput } from './dto/create-reservation.input';
 import { UpdateReservationInput } from './dto/update-reservation.input';
@@ -16,6 +16,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PaymentsService } from '../payments/payments.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ReservationsService {
@@ -29,6 +30,7 @@ export class ReservationsService {
     private readonly aircraftRepository: Repository<Aircraft>,
     private readonly administrationService: AdministrationService,
     private readonly paymentService: PaymentsService,
+    private readonly notificationService: NotificationsService,
   ) {}
 
   async create(
@@ -139,6 +141,14 @@ export class ReservationsService {
       },
     );
 
+    await this.notificationService.create({
+      user_id: user.id,
+      notification_type: 'RESERVATION_CONFIRMED',
+      notification_date: new Date(),
+      message: `Votre réservation pour l'avion ${aircraft.registration_number} a été confirmée.`,
+      is_read: false,
+    });
+
     const savedReservation = await this.reservationRepository.save(reservation);
 
     this.paymentService.createWithdrawal({
@@ -192,6 +202,14 @@ export class ReservationsService {
           new_end_time: updatedReservation.end_time,
         },
       );
+
+      await this.notificationService.create({
+        user_id: user.id,
+        notification_type: 'RESERVATION_MODIFIED',
+        notification_date: new Date(),
+        message: `Votre réservation pour l'avion immatriculé ${aircraft.registration_number} a été modifiée.`,
+        is_read: false,
+      });
     }
 
     return updatedReservation;
@@ -225,6 +243,23 @@ export class ReservationsService {
           end_time: reservation.end_time,
         },
       );
+
+      const startTime = new Date(reservation.start_time);
+      const endTime = new Date(reservation.end_time);
+      const hoursReserved =
+        (endTime.getTime() - startTime.getTime()) / 1000 / 60 / 60;
+
+      const totalCost = hoursReserved * aircraft.hourly_cost;
+
+      await this.paymentService.refund(user.id, totalCost);
+
+      await this.notificationService.create({
+        user_id: user.id,
+        notification_type: 'RESERVATION_CANCELLED',
+        notification_date: new Date(),
+        message: `Votre réservation pour l'avion immatriculé ${aircraft.registration_number} a été annulée.`,
+        is_read: false,
+      });
     }
 
     await this.reservationRepository.remove(reservation);
@@ -267,6 +302,18 @@ export class ReservationsService {
     return this.reservationRepository.find({
       where: { user: { id: userId } },
       relations: ['aircraft', 'user', 'flights'],
+    });
+  }
+
+  async findReservationsBetween(
+    start: Date,
+    end: Date,
+  ): Promise<Reservation[]> {
+    return this.reservationRepository.find({
+      where: {
+        start_time: Between(start, end),
+      },
+      relations: ['user', 'flights'],
     });
   }
 }

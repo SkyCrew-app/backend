@@ -1,12 +1,12 @@
 # Utiliser une image Node.js officielle
-FROM node:18-alpine
+FROM node:20-alpine
 
 # Définir le répertoire de travail
 WORKDIR /usr/src/app
 
 # Copier le package.json et installer les dépendances
 COPY package*.json ./
-RUN npm install
+RUN npm install --force
 
 # Copier tout le code source
 COPY . .

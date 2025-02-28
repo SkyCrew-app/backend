@@ -38,6 +38,9 @@ services:
       - '5432:5432'
     volumes:
       - db-data:/var/lib/postgresql/data
+    networks:
+      - default
+      - shared-network
 
   redis:
     image: redis:alpine
@@ -52,3 +55,7 @@ services:
 
 volumes:
   db-data:
+
+networks:
+  shared-network:
+    external: true

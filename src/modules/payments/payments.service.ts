@@ -7,6 +7,7 @@ import { StripeService } from './libs/stripe.service';
 import { PaypalService } from './libs/paypal.service';
 import { User } from '../users/entity/users.entity';
 import { Invoice } from '../invoices/entity/invoices.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
@@ -19,6 +20,7 @@ export class PaymentsService {
     private userRepository: Repository<User>,
     @InjectRepository(Invoice)
     private invoiceRepository: Repository<Invoice>,
+    private readonly NotificationsService: NotificationsService,
   ) {}
 
   async create(createPaymentInput: CreatePaymentInput): Promise<Payment> {
@@ -62,6 +64,14 @@ export class PaymentsService {
     });
 
     payment.invoice = invoice;
+
+    await this.NotificationsService.create({
+      user_id: user.id,
+      notification_type: 'WITHDRAWAL',
+      notification_date: new Date(),
+      message: `Un paiement de ${createPaymentInput.amount} a été effectué sur votre compte`,
+      is_read: false,
+    });
 
     return this.paymentsRepository.save(payment);
   }
@@ -168,6 +178,14 @@ export class PaymentsService {
       balance_due: 0,
     };
 
+    await this.NotificationsService.create({
+      user_id: payment.user.id,
+      notification_type: 'INVOICE_CREATED',
+      notification_date: new Date(),
+      message: `Une facture de ${payment.amount} a été créée`,
+      is_read: false,
+    });
+
     const invoiceResult = await this.invoiceRepository.save(invoice);
 
     return invoiceResult.id;
@@ -205,6 +223,14 @@ export class PaymentsService {
       });
     }
 
+    await this.NotificationsService.create({
+      user_id: payment.user.id,
+      notification_type: 'PAYMENT_RECEIVED',
+      notification_date: new Date(),
+      message: `Un ajout de ${payment.amount} a été effectué sur votre compte`,
+      is_read: false,
+    });
+
     return this.paymentsRepository.save(payment);
   }
 
@@ -222,6 +248,39 @@ export class PaymentsService {
       await this.paymentsRepository.save(payment);
 
       await this.updateUserBalance(payment.user.id, -amount);
+
+      await this.NotificationsService.create({
+        user_id: payment.user.id,
+        notification_type: 'PAYMENT_REFUNDED',
+        notification_date: new Date(),
+        message: `Un remboursement de ${amount} a été effectué sur votre compte`,
+        is_read: false,
+      });
+
+      return payment;
+    }
+    throw new Error('Payment not found');
+  }
+
+  async refund(user_id: number, amount: number): Promise<Payment> {
+    const payment = await this.paymentsRepository.findOne({
+      where: { user: { id: user_id }, amount: amount },
+      relations: ['user'],
+    });
+
+    if (payment) {
+      payment.payment_status = 'refunded';
+      await this.paymentsRepository.save(payment);
+
+      await this.updateUserBalance(payment.user.id, -amount);
+
+      await this.NotificationsService.create({
+        user_id: payment.user.id,
+        notification_type: 'PAYMENT_REFUNDED',
+        notification_date: new Date(),
+        message: `Un remboursement de ${amount} a été effectué sur votre compte`,
+        is_read: false,
+      });
 
       return payment;
     }

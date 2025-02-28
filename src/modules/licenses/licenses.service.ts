@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThanOrEqual, Repository } from 'typeorm';
 import { License } from './entity/licenses.entity';
 import { CreateLicenseInput } from './dto/create-license.input';
 import { UpdateLicenseInput } from './dto/update-license.input';
@@ -101,5 +101,19 @@ export class LicensesService {
     });
 
     return `/uploads/licences/${uniqueFilename}`;
+  }
+
+  async findExpiringLicenses(thresholdDays: number = 7): Promise<License[]> {
+    const now = new Date();
+    const thresholdDate = new Date(
+      now.getTime() + thresholdDays * 24 * 60 * 60 * 1000,
+    );
+    return this.licenseRepository.find({
+      where: {
+        expiration_date: LessThanOrEqual(thresholdDate),
+        status: 'active',
+      },
+      relations: ['user'],
+    });
   }
 }

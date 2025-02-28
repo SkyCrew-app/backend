@@ -8,10 +8,14 @@ import { PaypalService } from './libs/paypal.service';
 import { WebhookController } from '../../common/controllers/webhook.controller';
 import { User } from '../users/entity/users.entity';
 import { Invoice } from '../invoices/entity/invoices.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   controllers: [WebhookController],
-  imports: [TypeOrmModule.forFeature([Payment, User, Invoice])],
+  imports: [
+    TypeOrmModule.forFeature([Payment, User, Invoice]),
+    NotificationsModule,
+  ],
   providers: [PaymentsResolver, PaymentsService, StripeService, PaypalService],
   exports: [PaymentsService, StripeService, PaypalService],
 })

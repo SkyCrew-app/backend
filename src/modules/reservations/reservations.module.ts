@@ -9,6 +9,7 @@ import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { AdministrationModule } from '../administration/administration.module';
 import { FlightsModule } from '../flights/flights.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PaymentsModule } from '../payments/payments.module';
     AdministrationModule,
     FlightsModule,
     PaymentsModule,
+    NotificationsModule,
   ],
   providers: [ReservationsService, ReservationsResolver],
   exports: [ReservationsService],

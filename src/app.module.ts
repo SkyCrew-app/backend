@@ -1,10 +1,9 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { typeOrmConfig } from './config/typeorm.config';
-// import { RedisModule } from './config/redis.module';
 import { MailerModule } from './modules/mail/mailer.module';
 import { AppResolver } from './app.resolver';
 import { PassportModule } from '@nestjs/passport';
@@ -20,7 +19,6 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { FlightsModule } from './modules/flights/flights.module';
 import { IncidentsModule } from './modules/incidents/incidents.module';
 import { InstructionCoursesModule } from './modules/instruction-courses/instruction-courses.module';
-import { ExpensesModule } from './modules/expenses/expenses.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -30,7 +28,15 @@ import { ArticleModule } from './modules/article/article.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { EvalModule } from './modules/eval/eval.module';
 import { ELearningModule } from './modules/e-learning/e-learning.module';
+import { CronService } from './modules/cron/cron.service';
 import GraphQLJSON from 'graphql-type-json';
+import { ScheduleModule } from '@nestjs/schedule';
+import { MetricsService } from './modules/metrics/metrics.service';
+import { MetricsMiddleware } from './modules/metrics/metrics.middleware';
+import { MetricsModule } from './modules/metrics/metrics.module';
+import { GraphQLMetricsPlugin } from './modules/metrics/plugins/metrics.plugin';
+import { DatabaseMetricsInterceptor } from './common/interceptors/database.interceptor';
+import { FinancialModule } from './modules/financial/financial.module';
 
 @Module({
   imports: [
@@ -38,7 +44,6 @@ import GraphQLJSON from 'graphql-type-json';
       isGlobal: true,
     }),
 
-    //JWT Configuration
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -46,30 +51,51 @@ import GraphQLJSON from 'graphql-type-json';
       useFactory: jwtConfig,
     }),
 
-    // Configuration TypeORM
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: typeOrmConfig,
-    }),
+    MetricsModule,
 
-    // Configuration GraphQL
-    GraphQLModule.forRoot<ApolloDriverConfig>({
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule, MetricsModule],
+      inject: [ConfigService, MetricsService],
+      useFactory: (
+        configService: ConfigService,
+        metricsService: MetricsService,
+      ) => {
+        const config = typeOrmConfig(configService);
+        const interceptor = new DatabaseMetricsInterceptor(metricsService);
+
+        return {
+          ...config,
+          logging: false,
+          logger: 'advanced-console',
+          subscribers: [],
+          entityEventSubscribers: [],
+          beforeQueryExecution: (event) =>
+            interceptor.beforeQuery(event.queryRunner),
+          afterQueryExecution: (event) =>
+            interceptor.afterQuery(event.queryRunner),
+        };
+      },
+    }),
+    GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: true,
-      playground: true,
-      path: process.env.GRAPHQL_ENDPOINT || '/graphql',
-      resolvers: { JSON: GraphQLJSON },
-      context: ({ req, res }: { req: Request; res: Response }) => ({
-        req,
-        res,
+      imports: [MetricsModule],
+      inject: [MetricsService, GraphQLMetricsPlugin],
+      useFactory: (
+        metricsService: MetricsService,
+        metricsPlugin: GraphQLMetricsPlugin,
+      ) => ({
+        autoSchemaFile: true,
+        playground: true,
+        path: process.env.GRAPHQL_ENDPOINT || '/graphql',
+        resolvers: { JSON: GraphQLJSON },
+        plugins: [metricsPlugin],
+        context: ({ req, res }: { req: Request; res: Response }) => ({
+          req,
+          res,
+        }),
       }),
     }),
 
-    // Configuration Redis
-    // RedisModule,
-
-    // Mail Module
     MailerModule,
 
     UsersModule,
@@ -92,8 +118,6 @@ import GraphQLJSON from 'graphql-type-json';
 
     InstructionCoursesModule,
 
-    ExpensesModule,
-
     AuditModule,
 
     RolesModule,
@@ -109,6 +133,10 @@ import GraphQLJSON from 'graphql-type-json';
     ELearningModule,
 
     EvalModule,
+
+    FinancialModule,
+
+    ScheduleModule.forRoot(),
   ],
   providers: [
     AppResolver,
@@ -116,6 +144,12 @@ import GraphQLJSON from 'graphql-type-json';
       provide: 'Upload',
       useValue: GraphQLUpload,
     },
+    CronService,
+    GraphQLMetricsPlugin,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(MetricsMiddleware).forRoutes('*');
+  }
+}
