@@ -2,6 +2,7 @@ import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
+import { Incident } from 'src/modules/incidents/entity/incidents.entity';
 
 @ObjectType()
 @Entity('flights')
@@ -16,6 +17,13 @@ export class Flight {
     onDelete: 'SET NULL',
   })
   reservation: Reservation;
+
+  @Field(() => Incident, { nullable: true })
+  @ManyToOne(() => Incident, (incident) => incident.flight, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  incident: Incident;
 
   @Field(() => User)
   @ManyToOne(() => User, (user) => user.flights, {
