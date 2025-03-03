@@ -9,6 +9,9 @@ export class UpdateIncidentInput {
   aircraft_id?: number;
 
   @Field(() => Int, { nullable: true })
+  flight_id?: number;
+
+  @Field(() => Int, { nullable: true })
   user_id?: number;
 
   @Field({ nullable: true })
@@ -25,4 +28,13 @@ export class UpdateIncidentInput {
 
   @Field({ nullable: true })
   severity_level?: string;
+
+  @Field({ nullable: true })
+  status?: string;
+
+  @Field({ nullable: true })
+  priority?: string;
+
+  @Field({ nullable: true })
+  category?: string;
 }
