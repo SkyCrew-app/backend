@@ -9,6 +9,8 @@ import { AppResolver } from './app.resolver';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { jwtConfig } from './config/jwt.config';
+import { CacheModule } from '@nestjs/cache-manager';
+import * as redisStore from 'cache-manager-redis-store';
 import { UsersModule } from './modules/users/users.module';
 import { AircraftModule } from './modules/aircraft/aircraft.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
@@ -76,6 +78,7 @@ import { FinancialModule } from './modules/financial/financial.module';
         };
       },
     }),
+
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
       imports: [MetricsModule],
@@ -137,6 +140,16 @@ import { FinancialModule } from './modules/financial/financial.module';
     FinancialModule,
 
     ScheduleModule.forRoot(),
+
+    CacheModule.register({
+      isGlobal: true,
+      store: redisStore,
+      host: process.env.REDIS_HOST,
+      port: process.env.REDIS_PORT || 6379,
+      ttl: 2592000,
+      keyPrefix: '',
+      db: 0,
+    }),
   ],
   providers: [
     AppResolver,

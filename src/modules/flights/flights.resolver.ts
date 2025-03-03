@@ -11,10 +11,14 @@ import { FlightsService } from './flights.service';
 import { Flight } from './entity/flights.entity';
 import { CreateFlightInput } from './dto/create-flight.input';
 import { UpdateFlightInput } from './dto/update-flight.input';
+import { AirportsService } from './airports.service';
 
 @Resolver(() => Flight)
 export class FlightsResolver {
-  constructor(private readonly flightsService: FlightsService) {}
+  constructor(
+    private readonly flightsService: FlightsService,
+    private readonly airportsService: AirportsService,
+  ) {}
 
   @Query(() => [Flight], { name: 'getAllFlights' })
   findAll() {
@@ -23,13 +27,15 @@ export class FlightsResolver {
 
   @ResolveField(() => String, { nullable: true })
   async departure_airport_info(@Parent() flight: Flight) {
-    const info = await this.flightsService.fetchAirportInfo(flight.origin_icao);
+    const info = await this.airportsService.fetchAirportInfo(
+      flight.origin_icao,
+    );
     return info ? JSON.stringify(info) : null;
   }
 
   @ResolveField(() => String, { nullable: true })
   async arrival_airport_info(@Parent() flight: Flight) {
-    const info = await this.flightsService.fetchAirportInfo(
+    const info = await this.airportsService.fetchAirportInfo(
       flight.destination_icao,
     );
     return info ? JSON.stringify(info) : null;

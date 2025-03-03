@@ -289,6 +289,7 @@ export class FinancialService {
     const pdfDoc = await PDFDocument.create();
     const font = await pdfDoc.embedFont(StandardFonts.TimesRoman);
     const page = pdfDoc.addPage([600, 800]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { width, height } = page.getSize();
 
     const logoPath = join(process.cwd(), 'assets', 'logo.png');
@@ -296,6 +297,7 @@ export class FinancialService {
     try {
       const logoBytes = readFileSync(logoPath);
       logoImage = await pdfDoc.embedPng(logoBytes);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
       console.warn('Logo non trouvé, il sera ignoré.');
     }
