@@ -100,6 +100,7 @@ export class CronService {
     }
   }
 
+  // Vérification quotidienne des réservations pour demain
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleReservationNotifications() {
     this.logger.log('Début de la vérification des réservations pour demain...');
@@ -186,8 +187,8 @@ export class CronService {
     this.logger.log('Fin de la vérification des réservations pour demain.');
   }
 
-  // Exécution le 1er jour de chaque mois à 00:00 (heure de Paris)
-  @Cron('0 0 1 * *', { timeZone: 'Europe/Paris' })
+  // Agrégation financière mensuelle
+  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
   async generateMonthlyFinancialReport() {
     this.logger.log('Démarrage de l’agrégation financière mensuelle.');
 
@@ -226,5 +227,22 @@ export class CronService {
     });
 
     this.logger.log('Rapport financier mensuel généré avec succès.');
+  }
+
+  // Notification de fin de réservation
+  @Cron(CronExpression.EVERY_HOUR)
+  async notificationFinishReservation() {
+    const reservations =
+      await this.reservationsService.findFinishedReservations();
+
+    for (const reservation of reservations) {
+      await this.notificationsService.create({
+        user_id: reservation.user.id,
+        notification_type: 'RESERVATION_FINISHED',
+        message: `Votre réservation N°${reservation.id} est terminée. Veuillez cloturer votre vol.`,
+        notification_date: new Date(),
+        is_read: false,
+      });
+    }
   }
 }
