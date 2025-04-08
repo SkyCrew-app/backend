@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   OneToMany,
+  JoinColumn,
 } from 'typeorm';
 import { Course } from './course.entity';
 import { Lesson } from './lesson.entity';
@@ -14,7 +15,9 @@ import { Evaluation } from '../../eval/entity/evaluation.entity';
 @Entity('modules')
 export class Module {
   @Field(() => Int)
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn('identity', {
+    generatedIdentity: 'ALWAYS',
+  })
   id: number;
 
   @Field()
@@ -25,8 +28,16 @@ export class Module {
   @Column({ nullable: true })
   description: string;
 
+  @Column({ name: 'course_id' })
+  @Field(() => Int)
+  courseId: number;
+
   @Field(() => Course)
-  @ManyToOne(() => Course, (course) => course.modules, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Course, (course) => course.modules, {
+    onDelete: 'CASCADE',
+    orphanedRowAction: 'delete',
+  })
+  @JoinColumn({ name: 'course_id' })
   course: Course;
 
   @Field(() => [Lesson])
