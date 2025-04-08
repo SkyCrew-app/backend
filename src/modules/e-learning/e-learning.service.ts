@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Course } from './entity/course.entity';
@@ -59,7 +64,7 @@ export class ELearningService {
   async getCourseById(courseId: number, userId?: number): Promise<Course> {
     const course = await this.courseRepository.findOne({
       where: { id: courseId },
-      relations: ['modules', 'modules.lessons'],
+      relations: ['modules', 'modules.lessons', 'modules.evaluations'],
     });
 
     if (userId) {
@@ -73,8 +78,25 @@ export class ELearningService {
   }
 
   async createCourse(createCourseDto: CreateCourseDTO): Promise<Course> {
-    const course = this.courseRepository.create(createCourseDto);
-    return this.courseRepository.save(course);
+    try {
+      const course = this.courseRepository.create({
+        ...createCourseDto,
+        required_license: createCourseDto.required_license || null,
+      });
+
+      await this.courseRepository.save(course);
+      return course;
+    } catch (error) {
+      console.error('Database Error:', error);
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Validation failed',
+          details: error.driverError?.detail || error.message,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   async updateCourse(
@@ -103,16 +125,54 @@ export class ELearningService {
   }
 
   async createModule(createModuleDto: CreateModuleDTO): Promise<Module> {
-    const module = this.moduleRepository.create(createModuleDto);
-    return this.moduleRepository.save(module);
+    try {
+      const module = this.moduleRepository.create(createModuleDto);
+
+      await this.moduleRepository.save(module);
+      return this.moduleRepository.findOne({
+        where: { id: module.id },
+        relations: ['course'],
+      });
+    } catch (error) {
+      console.error('Database Error:', error);
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Validation failed',
+          details: error.driverError?.detail || error.message,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   async updateModule(
     moduleId: number,
     updateModuleDto: UpdateModuleDTO,
   ): Promise<Module> {
-    await this.moduleRepository.update(moduleId, updateModuleDto);
-    return this.moduleRepository.findOne({ where: { id: moduleId } });
+    const module = await this.moduleRepository.findOne({
+      where: { id: moduleId },
+      relations: ['course'],
+    });
+
+    if (!module) {
+      throw new NotFoundException(`Module with ID ${moduleId} not found`);
+    }
+
+    try {
+      Object.assign(module, updateModuleDto);
+      return await this.moduleRepository.save(module);
+    } catch (error) {
+      console.error('Database Error:', error);
+      throw new HttpException(
+        {
+          status: HttpStatus.BAD_REQUEST,
+          error: 'Update failed',
+          details: error.driverError?.detail || error.message,
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   async deleteModule(moduleId: number): Promise<void> {
@@ -135,8 +195,28 @@ export class ELearningService {
   }
 
   async createLesson(createLessonDto: CreateLessonDTO): Promise<Lesson> {
-    const lesson = this.lessonRepository.create(createLessonDto);
-    return this.lessonRepository.save(lesson);
+    const module = await this.moduleRepository.findOne({
+      where: { id: createLessonDto.moduleId },
+      relations: ['lessons'],
+    });
+
+    if (!module) {
+      throw new NotFoundException(
+        `Module with ID ${createLessonDto.moduleId} not found`,
+      );
+    }
+
+    const lesson = this.lessonRepository.create({
+      ...createLessonDto,
+      module,
+    });
+
+    await this.lessonRepository.save(lesson);
+
+    return this.lessonRepository.findOne({
+      where: { id: lesson.id },
+      relations: ['module'],
+    });
   }
 
   async updateLesson(

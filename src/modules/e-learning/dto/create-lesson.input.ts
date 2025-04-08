@@ -14,6 +14,9 @@ export class CreateLessonDTO {
   @Field({ nullable: true })
   video_url?: string;
 
+  @Field(() => [String], { nullable: true, defaultValue: [] })
+  attachments?: string[];
+
   @Field(() => Number, { description: 'Module ID the lesson belongs to' })
   moduleId: number;
 }

@@ -316,4 +316,21 @@ export class ReservationsService {
       relations: ['user', 'flights'],
     });
   }
+
+  async findFinishedReservations(): Promise<Reservation[]> {
+    return this.reservationRepository.find({
+      where: {
+        end_time: LessThan(new Date()),
+      },
+      relations: ['user', 'flights'],
+    });
+  }
+
+  async findRecentReservations(limit: number): Promise<Reservation[]> {
+    return this.reservationRepository.find({
+      order: { start_time: 'DESC' },
+      take: limit,
+      relations: ['user', 'aircraft'],
+    });
+  }
 }

@@ -4,10 +4,14 @@ import { Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { UsersService } from '../../modules/users/users.service';
 import { User } from '../../modules/users/entity/users.entity';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private usersService: UsersService) {
+  constructor(
+    private usersService: UsersService,
+    private readonly configService: ConfigService,
+  ) {
     super({
       jwtFromRequest: (req: Request) => {
         if (!req || !req.cookies || !req.cookies.token) {
@@ -16,7 +20,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         return req.cookies.token;
       },
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET,
+      secretOrKey: configService.get('JWT_SECRET'),
     });
   }
 

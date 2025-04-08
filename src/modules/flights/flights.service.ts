@@ -1,5 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  HttpException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Flight } from './entity/flights.entity';
@@ -8,6 +15,23 @@ import { UpdateFlightInput } from './dto/update-flight.input';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import axios from 'axios';
+import { Buffer } from 'buffer';
+import { AirportsService } from './airports.service';
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function retry<T>(
+  fn: () => Promise<T>,
+  options: { retries: number; retryIntervalMs: number },
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (options.retries <= 0) throw error;
+    await wait(options.retryIntervalMs);
+    return retry(fn, { ...options, retries: options.retries - 1 });
+  }
+}
 
 @Injectable()
 export class FlightsService {
@@ -16,6 +40,7 @@ export class FlightsService {
   private readonly WEATHER_URL =
     'https://api.openweathermap.org/data/2.5/weather';
   private readonly WEATHER_API_KEY = process.env.OPENWEATHERMAP_API_KEY;
+  private readonly logger = new Logger(FlightsService.name);
 
   constructor(
     @InjectRepository(Flight)
@@ -23,7 +48,23 @@ export class FlightsService {
     @InjectRepository(Reservation)
     private reservationsRepository: Repository<Reservation>,
     private readonly notificationsService: NotificationsService,
+    private readonly airportsService: AirportsService,
   ) {}
+
+  private getApiHeaders() {
+    return {
+      Authorization: `Basic ${Buffer.from(`${this.FPDB_API_KEY}:`).toString('base64')}`,
+      'Content-Type': 'application/json',
+    };
+  }
+
+  private logApiError(error: any) {
+    this.logger.error(`External API Failure: ${error.config?.url}`, {
+      status: error.response?.status,
+      response: error.response?.data,
+      stack: error.stack,
+    });
+  }
 
   async createFlightByUser(
     createFlightInput: CreateFlightInput,
@@ -68,50 +109,71 @@ export class FlightsService {
     reservation_id?: number,
   ): Promise<Flight> {
     try {
+      if (!reservation_id) {
+        throw new BadRequestException('Reservation ID is required');
+      }
+
       const reservation = await this.reservationsRepository.findOne({
         where: { id: reservation_id },
         relations: ['aircraft'],
       });
 
       if (!reservation) {
-        throw new NotFoundException(
-          `Reservation with ID ${reservation_id} not found`,
-        );
+        throw new NotFoundException(`Reservation ${reservation_id} not found`);
       }
 
       const aircraft = reservation.aircraft;
+      if (!aircraft?.cruiseSpeed || !aircraft?.maxAltitude) {
+        throw new BadRequestException('Aircraft configuration incomplete');
+      }
 
-      const departure = await this.fetchAirportInfo(origin_icao);
+      const [departure, arrival] = await Promise.all([
+        this.airportsService.getAirportInfo(origin_icao),
+        this.airportsService.getAirportInfo(destination_icao),
+      ]);
 
-      const arrival = await this.fetchAirportInfo(destination_icao);
-
-      const flightPlanResponse = await axios.post(
-        `${this.FPDB_BASE_URL}/auto/generate`,
-        {
-          fromICAO: origin_icao,
-          toICAO: destination_icao,
-          cruiseSpeed: aircraft.cruiseSpeed,
-          maxAltitude: aircraft.maxAltitude,
+      const flightPlanResponse = await retry(
+        async () => {
+          const response = await axios.post(
+            `${this.FPDB_BASE_URL}/auto/generate`,
+            {
+              fromICAO: origin_icao,
+              toICAO: destination_icao,
+              cruiseSpeed: aircraft.cruiseSpeed,
+              maxAltitude: aircraft.maxAltitude,
+            },
+            {
+              headers: this.getApiHeaders(),
+              timeout: 10000,
+            },
+          );
+          return response;
         },
-        {
-          headers: {
-            Authorization: `Basic ${Buffer.from(`${this.FPDB_API_KEY}:`).toString('base64')}`,
-          },
-        },
+        { retries: 3, retryIntervalMs: 1000 },
       );
 
-      const flightPlan = flightPlanResponse.data;
+      if (!flightPlanResponse.data?.id) {
+        throw new BadGatewayException('Invalid flight plan response');
+      }
 
-      const waypointsResponse = await axios.get(
-        `${this.FPDB_BASE_URL}/plan/${flightPlan.id}`,
-        {
-          headers: {
-            Authorization: `Basic ${Buffer.from(`${this.FPDB_API_KEY}:`).toString('base64')}`,
-          },
-        },
-      );
+      const waypointsResponse = await axios
+        .get(`${this.FPDB_BASE_URL}/plan/${flightPlanResponse.data.id}`, {
+          headers: this.getApiHeaders(),
+          timeout: 10000,
+        })
+        .catch((error) => {
+          this.logApiError(error);
+          throw new HttpException(
+            `Flight plan API error: ${error.response?.data?.message || error.message}`,
+            error.response?.status || 500,
+          );
+        });
 
-      const waypointsData = waypointsResponse.data.route.nodes;
+      const waypointsData = waypointsResponse.data?.route?.nodes;
+      if (!Array.isArray(waypointsData)) {
+        throw new BadGatewayException('Invalid waypoints structure');
+      }
+
       const waypoints = waypointsData.map((wp) => ({
         ident: wp.ident,
         type: wp.type,
@@ -121,49 +183,41 @@ export class FlightsService {
         name: wp.name,
       }));
 
-      const encodedPolyline = flightPlan.encodedPolyline;
+      const [weatherDeparture, weatherArrival] = await Promise.all([
+        this.fetchWeather(departure.lat, departure.lon),
+        this.fetchWeather(arrival.lat, arrival.lon),
+      ]);
 
-      const weatherDeparture = await this.fetchWeather(
-        departure.lat,
-        departure.lon,
-      );
-
-      const weatherArrival = await this.fetchWeather(arrival.lat, arrival.lon);
-
-      const distanceKm = flightPlan.distance * 1.852;
-
-      const flightHours = this.computeFlightTime(
-        distanceKm,
-        aircraft.cruiseSpeed,
-      );
-
-      const flight = new Flight();
-      Object.assign(flight, {
+      const flight = this.flightsRepository.create({
         origin_icao,
         destination_icao,
         user: { id: user_id },
         reservation: { id: reservation_id },
-        flight_hours: flightHours,
+        flight_hours: this.computeFlightTime(
+          flightPlanResponse.data.distance * 1.852,
+          aircraft.cruiseSpeed,
+        ),
         flight_type: reservation.flight_category,
-        distance_km: distanceKm,
-        encoded_polyline: encodedPolyline,
+        distance_km: flightPlanResponse.data.distance * 1.852,
+        encoded_polyline: flightPlanResponse.data.encodedPolyline,
         weather_conditions: `Departure: ${weatherDeparture.weather[0]?.description}, Arrival: ${weatherArrival.weather[0]?.description}`,
         waypoints: JSON.stringify(waypoints),
         number_of_passengers: reservation.number_of_passengers || 1,
       });
 
-      await this.notificationsService.create({
-        user_id: user_id,
-        notification_type: 'FLIGHT_CREATED',
-        notification_date: new Date(),
-        message: `Votre plan de vol de ${flight.origin_icao} à ${flight.destination_icao} a été créé`,
-        is_read: false,
-      });
-
-      return this.flightsRepository.save(flight);
+      return await this.flightsRepository.save(flight);
     } catch (error) {
-      console.error('Error in createFlightByAI:', error.message);
-      throw new Error('Failed to generate flight plan via AI');
+      this.logger.error(
+        `Flight creation failed: ${error.message}`,
+        error.stack,
+      );
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Flight generation error', {
+        cause: error,
+        description: 'Please check flight parameters and try again',
+      });
     }
   }
 
@@ -187,7 +241,6 @@ export class FlightsService {
     updateFlightInput: UpdateFlightInput,
   ): Promise<Flight> {
     const flight = await this.flightsRepository.findOne({ where: { id } });
-
     if (!flight) {
       throw new NotFoundException(`Flight with ID ${id} not found`);
     }
@@ -199,39 +252,12 @@ export class FlightsService {
     }
 
     Object.assign(flight, updateFlightInput);
-
     return this.flightsRepository.save(flight);
   }
 
   async removeFlight(id: number): Promise<boolean> {
     const result = await this.flightsRepository.delete(id);
     return result.affected > 0;
-  }
-
-  async fetchAirportInfo(icao: string): Promise<any> {
-    try {
-      const response = await axios.get(
-        `${this.FPDB_BASE_URL}/nav/airport/${icao}`,
-        {
-          headers: {
-            Authorization: `Basic ${Buffer.from(`${this.FPDB_API_KEY}:`).toString('base64')}`,
-          },
-        },
-      );
-      const data = response.data;
-
-      const lat = data.lat || data.latitude || null;
-      const lon = data.lon || data.longitude || null;
-
-      if (lat === null || lon === null) {
-        throw new Error(`Coordinates not available for airport ${icao}`);
-      }
-
-      return data;
-    } catch (error) {
-      console.error(`Failed to fetch airport info for ${icao}:`, error.message);
-      throw new Error(`Failed to fetch airport info for ${icao}`);
-    }
   }
 
   async fetchWeather(lat: number, lon: number): Promise<any> {
@@ -246,6 +272,7 @@ export class FlightsService {
         },
       });
       return response.data;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       throw new Error(
         `Failed to fetch weather data for coordinates (${lat}, ${lon})`,
@@ -275,6 +302,7 @@ export class FlightsService {
           );
           const data = response.data;
           return `${wp.ident}: ${data.name}, Lat: ${data.lat}, Lon: ${data.lon}`;
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
         } catch (error) {
           return `${wp.ident}: Info not available`;
         }
@@ -285,6 +313,14 @@ export class FlightsService {
   async getFlightsByUser(user_id: number): Promise<Flight[]> {
     return this.flightsRepository.find({
       where: { user: { id: user_id } },
+      relations: ['user', 'reservation'],
+    });
+  }
+
+  async getRecentFlights(limit: number): Promise<Flight[]> {
+    return this.flightsRepository.find({
+      order: { reservation: { start_time: 'DESC' } },
+      take: limit,
       relations: ['user', 'reservation'],
     });
   }

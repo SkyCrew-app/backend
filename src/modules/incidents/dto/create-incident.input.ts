@@ -6,6 +6,9 @@ export class CreateIncidentInput {
   aircraft_id: number;
 
   @Field(() => Int)
+  flight_id: number;
+
+  @Field(() => Int)
   user_id: number;
 
   @Field()
@@ -22,4 +25,13 @@ export class CreateIncidentInput {
 
   @Field()
   severity_level: string;
+
+  @Field()
+  status: string;
+
+  @Field()
+  priority: string;
+
+  @Field()
+  category: string;
 }

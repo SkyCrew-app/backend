@@ -57,4 +57,11 @@ export class ReservationsResolver {
   ): Promise<Reservation[]> {
     return this.reservationService.findUserReservations(userId);
   }
+
+  @Query(() => [Reservation], { name: 'recentReservations' })
+  async getRecentReservations(
+    @Args('limit', { type: () => Int }) limit: number,
+  ): Promise<Reservation[]> {
+    return this.reservationService.findRecentReservations(limit);
+  }
 }

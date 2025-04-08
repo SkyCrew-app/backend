@@ -4,6 +4,7 @@ import { User } from './entity/users.entity';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { UpdateUserInput } from './dto/update-user.input';
+import { UpdateUserPreferencesInput } from './dto/update-user-preferences.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -127,6 +128,26 @@ export class UsersResolver {
   }
 
   @Query(() => User)
+  async getUserPreferences(@Args('userId') userId: number): Promise<User> {
+    return this.usersService.getUserPreferences(userId);
+  }
+  @Mutation(() => User)
+  async updateUserPreferences(
+    @Args('userId', { type: () => Number }) userId: number,
+    @Args('preference', { type: () => UpdateUserPreferencesInput })
+    preference: UpdateUserPreferencesInput,
+  ): Promise<User> {
+    return this.usersService.updateUserPreferences(
+      userId,
+      preference.language,
+      preference.speed_unit,
+      preference.distance_unit,
+      preference.timezone,
+      preference.preferred_aerodrome,
+    );
+  }
+
+  @Query(() => User)
   @UseGuards(JwtAuthGuard)
   me(@Context() context): { id: number; email: string } {
     if (!context.req.user) {
@@ -184,5 +205,13 @@ export class UserProgressResolver {
     @Args('userId') userId: number,
   ): Promise<UserProgress[]> {
     return this.usersService.getEvaluationResults(userId);
+  }
+
+  @Query(() => Boolean, { name: 'getUserProgress' })
+  async getUserProgress(
+    @Args('userId') userId: number,
+    @Args('lessonId') lessonId: number,
+  ): Promise<boolean> {
+    return this.usersService.getUserProgress(userId, lessonId);
   }
 }

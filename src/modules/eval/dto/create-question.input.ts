@@ -1,12 +1,10 @@
 import { InputType, Field } from '@nestjs/graphql';
+import { GraphQLJSONObject } from 'graphql-type-json';
 
 @InputType()
 export class CreateQuestionDTO {
-  @Field(() => Number, { description: 'Evaluation ID the question belongs to' })
-  evaluationId: number;
-
-  @Field(() => String, { description: 'Rich content in JSON format' })
-  content: any;
+  @Field(() => GraphQLJSONObject)
+  content: object;
 
   @Field(() => [String], { description: 'List of possible answers' })
   options: string[];
