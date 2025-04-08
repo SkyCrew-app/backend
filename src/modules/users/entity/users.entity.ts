@@ -107,6 +107,10 @@ export class User {
   @Column({ nullable: true })
   timezone: string;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  preferred_aerodrome: string;
+
   @Field(() => Role, { nullable: true })
   @ManyToOne(() => Role, (role) => role.users, { nullable: true })
   role: Role;

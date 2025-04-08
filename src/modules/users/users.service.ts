@@ -160,6 +160,36 @@ export class UsersService {
     return this.usersRepository.save(user);
   }
 
+  async getUserPreferences(userId: number): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['role'],
+    });
+    if (!user) throw new Error('User not found');
+    return user;
+  }
+
+  async updateUserPreferences(
+    userId: number,
+    language: string,
+    speed_unit: string,
+    distance_unit: string,
+    timezone: string,
+    preferred_aerodrome: string,
+  ): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+      relations: ['role'],
+    });
+    if (!user) throw new Error('User not found');
+    user.language = language;
+    user.speed_unit = speed_unit;
+    user.distance_unit = distance_unit;
+    user.timezone = timezone;
+    user.preferred_aerodrome = preferred_aerodrome;
+    return this.usersRepository.save(user);
+  }
+
   async updateNotificationSettings(
     userId: number,
     email_notifications_enabled: boolean,
@@ -281,5 +311,13 @@ export class UsersService {
     });
 
     return results;
+  }
+
+  async getUserProgress(userId: number, lessonId: number): Promise<boolean> {
+    const progress = await this.userProgressRepository.findOne({
+      where: { user: { id: userId }, lesson: { id: lessonId } },
+    });
+
+    return progress?.completed;
   }
 }
