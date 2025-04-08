@@ -1,4 +1,4 @@
-import { Args, Mutation, Query } from '@nestjs/graphql';
+import { Args, Int, Mutation, Query } from '@nestjs/graphql';
 import { Resolver } from '@nestjs/graphql';
 import { IncidentsService } from './incidents.service';
 import { Incident } from './entity/incidents.entity';
@@ -55,5 +55,10 @@ export class IncidentsResolver {
   @Mutation(() => Boolean, { name: 'deleteIncident' })
   delete(@Args('id') id: string) {
     return this.incidentService.deleteIncident(id);
+  }
+
+  @Query(() => [Incident], { name: 'recentIncidents' })
+  recentIncidents(@Args('limit', { type: () => Int }) limit: number) {
+    return this.incidentService.getRecentIncidents(limit);
   }
 }
