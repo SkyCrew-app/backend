@@ -97,4 +97,9 @@ export class FlightsResolver {
   removeFlight(@Args('id', { type: () => Number }) id: number) {
     return this.flightsService.removeFlight(id);
   }
+
+  @Query(() => [Flight], { name: 'recentFlights' })
+  getRecentFlights(@Args('limit', { type: () => Int }) limit: number) {
+    return this.flightsService.getRecentFlights(limit);
+  }
 }
