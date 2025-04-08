@@ -17,10 +17,11 @@ export class MailerService {
     templateName: string,
     variables: { [key: string]: any },
   ): Promise<void> {
+    // Utiliser un chemin qui fonctionnera en développement et en production
     const templatePath = join(
-      __dirname,
-      '..',
-      '..',
+      process.cwd(),
+      process.env.NODE_ENV === 'production' ? 'dist' : 'src',
+      'modules',
       'templates',
       `${templateName}.hbs`,
     );
@@ -35,13 +36,17 @@ export class MailerService {
     });
   }
 
-  // Charger et compiler le template avec Handlebars
   private loadTemplate(
     templatePath: string,
     variables: { [key: string]: any },
   ): string {
-    const templateFile = readFileSync(templatePath, 'utf8');
-    const template = Handlebars.compile(templateFile);
-    return template(variables);
+    try {
+      const templateFile = readFileSync(templatePath, 'utf8');
+      const template = Handlebars.compile(templateFile);
+      return template(variables);
+    } catch (error) {
+      console.error(`Erreur lors du chargement du template: ${error.message}`);
+      throw error;
+    }
   }
 }

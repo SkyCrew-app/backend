@@ -3,6 +3,8 @@ import { AdministrationService } from './administration.service';
 import { Administration } from './entity/admin.entity';
 import { CreateAdministrationInput } from './dto/create-admin.input';
 import { UpdateAdministrationInput } from './dto/update-admin.input';
+import { AdminDashboardStats } from 'src/types/administration.types';
+import { adminStatus } from './dto/adminStatus.input';
 
 @Resolver(() => Administration)
 export class AdministrationResolver {
@@ -51,5 +53,10 @@ export class AdministrationResolver {
   @Mutation(() => Boolean, { name: 'setSiteStatus' })
   setSiteStatus() {
     return this.administrationService.setMaintenance();
+  }
+
+  @Query(() => adminStatus, { name: 'adminDashboardStats' })
+  async adminDashboardStats(): Promise<AdminDashboardStats> {
+    return this.administrationService.getAdminDashboardStats();
   }
 }

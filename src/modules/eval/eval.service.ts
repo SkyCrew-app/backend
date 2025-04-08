@@ -123,26 +123,31 @@ export class EvalService {
     evaluationId: number,
     questionData: { content: any; options: string[]; correctAnswer: string },
   ): Promise<Question> {
-    if (!questionData.options.includes(questionData.correctAnswer)) {
-      throw new Error('Correct answer must be one of the options.');
+    try {
+      if (!questionData.options.includes(questionData.correctAnswer)) {
+        throw new Error('Correct answer must be one of the options.');
+      }
+
+      const evaluation = await this.evaluationRepository.findOne({
+        where: { id: evaluationId },
+      });
+
+      if (!evaluation) {
+        throw new Error('Evaluation not found');
+      }
+
+      const question = this.questionRepository.create({
+        content: questionData.content,
+        options: questionData.options,
+        correct_answer: questionData.correctAnswer,
+        evaluation,
+      });
+
+      return this.questionRepository.save(question);
+    } catch (error) {
+      console.error('Database Error:', error);
+      throw new Error('Failed to create question');
     }
-
-    const evaluation = await this.evaluationRepository.findOne({
-      where: { id: evaluationId },
-    });
-
-    if (!evaluation) {
-      throw new Error('Evaluation not found');
-    }
-
-    const question = this.questionRepository.create({
-      content: questionData.content,
-      options: questionData.options,
-      correct_answer: questionData.correctAnswer,
-      evaluation,
-    });
-
-    return this.questionRepository.save(question);
   }
 
   // Mettre à jour une question existante

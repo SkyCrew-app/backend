@@ -325,4 +325,12 @@ export class ReservationsService {
       relations: ['user', 'flights'],
     });
   }
+
+  async findRecentReservations(limit: number): Promise<Reservation[]> {
+    return this.reservationRepository.find({
+      order: { start_time: 'DESC' },
+      take: limit,
+      relations: ['user', 'aircraft'],
+    });
+  }
 }

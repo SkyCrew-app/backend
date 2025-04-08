@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Int, Context } from '@nestjs/graphql';
 import { InstructionCourse } from './entity/instruction-courses.entity';
 import { InstructionCoursesService } from './instruction-courses.service';
 import { CreateCourseInstructionInput } from './dto/create-course.input';
@@ -7,6 +7,7 @@ import { AddCompetencyInput } from './dto/add-competency.input';
 import { AddCommentInput } from './dto/add-comment.input';
 import { CourseCompetency } from './entity/course-competency.entity';
 import { CourseComment } from './entity/course-comment.entity';
+import { UserInstructionSummary } from './dto/instruction-summary.dto';
 
 @Resolver(() => InstructionCourse)
 export class InstructionCoursesResolver {
@@ -108,5 +109,15 @@ export class InstructionCoursesResolver {
     @Args('userId', { type: () => Int }) userId: number,
   ): Promise<InstructionCourse[]> {
     return this.courseService.findCoursesByUserId(userId);
+  }
+
+  @Query(() => UserInstructionSummary, { name: 'getUserInstructionSummary' })
+  async getUserInstructionSummary(
+    @Args('userId', { type: () => Int, nullable: true }) userId?: number,
+    @Context() context?: any,
+  ): Promise<UserInstructionSummary> {
+    // Si userId n'est pas fourni, utiliser l'ID de l'utilisateur connecté
+    const userIdToUse = userId || context.req.user.id;
+    return this.courseService.getUserInstructionSummary(userIdToUse);
   }
 }

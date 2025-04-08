@@ -7,7 +7,9 @@ import { GraphQLJSON } from 'graphql-type-json';
 @Entity('lessons')
 export class Lesson {
   @Field(() => Int)
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn('identity', {
+    generatedIdentity: 'ALWAYS',
+  })
   id: number;
 
   @Field()
@@ -25,6 +27,15 @@ export class Lesson {
   @Field({ nullable: true })
   @Column({ nullable: true })
   video_url: string;
+
+  @Field(() => [String], { nullable: true })
+  @Column({
+    type: 'text',
+    array: true,
+    default: [],
+    nullable: false,
+  })
+  attachments: string[];
 
   @Field(() => Module)
   @ManyToOne(() => Module, (module) => module.lessons, { onDelete: 'CASCADE' })

@@ -65,4 +65,7 @@ export class CreateAdministrationInput {
 
   @Field()
   taxonomies: Taxonomies;
+
+  @Field()
+  fuelPrice: number;
 }

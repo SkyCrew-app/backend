@@ -27,6 +27,10 @@ export class Maintenance {
   @Column()
   end_date: Date;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  status?: string;
+
   @Field(() => MaintenanceType, { nullable: true })
   @Column({ type: 'enum', enum: MaintenanceType, nullable: true })
   maintenance_type: MaintenanceType;
