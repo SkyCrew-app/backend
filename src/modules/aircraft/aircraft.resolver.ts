@@ -5,6 +5,7 @@ import { CreateAircraftInput } from './dto/create-aircraft.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
+import { UpdateAircraftInput } from './dto/update-aircraft.input';
 
 @Resolver(() => Aircraft)
 export class AircraftResolver {
@@ -68,7 +69,7 @@ export class AircraftResolver {
   @Mutation(() => Aircraft)
   async updateAircraft(
     @Args('aircraftId', { type: () => Int }) aircraftId: number,
-    @Args('updateAircraftInput') updateAircraftInput: CreateAircraftInput,
+    @Args('updateAircraftInput') updateAircraftInput: UpdateAircraftInput,
     @Args({ name: 'file', type: () => GraphQLUpload, nullable: true })
     file?: FileUpload,
     @Args({ name: 'image', type: () => GraphQLUpload, nullable: true })
@@ -128,5 +129,12 @@ export class AircraftResolver {
         'maintenances.technician',
       ],
     });
+  }
+
+  @Mutation(() => Boolean)
+  async deleteAircraft(
+    @Args('aircraftId', { type: () => Int }) aircraftId: number,
+  ): Promise<boolean> {
+    return this.aircraftService.remove(aircraftId);
   }
 }
