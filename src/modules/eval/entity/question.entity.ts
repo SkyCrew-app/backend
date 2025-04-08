@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   OneToMany,
+  JoinColumn,
 } from 'typeorm';
 import { Evaluation } from './evaluation.entity';
 import { Answer } from './answer.entity';
@@ -19,7 +20,7 @@ export class Question {
 
   @Field(() => GraphQLJSON, { description: 'Rich content in JSON format' })
   @Column('jsonb')
-  content: any;
+  content: object;
 
   @Field(() => [String])
   @Column('simple-array')
@@ -29,10 +30,13 @@ export class Question {
   @Column()
   correct_answer: string;
 
-  @Field(() => Evaluation)
+  @Column({ name: 'evaluation_id' })
+  evaluationId: number;
+
   @ManyToOne(() => Evaluation, (evaluation) => evaluation.questions, {
     onDelete: 'CASCADE',
   })
+  @JoinColumn({ name: 'evaluation_id' })
   evaluation: Evaluation;
 
   @Field(() => [Answer], { description: 'The answers to the question' })

@@ -24,7 +24,9 @@ export class Evaluation {
   module: Module;
 
   @Field(() => [Question])
-  @OneToMany(() => Question, (question) => question.evaluation)
+  @OneToMany(() => Question, (question) => question.evaluation, {
+    onDelete: 'CASCADE',
+  })
   questions: Question[];
 
   @Field()

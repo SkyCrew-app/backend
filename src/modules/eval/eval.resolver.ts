@@ -52,8 +52,13 @@ export class EvaluationResolver {
 
   @Mutation(() => Boolean, { name: 'deleteEvaluation' })
   async deleteEvaluation(@Args('id') id: number): Promise<boolean> {
-    await this.evalService.deleteEvaluation(id);
-    return true;
+    try {
+      await this.evalService.deleteEvaluation(id);
+      return true;
+    } catch (error) {
+      console.error(error);
+      throw new Error('An error occurred while deleting the evaluation');
+    }
   }
 
   @Query(() => [Evaluation], { name: 'getEvaluationsByModule' })
@@ -75,17 +80,16 @@ export class QuestionResolver {
     return this.evalService.getQuestionsByEvaluation(evaluationId);
   }
 
-  @Mutation(() => Question, { name: 'createQuestion' })
+  @Mutation(() => Question)
   async createQuestion(
     @Args('evaluationId') evaluationId: number,
     @Args('createQuestionInput') createQuestionInput: CreateQuestionDTO,
-  ): Promise<Question> {
-    const questionData = {
+  ) {
+    return this.evalService.createQuestion(evaluationId, {
       content: createQuestionInput.content,
       options: createQuestionInput.options,
       correctAnswer: createQuestionInput.correct_answer,
-    };
-    return this.evalService.createQuestion(evaluationId, questionData);
+    });
   }
 
   @Mutation(() => Question, { name: 'updateQuestion' })
