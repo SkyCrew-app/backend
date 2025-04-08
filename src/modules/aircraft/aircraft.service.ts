@@ -6,6 +6,7 @@ import { CreateAircraftInput } from './dto/create-aircraft.input';
 import { AvailabilityStatus } from './entity/aircraft.entity';
 import * as path from 'path';
 import * as fs from 'fs';
+import { UpdateAircraftInput } from './dto/update-aircraft.input';
 
 @Injectable()
 export class AircraftService {
@@ -68,7 +69,7 @@ export class AircraftService {
 
   async update(
     aircraftId: number,
-    updateAircraftInput: CreateAircraftInput,
+    updateAircraftInput: UpdateAircraftInput,
     filePaths: string[],
     imagePath: string | null,
   ): Promise<Aircraft> {
@@ -121,5 +122,25 @@ export class AircraftService {
 
   aircraftHistory(options?: any): Promise<Aircraft[]> {
     return this.aircraftRepository.find(options);
+  }
+
+  async remove(aircraftId: number): Promise<boolean> {
+    const aircraft = await this.aircraftRepository.findOneOrFail({
+      where: { id: aircraftId },
+    });
+
+    const aircraftDir = path.join(
+      __dirname,
+      '../../uploads',
+      String(aircraftId),
+    );
+
+    if (fs.existsSync(aircraftDir)) {
+      fs.rmdirSync(aircraftDir, { recursive: true });
+    }
+
+    await this.aircraftRepository.remove(aircraft);
+
+    return true;
   }
 }
