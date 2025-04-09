@@ -139,6 +139,8 @@ import { FinancialModule } from './modules/financial/financial.module';
 
     FinancialModule,
 
+    AuditModule,
+
     ScheduleModule.forRoot(),
 
     CacheModule.register({
