@@ -9,6 +9,7 @@ export const seedRoles = async (dataSource: DataSource): Promise<void> => {
     { role_name: 'Pilote' },
     { role_name: 'Instructeur' },
     { role_name: 'Technicien' },
+    { role_name: 'Student' },
   ];
 
   for (const roleData of rolesToCreate) {
