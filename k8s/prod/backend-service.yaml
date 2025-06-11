@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  type: ClusterIP        # Service interne, non exposé en dehors du cluster
+  selector:
+    app: backend
+  ports:
+  - port: 3000
+    targetPort: 3000

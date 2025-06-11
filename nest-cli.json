@@ -4,9 +4,10 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "assets": [{
-      "include": "templates/**/*",
+      "include": "src/module/template/**/*",
       "outDir": "dist/"
     }],
-    "deleteOutDir": true
+    "deleteOutDir": true,
+    "watchAssets": true
   }
 }
