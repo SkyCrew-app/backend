@@ -53,6 +53,7 @@ export class UsersService {
 
     const newUser = this.usersRepository.create({
       ...userData,
+      role: { id: 1 },
       validation_token: token,
     });
     const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${token}`;
