@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { LoginResponse } from './dto/login-response.dto';
 import { LoginInput } from './dto/login-input.dto';
 import { Response, Request } from 'express';
+import { UnauthorizedException } from '@nestjs/common';
 
 @Resolver()
 export class AuthResolver {
@@ -19,7 +20,7 @@ export class AuthResolver {
     );
 
     if (!user) {
-      throw new Error('Invalid credentials');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     const token = await this.authService.login(user);
