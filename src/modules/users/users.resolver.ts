@@ -4,24 +4,30 @@ import { User } from './entity/users.entity';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { UpdateUserInput } from './dto/update-user.input';
+import { UpdateUserPreferencesInput } from './dto/update-user-preferences.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import * as path from 'path';
 import * as fs from 'fs';
 import { EvalService } from '../eval/eval.service';
 import { Evaluation } from '../eval/entity/evaluation.entity';
 import { UserProgress } from './entity/user-progress.entity';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Resolver(() => User)
 export class UsersResolver {
   constructor(private readonly usersService: UsersService) {}
 
   @Query(() => [User])
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   getUsers() {
     return this.usersService.findAll();
   }
 
   @Mutation(() => User)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   createUser(
     @Args('first_name') first_name: string,
     @Args('last_name') last_name: string,
@@ -120,10 +126,31 @@ export class UsersResolver {
 
   @Mutation(() => User)
   async confirmEmailAndSetPassword(
-    @Args('token') token: string,
+    @Args('validation_token') token: string,
     @Args('password') password: string,
   ) {
     return this.usersService.confirmEmailAndSetPassword(token, password);
+  }
+
+  @Query(() => User)
+  @UseGuards(JwtAuthGuard)
+  async getUserPreferences(@Args('userId') userId: number): Promise<User> {
+    return this.usersService.getUserPreferences(userId);
+  }
+  @Mutation(() => User)
+  async updateUserPreferences(
+    @Args('userId', { type: () => Number }) userId: number,
+    @Args('preference', { type: () => UpdateUserPreferencesInput })
+    preference: UpdateUserPreferencesInput,
+  ): Promise<User> {
+    return this.usersService.updateUserPreferences(
+      userId,
+      preference.language,
+      preference.speed_unit,
+      preference.distance_unit,
+      preference.timezone,
+      preference.preferred_aerodrome,
+    );
   }
 
   @Query(() => User)
@@ -147,6 +174,7 @@ export class UserProgressResolver {
   ) {}
 
   @Query(() => [Evaluation], { name: 'getUserProgressByEvaluation' })
+  @UseGuards(JwtAuthGuard)
   async getUserProgressByEvaluation(
     @Args('userId') userId: number,
   ): Promise<any[]> {
@@ -154,6 +182,7 @@ export class UserProgressResolver {
   }
 
   @Query(() => Number, { name: 'getCourseProgress' })
+  @UseGuards(JwtAuthGuard)
   async getCourseProgress(
     @Args('userId') userId: number,
     @Args('courseId') courseId: number,
@@ -162,6 +191,7 @@ export class UserProgressResolver {
   }
 
   @Mutation(() => Boolean, { name: 'markLessonStarted' })
+  @UseGuards(JwtAuthGuard)
   async markLessonStarted(
     @Args('userId') userId: number,
     @Args('lessonId') lessonId: number,
@@ -171,6 +201,7 @@ export class UserProgressResolver {
   }
 
   @Mutation(() => Boolean, { name: 'markLessonCompleted' })
+  @UseGuards(JwtAuthGuard)
   async markLessonCompleted(
     @Args('userId') userId: number,
     @Args('lessonId') lessonId: number,
@@ -180,9 +211,19 @@ export class UserProgressResolver {
   }
 
   @Query(() => [UserProgress], { name: 'getUserEvaluationResults' })
+  @UseGuards(JwtAuthGuard)
   async getUserEvaluationResults(
     @Args('userId') userId: number,
   ): Promise<UserProgress[]> {
     return this.usersService.getEvaluationResults(userId);
+  }
+
+  @Query(() => Boolean, { name: 'getUserProgress' })
+  @UseGuards(JwtAuthGuard)
+  async getUserProgress(
+    @Args('userId') userId: number,
+    @Args('lessonId') lessonId: number,
+  ): Promise<boolean> {
+    return this.usersService.getUserProgress(userId, lessonId);
   }
 }

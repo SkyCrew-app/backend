@@ -18,7 +18,7 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'https://staging.skycrew.fr',
-      'http://localhost:8080',
+      'http://localhost:5173',
       'https://*.vercel.app',
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',

@@ -6,12 +6,18 @@ import { UpdateMaintenanceInput } from './dto/update-maintenance.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Resolver(() => Maintenance)
 export class MaintenanceResolver {
   constructor(private readonly maintenanceService: MaintenanceService) {}
 
   @Mutation(() => Maintenance)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Technicien', 'Administrateur')
   async createMaintenance(
     @Args('createMaintenanceInput')
     createMaintenanceInput: CreateMaintenanceInput,
@@ -65,6 +71,8 @@ export class MaintenanceResolver {
   }
 
   @Mutation(() => Maintenance)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Technicien', 'Administrateur')
   async updateMaintenance(
     @Args('updateMaintenanceInput')
     updateMaintenanceInput: UpdateMaintenanceInput,
@@ -118,6 +126,7 @@ export class MaintenanceResolver {
   }
 
   @Query(() => Maintenance, { name: 'getMaintenance' })
+  @UseGuards(JwtAuthGuard)
   async getMaintenance(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<Maintenance> {
@@ -125,6 +134,7 @@ export class MaintenanceResolver {
   }
 
   @Query(() => [Maintenance], { name: 'getMaintenancesByAircraft' })
+  @UseGuards(JwtAuthGuard)
   async getMaintenancesByAircraft(
     @Args('aircraftId', { type: () => Int }) aircraftId: number,
   ): Promise<Maintenance[]> {
@@ -132,6 +142,7 @@ export class MaintenanceResolver {
   }
 
   @Query(() => [Maintenance], { name: 'getAllMaintenances' })
+  @UseGuards(JwtAuthGuard)
   async getAllMaintenances(): Promise<Maintenance[]> {
     return this.maintenanceService.findAll();
   }

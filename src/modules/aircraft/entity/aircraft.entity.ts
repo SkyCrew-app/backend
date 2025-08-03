@@ -8,6 +8,7 @@ import {
 import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { Maintenance } from '../../maintenance/entity/maintenance.entity';
+import { Audit } from 'src/modules/audit/entity/audit.entity';
 
 export enum AvailabilityStatus {
   AVAILABLE = 'AVAILABLE',
@@ -85,4 +86,8 @@ export class Aircraft {
   @Field(() => [Maintenance])
   @OneToMany(() => Maintenance, (maintenance) => maintenance.aircraft)
   maintenances: Maintenance[];
+
+  @Field(() => [Audit])
+  @OneToMany(() => Audit, (audit) => audit.aircraft)
+  audits: Audit[];
 }

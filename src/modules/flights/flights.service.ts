@@ -316,4 +316,12 @@ export class FlightsService {
       relations: ['user', 'reservation'],
     });
   }
+
+  async getRecentFlights(limit: number): Promise<Flight[]> {
+    return this.flightsRepository.find({
+      order: { reservation: { start_time: 'DESC' } },
+      take: limit,
+      relations: ['user', 'reservation'],
+    });
+  }
 }

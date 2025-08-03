@@ -3,9 +3,6 @@ import { AvailabilityStatus } from '../entity/aircraft.entity';
 
 @InputType()
 export class UpdateAircraftInput {
-  @Field(() => Int)
-  id: number;
-
   @Field({ nullable: true })
   registration_number?: string;
 
@@ -28,11 +25,20 @@ export class UpdateAircraftInput {
   image_url?: string;
 
   @Field(() => [String], { nullable: true })
-  documents_url: string[];
+  documents_url?: string[];
 
   @Field({ nullable: true })
   last_inspection_date?: Date;
 
   @Field({ nullable: true })
   current_location?: string;
+
+  @Field(() => Int, { nullable: true })
+  maxAltitude?: number;
+
+  @Field(() => Int, { nullable: true })
+  cruiseSpeed?: number;
+
+  @Field(() => Int, { nullable: true })
+  consumption?: number;
 }

@@ -7,6 +7,8 @@ import { UpdateMaintenanceInput } from './dto/update-maintenance.input';
 import { AircraftService } from '../aircraft/aircraft.service';
 import * as path from 'path';
 import * as fs from 'fs';
+import { Aircraft } from '../aircraft/entity/aircraft.entity';
+import { User } from '../users/entity/users.entity';
 
 @Injectable()
 export class MaintenanceService {
@@ -14,6 +16,10 @@ export class MaintenanceService {
     @InjectRepository(Maintenance)
     private readonly maintenanceRepository: Repository<Maintenance>,
     private readonly aircraftService: AircraftService,
+    @InjectRepository(Aircraft)
+    private readonly aircraftRepository: Repository<Aircraft>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async create(
@@ -77,6 +83,7 @@ export class MaintenanceService {
   ): Promise<Maintenance> {
     const maintenance = await this.maintenanceRepository.findOne({
       where: { id: updateMaintenanceInput.id },
+      relations: ['aircraft', 'technician'],
     });
 
     if (!maintenance) {
@@ -115,7 +122,34 @@ export class MaintenanceService {
       });
     }
 
-    Object.assign(maintenance, updateMaintenanceInput);
+    if (updateMaintenanceInput.aircraft_id) {
+      const aircraft = await this.aircraftRepository.findOne({
+        where: { id: updateMaintenanceInput.aircraft_id },
+      });
+
+      if (!aircraft) {
+        throw new NotFoundException(
+          `Aircraft with ID ${updateMaintenanceInput.aircraft_id} not found`,
+        );
+      }
+
+      maintenance.aircraft = aircraft;
+    }
+
+    if (updateMaintenanceInput.technician_id) {
+      const technician = await this.userRepository.findOne({
+        where: { id: updateMaintenanceInput.technician_id },
+      });
+
+      if (technician) {
+        maintenance.technician = technician;
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { aircraft_id, technician_id, ...otherFields } =
+      updateMaintenanceInput;
+    Object.assign(maintenance, otherFields);
 
     return this.maintenanceRepository.save(maintenance);
   }

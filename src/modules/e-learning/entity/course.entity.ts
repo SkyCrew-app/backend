@@ -7,7 +7,9 @@ import { LicenseType } from 'src/shared/enums/licence-type.enum';
 @Entity('courses')
 export class Course {
   @Field(() => Int)
-  @PrimaryGeneratedColumn()
+  @PrimaryGeneratedColumn('identity', {
+    generatedIdentity: 'ALWAYS',
+  })
   id: number;
 
   @Field()

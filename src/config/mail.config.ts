@@ -6,9 +6,17 @@ export const mailConfig = (
 ): SMTPTransport.Options => ({
   host: configService.get<string>('MAIL_HOST'),
   port: configService.get<number>('MAIL_PORT'),
-  secure: configService.get<boolean>('MAIL_SECURE'),
-  auth: {
-    user: configService.get<string>('MAIL_USER'),
-    pass: configService.get<string>('MAIL_PASSWORD'),
+  secure: false,
+  ignoreTLS: true,
+  requireTLS: false,
+  auth:
+    configService.get<boolean>('MAIL_AUTH') === true
+      ? {
+          user: configService.get<string>('MAIL_USER'),
+          pass: configService.get<string>('MAIL_PASSWORD'),
+        }
+      : null,
+  tls: {
+    rejectUnauthorized: false,
   },
 });

@@ -119,4 +119,11 @@ export class IncidentsService {
     await this.incidentRepository.delete(id);
     return true;
   }
+
+  async getRecentIncidents(limit: number): Promise<Incident[]> {
+    return this.incidentRepository.find({
+      order: { incident_date: 'DESC' },
+      take: limit,
+    });
+  }
 }
