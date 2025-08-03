@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Incident } from './entity/incidents.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
-import { Flight } from 'src/modules/flights/entity/flights.entity';
-import { User } from 'src/modules/users/entity/users.entity';
+import { Flight } from '../flights/entity/flights.entity';
+import { User } from '../users/entity/users.entity';
 import { IncidentsService } from './incidents.service';
 import { IncidentsResolver } from './incidents.resolver';
 

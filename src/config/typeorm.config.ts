@@ -9,7 +9,7 @@ export const typeOrmConfig = (
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   synchronize: true,
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  // ssl: {
+  //   rejectUnauthorized: false,
+  // },
 });
