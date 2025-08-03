@@ -1,5 +1,5 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { LicenseType } from 'src/shared/enums/licence-type.enum';
+import { LicenseType } from '../../../shared/enums/licence-type.enum';
 
 @InputType()
 export class CreateCourseDTO {
