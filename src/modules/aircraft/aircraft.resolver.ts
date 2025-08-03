@@ -5,17 +5,25 @@ import { CreateAircraftInput } from './dto/create-aircraft.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import * as path from 'path';
+import { UpdateAircraftInput } from './dto/update-aircraft.input';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Resolver(() => Aircraft)
 export class AircraftResolver {
   constructor(private readonly aircraftService: AircraftService) {}
 
   @Query(() => [Aircraft], { name: 'getAircrafts' })
+  @UseGuards(JwtAuthGuard)
   getAircrafts() {
     return this.aircraftService.findAll();
   }
 
   @Mutation(() => Aircraft)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createAircraft(
     @Args('createAircraftInput') createAircraftInput: CreateAircraftInput,
     @Args({ name: 'file', type: () => GraphQLUpload, nullable: true })
@@ -66,9 +74,11 @@ export class AircraftResolver {
   }
 
   @Mutation(() => Aircraft)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateAircraft(
     @Args('aircraftId', { type: () => Int }) aircraftId: number,
-    @Args('updateAircraftInput') updateAircraftInput: CreateAircraftInput,
+    @Args('updateAircraftInput') updateAircraftInput: UpdateAircraftInput,
     @Args({ name: 'file', type: () => GraphQLUpload, nullable: true })
     file?: FileUpload,
     @Args({ name: 'image', type: () => GraphQLUpload, nullable: true })
@@ -119,6 +129,7 @@ export class AircraftResolver {
   }
 
   @Query(() => [Aircraft])
+  @UseGuards(JwtAuthGuard)
   async getHistoryAircraft(): Promise<Aircraft[]> {
     return this.aircraftService.aircraftHistory({
       relations: [
@@ -128,5 +139,14 @@ export class AircraftResolver {
         'maintenances.technician',
       ],
     });
+  }
+
+  @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
+  async deleteAircraft(
+    @Args('aircraftId', { type: () => Int }) aircraftId: number,
+  ): Promise<boolean> {
+    return this.aircraftService.remove(aircraftId);
   }
 }

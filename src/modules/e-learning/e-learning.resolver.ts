@@ -19,6 +19,10 @@ import { CreateLessonDTO } from './dto/create-lesson.input';
 import { UpdateLessonDTO } from './dto/update-lesson.input';
 import { CreateModuleDTO } from './dto/create-module.input';
 import { UpdateModuleDTO } from './dto/update-module.input';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Resolver(() => Course)
 export class CourseResolver {
@@ -28,6 +32,7 @@ export class CourseResolver {
   ) {}
 
   @Query(() => [Course], { name: 'getCourses' })
+  @UseGuards(JwtAuthGuard)
   async getCourses(
     @Args('category', { nullable: true }) category?: string,
     @Args('search', { nullable: true }) search?: string,
@@ -36,6 +41,7 @@ export class CourseResolver {
   }
 
   @Query(() => Course, { name: 'getCourseById' })
+  @UseGuards(JwtAuthGuard)
   async getCourseById(
     @Args('id') id: number,
     @Args('userId', { nullable: true }) userId?: number,
@@ -44,6 +50,8 @@ export class CourseResolver {
   }
 
   @Mutation(() => Course, { name: 'createCourse' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createCourse(
     @Args('createCourseInput') createCourseInput: CreateCourseDTO,
   ): Promise<Course> {
@@ -51,6 +59,8 @@ export class CourseResolver {
   }
 
   @Mutation(() => Course, { name: 'updateCourse' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateCourse(
     @Args('id') id: number,
     @Args('updateCourseInput') updateCourseInput: UpdateCourseDTO,
@@ -59,12 +69,15 @@ export class CourseResolver {
   }
 
   @Mutation(() => Boolean, { name: 'deleteCourse' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteCourse(@Args('id') id: number): Promise<boolean> {
     await this.eLearningService.deleteCourse(id);
     return true;
   }
 
   @ResolveField(() => Float, { nullable: true })
+  @UseGuards(JwtAuthGuard)
   async progress(
     @Parent() course: Course,
     @Context() context,
@@ -79,6 +92,7 @@ export class ModuleResolver {
   constructor(private readonly eLearningService: ELearningService) {}
 
   @Query(() => [Module], { name: 'getModulesByCourse' })
+  @UseGuards(JwtAuthGuard)
   async getModulesByCourse(
     @Args('courseId') courseId: number,
   ): Promise<Module[]> {
@@ -86,11 +100,14 @@ export class ModuleResolver {
   }
 
   @Query(() => [Module], { name: 'getAllModules' })
+  @UseGuards(JwtAuthGuard)
   async getAllModules(): Promise<Module[]> {
     return this.eLearningService.getAllModules();
   }
 
   @Mutation(() => Module, { name: 'createModule' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createModule(
     @Args('createModuleInput') createModuleInput: CreateModuleDTO,
   ): Promise<Module> {
@@ -98,6 +115,8 @@ export class ModuleResolver {
   }
 
   @Mutation(() => Module, { name: 'updateModule' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateModule(
     @Args('id') id: number,
     @Args('updateModuleInput') updateModuleInput: UpdateModuleDTO,
@@ -106,6 +125,8 @@ export class ModuleResolver {
   }
 
   @Mutation(() => Boolean, { name: 'deleteModule' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteModule(@Args('id') id: number): Promise<boolean> {
     await this.eLearningService.deleteModule(id);
     return true;
@@ -117,6 +138,7 @@ export class LessonResolver {
   constructor(private readonly eLearningService: ELearningService) {}
 
   @Query(() => Lesson, { name: 'getLessonContent' })
+  @UseGuards(JwtAuthGuard)
   async getLessonContent(
     @Args('lessonId') lessonId: number,
     @Args('userId') userId: number,
@@ -125,6 +147,7 @@ export class LessonResolver {
   }
 
   @Query(() => [Lesson], { name: 'getLessonsByModule' })
+  @UseGuards(JwtAuthGuard)
   async getLessonsByModule(
     @Args('moduleId') moduleId: number,
   ): Promise<Lesson[]> {
@@ -132,6 +155,8 @@ export class LessonResolver {
   }
 
   @Mutation(() => Lesson, { name: 'createLesson' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createLesson(
     @Args('createLessonInput') createLessonInput: CreateLessonDTO,
   ): Promise<Lesson> {
@@ -139,6 +164,8 @@ export class LessonResolver {
   }
 
   @Mutation(() => Lesson, { name: 'updateLesson' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateLesson(
     @Args('id') id: number,
     @Args('updateLessonInput') updateLessonInput: UpdateLessonDTO,
@@ -147,12 +174,15 @@ export class LessonResolver {
   }
 
   @Mutation(() => Boolean, { name: 'deleteLesson' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteLesson(@Args('id') id: number): Promise<boolean> {
     await this.eLearningService.deleteLesson(id);
     return true;
   }
 
   @Mutation(() => Boolean, { name: 'completeLesson' })
+  @UseGuards(JwtAuthGuard)
   async completeLesson(
     @Args('lessonId') lessonId: number,
     @Args('userId') userId: number,
