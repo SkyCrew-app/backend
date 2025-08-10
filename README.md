@@ -1,7 +1,7 @@
 # ✈️ SkyCrew - AeroClub Management System
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D14-brightgreen)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![NestJS](https://img.shields.io/badge/backend-NestJS-e0234e)](https://nestjs.com/)
 [![React](https://img.shields.io/badge/frontend-React-61DAFB)](https://reactjs.org/)
 
@@ -29,20 +29,24 @@
 ## 🛠️ Tech Stack
 
 - **Backend**: [NestJS](https://nestjs.com/) 🐺, [GraphQL](https://graphql.org/) 🕸️, [TypeORM](https://typeorm.io/) 📚, [PostgreSQL](https://www.postgresql.org/) 🐘
-- **Frontend**: [React.js](https://reactjs.org/) ⚛️
-- **Database**: [PostgreSQL](https://www.postgresql.org/) 🐘
+- **Frontend**: [React.js](https://reactjs.org/) ⚛️ [ShadCN](https://ui.shadcn.com/) for UI components, [Next.js](https://nextjs.org/) for server-side rendering
+- **Database**: [PostgreSQL](https://www.postgresql.org/) 🐘 [Redis](https://redis.io/) 🧰
 - **Messaging & Notifications**: [Mailgun](https://www.mailgun.com/) ✉️, SMS 📱
-- **Background Processing**: [Bull](https://github.com/OptimalBits/bull) 🐂 (with [Redis](https://redis.io/) 🧰)
+- **Payment Processing**: [Stripe](https://stripe.com/) 💳, [Paypal](https://www.paypal.com/) 💳
+- **Background Processing**: [Jenkins](https://www.jenkins.io/) for CI/CD
 
 ---
 
 ## 📸 Screenshots
 
-![Dashboard Screenshot](https://via.placeholder.com/800x400.png?text=Dashboard+Screenshot)
+![Dashboard Screenshot](/screen//homepage.png)
 *An overview of the main dashboard displaying key metrics and notifications.*
 
-![Aircraft Tracking](https://via.placeholder.com/800x400.png?text=Aircraft+Tracking)
+![Aircraft Tracking](/screen/flotte.png)
 *Real-time fleet tracking with detailed aircraft information.*
+
+![E-Learning](/screen/elearning.png)
+*E-learning module for pilot training and certification management.*
 
 ---
 
@@ -54,9 +58,9 @@ To set up the project locally, follow these steps:
 
 Ensure you have the following installed:
 
-- [Node.js](https://nodejs.org/) (v14 or above) 📦
-- [PostgreSQL](https://www.postgresql.org/) 🐘
-- [Redis](https://redis.io/) 🧰
+- [Node.js](https://nodejs.org/) (v20 or above) 📦
+- [npm](https://www.npmjs.com/) (Node Package Manager) 📦
+- [Docker](https://www.docker.com/) (for containerized setup) 🐳 or [Kubernetes](https://kubernetes.io/) (for orchestration) ☸️
 - [Git](https://git-scm.com/) 🔧
 
 ### **Backend Setup**
@@ -64,8 +68,7 @@ Ensure you have the following installed:
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/yourusername/aeroclub-management.git
-   cd aeroclub-management
+   git clone https://github.com/SkyCrew-app/backend
    ```
 
 2. **Install backend dependencies:**
@@ -78,86 +81,62 @@ Ensure you have the following installed:
 3. **Set up environment variables:**
 
    Create a `.env` file in the backend root directory:
+   Please refer to the `.env.example` file for required variables.
 
-   ```env
-   DATABASE_HOST=localhost
-   DATABASE_PORT=5432
-   DATABASE_USERNAME=your_postgres_user
-   DATABASE_PASSWORD=your_postgres_password
-   DATABASE_NAME=aeroclub_db
-   JWT_SECRET=your_jwt_secret
-   REDIS_HOST=localhost
-   REDIS_PORT=6379
-   MAILGUN_API_KEY=your_mailgun_api_key
-   MAILGUN_DOMAIN=your_mailgun_domain
-   ```
+   For evaluation purposes, you can use the .env file provided in the repository.
 
-4. **Run database migrations:**
 
-   ```bash
-   npm run typeorm migration:run
-   ```
-
-5. **Start the NestJS backend server:**
-
-   ```bash
-   npm run start:dev
-   ```
-
-### **Backend Setup (Docker)**
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/yourusername/aeroclub-management.git
-   cd aeroclub-management
-   ```
-
-2. **Install backend dependencies:**
-
-   ```bash
-   cd backend
-   npm install
-   ```
-
-3. **Set up environment variables:**
-
-   Create a `.env` file in the backend root directory:
-
-   ```env
-   DB_HOST=db
-   DB_PORT=5432
-   DB_USER=root
-   DB_PASSWORD=password
-   DB_NAME=mydb
-   REDIS_HOST=redis
-   REDIS_PORT=6379
-   GRAPHQL_ENDPOINT=/graphql
-   MAIL_HOST=mailhog
-   MAIL_PORT=1025
-   MAIL_USER=null
-   MAIL_PASSWORD=null
-   MAIL_FROM=no-reply@skycrew.fr
-   MAIL_SECURE=false
-   JWT_SECRET=uAsLYpaZSV3guAj-e-biupo-5eVfIHq-69DRZog9ZTs
-   JWT_EXPIRES_IN=3600
-   FRONTEND_URL=http://localhost:8080
-   VONAGE_API_KEY=
-   VONAGE_API_SECRET=
-   WHATSAPP_FROM_NUMBER=
-   ```
-
-4. **Run docker compose:**
+4. **Start the setup (Server, Database, Redis, mailhog):**
 
    ```bash
    docker-compose up -d
    ```
 
+5. **For evaluation purposes:**
+
+   Copy the exemple database file for evaluation purposes:
+
+   ```bash
+   cp bdd/example.sql
+   ```
+
+   Connect to PostgreSQL docker container and execute the SQL file:
+
+   ```bash
+      docker exec -i <container_name> psql -U <username> -d <database_name> -f /path/to/example.sql
+   ```
+
+7. **Use SkyCrew**
+
+   Connect to your browser at `http://localhost:3000` to access the backend API.
+   You can also access the GraphQL playground at `http://localhost:3000/graphql`.
+
 ---
+
+### **Monitoring Setup**
+
+1. **Go to the monitoring directory:**
+
+   ```bash
+   cd backend/monitoring
+   ```
+
+2. **Start the monitoring services:**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+3. **Access the monitoring dashboard:**
+   Open your browser and navigate to `http://localhost:9090/` to view the Prometheus dashboard.
+   Open `http://localhost:8000/` to view the Grafana dashboard.
+
+---
+
 
 ## 🎮 Usage
 
-Once both the backend and frontend are running, navigate to `http://localhost:3000` in your browser to access the AeroClub Management System.
+Once both the backend and frontend are running, navigate to `http://localhost:3000` in your browser to access SkyCrew.
 
 - **GraphQL Playground**: Access it at `http://localhost:3000/graphql` for testing API queries.
 - **Default Credentials**: Use `admin@example.com` with password `admin123` for initial access (if set up).
@@ -167,6 +146,7 @@ Once both the backend and frontend are running, navigate to `http://localhost:30
 ## 📚 API Documentation
 
 The backend exposes a **GraphQL API**. Explore the schema and run queries using the GraphQL Playground.
+You can find the API documentation at `http://localhost:3000/playground`.
 
 ### **Example Queries**
 
@@ -221,6 +201,12 @@ cd backend
 npm run test
 ```
 
+To run coverage reports:
+
+```bash
+npm run test:cov
+```
+
 ---
 
 ## 📅 Roadmap
@@ -229,13 +215,6 @@ npm run test
 - [ ] **Mobile App Integration**: Develop companion apps for iOS and Android.
 - [ ] **Advanced Analytics**: Add reporting tools for data-driven decisions.
 - [ ] **Third-party Integrations**: Connect with maintenance and booking platforms.
-
----
-
-## 🐛 Known Issues
-
-- **Email Notifications**: Some users may experience delays due to SMTP configurations.
-- **Timezone Discrepancies**: Reservation times may not adjust for different timezones.
 
 ---
 
@@ -248,7 +227,7 @@ Contributions are welcome! Please follow these guidelines:
 2. **Create a Feature Branch**
 
    ```bash
-   git checkout -b feature/YourFeature
+   git checkout -b feature/YourFeature or git checkout -b fix/YourBugFix
    ```
 
 3. **Commit Your Changes**
@@ -285,10 +264,10 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 For any inquiries or issues, feel free to reach out:
 
-- **Name**: Your Name
-- **Email**: [your.email@example.com](mailto:your.email@example.com)
-- **LinkedIn**: [Your LinkedIn Profile](https://linkedin.com/in/yourprofile)
-- **GitHub**: [YourUsername](https://github.com/yourusername)
+- **Name**: Anthony DENIN
+- **Email**: [anthony.denin@ynov.com](mailto:anthony.denin@ynov.com)
+- **LinkedIn**: [Anthony DENIN](https://linkedin.com/in/anthony-denin)
+- **GitHub**: [MrBartou](https://github.com/MrBartou)
 
 ---
 
