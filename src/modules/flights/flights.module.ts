@@ -6,15 +6,25 @@ import { Flight } from './entity/flights.entity';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AirportsService } from './airports.service';
-import { HttpModule } from '@nestjs/axios';
+import { FlightPlanGeneratorService } from './flight-plan-generator.service';
+import { AirwayGraphService } from './airway-graph.service';
+import { AircraftPerformanceService } from './aircraft-performance.service';
+import { MetarService } from './metar.service';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Flight, Reservation]),
     NotificationsModule,
-    HttpModule,
   ],
   exports: [FlightsService],
-  providers: [FlightsService, FlightsResolver, AirportsService],
+  providers: [
+    FlightsService,
+    FlightsResolver,
+    AirportsService,
+    FlightPlanGeneratorService,
+    AirwayGraphService,
+    AircraftPerformanceService,
+    MetarService,
+  ],
 })
 export class FlightsModule {}

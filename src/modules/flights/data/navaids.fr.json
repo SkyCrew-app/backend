@@ -1,0 +1,1114 @@
+[
+  {
+    "ident": "ALM",
+    "name": "AIX LES MILLES",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.507777777778,
+    "lon": 5.3669444444444
+  },
+  {
+    "ident": "AJO",
+    "name": "AJACCIO-COTI CHIAVARI",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 41.770555555556,
+    "lon": 8.7747222222222
+  },
+  {
+    "ident": "ABY",
+    "name": "ALBERT BRAY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 49.976111111111,
+    "lon": 2.8111111111111
+  },
+  {
+    "ident": "AMB",
+    "name": "AMBOISE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.418055555556,
+    "lon": 1.0411111111111
+  },
+  {
+    "ident": "GI",
+    "name": "AMIENS-GLISY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 49.842222222222,
+    "lon": 2.4841666666667
+  },
+  {
+    "ident": "LMT",
+    "name": "AUCH GERS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.7175,
+    "lon": 0.60305555555556
+  },
+  {
+    "ident": "AX",
+    "name": "AUXERRE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.920277777778,
+    "lon": 3.5022222222222
+  },
+  {
+    "ident": "CM",
+    "name": "AVIGNON CAUMONT",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.908333333333,
+    "lon": 4.9052777777778
+  },
+  {
+    "ident": "AVN",
+    "name": "AVIGNON PUJAUT",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.995277777778,
+    "lon": 4.7463888888889
+  },
+  {
+    "ident": "AVD",
+    "name": "AVORD",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.120555555556,
+    "lon": 2.7997222222222
+  },
+  {
+    "ident": "BLM",
+    "name": "BALE/MULHOUSE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.632777777778,
+    "lon": 7.4994444444444
+  },
+  {
+    "ident": "BTA",
+    "name": "BASTIA PORETTA",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 42.573611111111,
+    "lon": 9.4747222222222
+  },
+  {
+    "ident": "BV",
+    "name": "BEAUVAIS TILLE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 49.491666666667,
+    "lon": 2.0294444444444
+  },
+  {
+    "ident": "BOV",
+    "name": "BEAUVAIS TILLE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.436388888889,
+    "lon": 2.1530555555556
+  },
+  {
+    "ident": "ZR",
+    "name": "BEZIERS VIAS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.326944444444,
+    "lon": 3.2830555555556
+  },
+  {
+    "ident": "BTZ",
+    "name": "BIARRITZ BAYONNE ANGLET",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.466666666667,
+    "lon": -1.5102777777778
+  },
+  {
+    "ident": "BRS",
+    "name": "BISCARROSSE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 44.365555555556,
+    "lon": -1.1288888888889
+  },
+  {
+    "ident": "BLB",
+    "name": "BLOIS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.673888888889,
+    "lon": 1.2025
+  },
+  {
+    "ident": "BMC",
+    "name": "BORDEAUX MERIGNAC",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 44.826944444444,
+    "lon": -0.72111111111111
+  },
+  {
+    "ident": "BNE",
+    "name": "BOULOGNE SUR MER",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 50.624722222222,
+    "lon": 1.9072222222222
+  },
+  {
+    "ident": "BZH",
+    "name": "BREST",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.44206,
+    "lon": -4.44419
+  },
+  {
+    "ident": "GU",
+    "name": "BREST BRETAGNE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.4775,
+    "lon": -4.2855555555556
+  },
+  {
+    "ident": "BSC",
+    "name": "BRIVE SOUILLAC",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 44.995277777778,
+    "lon": 1.6219444444444
+  },
+  {
+    "ident": "CAN",
+    "name": "CAEN CARPIQUET",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.173333333333,
+    "lon": -0.45527777777778
+  },
+  {
+    "ident": "CNE",
+    "name": "CAEN CARPIQUET",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 49.115555555556,
+    "lon": -0.32111111111111
+  },
+  {
+    "ident": "CV",
+    "name": "CALVI SAINTE CATHERINE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 42.576944444444,
+    "lon": 8.8066666666667
+  },
+  {
+    "ident": "CMB",
+    "name": "CAMBRAI",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 50.228138888888886,
+    "lon": 3.1515
+  },
+  {
+    "ident": "CNM",
+    "name": "CANNES TANNERON",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.560277777778,
+    "lon": 6.8708333333333
+  },
+  {
+    "ident": "VAT",
+    "name": "CHALONS VATRY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.797777777778,
+    "lon": 4.0161111111111
+  },
+  {
+    "ident": "CVT",
+    "name": "CHALONS VATRY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.759166666667,
+    "lon": 4.3188888888889
+  },
+  {
+    "ident": "CBY",
+    "name": "CHAMBERY",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 45.88188,
+    "lon": 5.757306
+  },
+  {
+    "ident": "CH",
+    "name": "CHAMBERY AIX LES BAINS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 45.592222222222,
+    "lon": 5.8836111111111
+  },
+  {
+    "ident": "CHW",
+    "name": "CHARTRES LA LOUPE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.48,
+    "lon": 0.98694444444444
+  },
+  {
+    "ident": "CAD",
+    "name": "CHATEAUDUN",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.059166666667,
+    "lon": 1.3869444444444
+  },
+  {
+    "ident": "CHX",
+    "name": "CHATEAUROUX DEOLS",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 46.87119444444445,
+    "lon": 1.741861111111111
+  },
+  {
+    "ident": "CTX",
+    "name": "CHATEAUROUX DEOLS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.936666666667,
+    "lon": 1.8011111111111
+  },
+  {
+    "ident": "CFA",
+    "name": "CLERMONT FERRAND AUVERGNE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 45.7875,
+    "lon": 3.1922222222222
+  },
+  {
+    "ident": "CNA",
+    "name": "COGNAC CHATEAUBERNARD",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 45.659444444444,
+    "lon": -0.31166666666667
+  },
+  {
+    "ident": "OC",
+    "name": "COGNAC CHATEAUBERNARD",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 45.740555555556,
+    "lon": -0.16111111111111
+  },
+  {
+    "ident": "HO",
+    "name": "COLMAR",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.133611111111,
+    "lon": 7.3661111111111
+  },
+  {
+    "ident": "CLM",
+    "name": "COULOMMIERS VOISINS",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.844722222222,
+    "lon": 3.0138888888889
+  },
+  {
+    "ident": "DX",
+    "name": "DAX SEYRESSE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.6975,
+    "lon": -1.0280555555556
+  },
+  {
+    "ident": "DVL",
+    "name": "DEAUVILLE NORMANDIE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.310833333333,
+    "lon": 0.31277777777778
+  },
+  {
+    "ident": "DPE",
+    "name": "DIEPPE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.925277777778,
+    "lon": 1.1705555555556
+  },
+  {
+    "ident": "DJL",
+    "name": "DIJON-LONGVIC",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.270833333333,
+    "lon": 5.0972222222222
+  },
+  {
+    "ident": "DIN",
+    "name": "DINARD PLEURTUIT SAINT MALO",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.586111111111,
+    "lon": -2.0822222222222
+  },
+  {
+    "ident": "DO",
+    "name": "DOLE TAVAUX",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.979722222222,
+    "lon": 5.3052777777778
+  },
+  {
+    "ident": "EPR",
+    "name": "EPERNON",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.625833333333,
+    "lon": 1.6566666666667
+  },
+  {
+    "ident": "EMT",
+    "name": "EPINAL",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.3325,
+    "lon": 6.1936111111111
+  },
+  {
+    "ident": "EPL",
+    "name": "EPINAL MIRECOURT",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.317777777778,
+    "lon": 6.0594444444444
+  },
+  {
+    "ident": "ETN",
+    "name": "ETAIN ROUVRES",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 49.228611111111,
+    "lon": 5.6744444444444
+  },
+  {
+    "ident": "EVX",
+    "name": "EVREUX FAUVILLE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.031666666667,
+    "lon": 1.2208333333333
+  },
+  {
+    "ident": "FGI",
+    "name": "FIGARI",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 41.502222222222,
+    "lon": 9.0833333333333
+  },
+  {
+    "ident": "GTQ",
+    "name": "GROSTENQUIN",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.986388888889,
+    "lon": 6.7161111111111
+  },
+  {
+    "ident": "GSG",
+    "name": "GUISCRIFF SCAER",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.16,
+    "lon": -3.6025
+  },
+  {
+    "ident": "HR",
+    "name": "HERICOURT",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.561666666667,
+    "lon": 6.7322222222222
+  },
+  {
+    "ident": "TLN",
+    "name": "HYERES LE PALYVESTRE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.032777777778,
+    "lon": 6.1527777777778
+  },
+  {
+    "ident": "ITS",
+    "name": "ISTRES LE TUBE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.500277777778,
+    "lon": 4.94
+  },
+  {
+    "ident": "LGL",
+    "name": "L'AIGLE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.790555555556,
+    "lon": 0.53027777777778
+  },
+  {
+    "ident": "LCA",
+    "name": "LA CHATRE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 46.691388888889,
+    "lon": 2.1494444444444
+  },
+  {
+    "ident": "RL",
+    "name": "LA ROCHELLE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.176388888889,
+    "lon": -1.0988888888889
+  },
+  {
+    "ident": "LTP",
+    "name": "LA TOUR DU PIN",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 45.489,
+    "lon": 5.43906
+  },
+  {
+    "ident": "BST",
+    "name": "LANVEOC POULMIC",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.283611111111,
+    "lon": -4.4322222222222
+  },
+  {
+    "ident": "LUC",
+    "name": "LE LUC LE CANNET",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.382777777778,
+    "lon": 6.2558333333333
+  },
+  {
+    "ident": "LU",
+    "name": "LE LUC LE CANNET",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.386944444444,
+    "lon": 6.5252777777778
+  },
+  {
+    "ident": "PY",
+    "name": "LE PUY LOUDES",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 45.018055555556,
+    "lon": 3.815
+  },
+  {
+    "ident": "LMB",
+    "name": "LEMBEYE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.466666666667,
+    "lon": -0.018333333333333
+  },
+  {
+    "ident": "LEQ",
+    "name": "LILLE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 50.561666666667,
+    "lon": 3.0891666666667
+  },
+  {
+    "ident": "LMG",
+    "name": "LIMOGES",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 45.815833333333,
+    "lon": 1.0255555555556
+  },
+  {
+    "ident": "LOR",
+    "name": "LORIENT LANN BIHOUE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.763055555556,
+    "lon": -3.4405555555556
+  },
+  {
+    "ident": "LUL",
+    "name": "LUXEUIL",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.688333333333,
+    "lon": 6.2955555555556
+  },
+  {
+    "ident": "LSE",
+    "name": "LYON SAINT EXUPERY",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 45.745555555556,
+    "lon": 5.0905555555556
+  },
+  {
+    "ident": "OB",
+    "name": "MARSEILLE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.229722222222,
+    "lon": 5.6652777777778
+  },
+  {
+    "ident": "MRM",
+    "name": "MARSEILLE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.377222222222,
+    "lon": 5.3263888888889
+  },
+  {
+    "ident": "MJ",
+    "name": "MARSEILLE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.438333333333,
+    "lon": 5.2163888888889
+  },
+  {
+    "ident": "MAR",
+    "name": "MARSEILLE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.489722222222,
+    "lon": 5.1372222222222
+  },
+  {
+    "ident": "MTG",
+    "name": "MARTIGUES",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.386388888889,
+    "lon": 5.0869444444444
+  },
+  {
+    "ident": "MV",
+    "name": "MELUN",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.553888888889,
+    "lon": 2.9780555555556
+  },
+  {
+    "ident": "MLN",
+    "name": "MELUN",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.455833333333,
+    "lon": 2.8133333333333
+  },
+  {
+    "ident": "MVC",
+    "name": "MERVILLE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 50.571666666667,
+    "lon": 2.5872222222222
+  },
+  {
+    "ident": "MRV",
+    "name": "MERVILLE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 50.671388888889,
+    "lon": 2.7061111111111
+  },
+  {
+    "ident": "MTZ",
+    "name": "METZ NANCY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 49.276111111111,
+    "lon": 6.2086111111111
+  },
+  {
+    "ident": "LOU",
+    "name": "METZ NANCY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.998333333333,
+    "lon": 6.2713888888889
+  },
+  {
+    "ident": "LGH",
+    "name": "MONT DE MARSAN",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.910833333333,
+    "lon": -0.495
+  },
+  {
+    "ident": "MTD",
+    "name": "MONTDIDIER",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.5525,
+    "lon": 2.4894444444444
+  },
+  {
+    "ident": "MTL",
+    "name": "MONTELIMAR",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 44.555,
+    "lon": 4.7797222222222
+  },
+  {
+    "ident": "MC",
+    "name": "MONTLUCON DOMERAT",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.3725,
+    "lon": 2.4927777777778
+  },
+  {
+    "ident": "LPD",
+    "name": "MONTLUCON GUERET",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.3025,
+    "lon": 2.3372222222222
+  },
+  {
+    "ident": "MMD",
+    "name": "MONTMEDY-DUN SUR MEUSE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.391388888889,
+    "lon": 5.1244444444444
+  },
+  {
+    "ident": "FJR",
+    "name": "MONTPELLIER",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.578333333333,
+    "lon": 3.9747222222222
+  },
+  {
+    "ident": "FG",
+    "name": "MONTPELLIER",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.556666666667,
+    "lon": 4.0141666666667
+  },
+  {
+    "ident": "MOU",
+    "name": "MOULINS",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 46.706666666667,
+    "lon": 3.6316666666667
+  },
+  {
+    "ident": "MUT",
+    "name": "MURET LHERM",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.479722222222,
+    "lon": 1.1816666666667
+  },
+  {
+    "ident": "NE",
+    "name": "NANCY ESSEY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.574166666667,
+    "lon": 6.1344444444444
+  },
+  {
+    "ident": "NTS",
+    "name": "NANTES ATLANTIQUE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.160833333333,
+    "lon": -1.6127777777778
+  },
+  {
+    "ident": "NV",
+    "name": "NEVERS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.955555555556,
+    "lon": 3.19
+  },
+  {
+    "ident": "NEV",
+    "name": "NEVERS",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.153055555556,
+    "lon": 2.9294444444444
+  },
+  {
+    "ident": "AZR",
+    "name": "NICE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.659722222222,
+    "lon": 7.2244444444444
+  },
+  {
+    "ident": "MUS",
+    "name": "NICE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.384444444444,
+    "lon": 6.6063888888889
+  },
+  {
+    "ident": "NG",
+    "name": "NIMES",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.857222222222,
+    "lon": 4.4063888888889
+  },
+  {
+    "ident": "ORG",
+    "name": "ORANGE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 44.145833333333,
+    "lon": 4.8572222222222
+  },
+  {
+    "ident": "ORS",
+    "name": "ORLEANS SAINT DENIS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.9375,
+    "lon": 2.2425
+  },
+  {
+    "ident": "BCY",
+    "name": "ORLEANS-BRICY",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.985277777778,
+    "lon": 1.7555555555556
+  },
+  {
+    "ident": "OSA",
+    "name": "OUESSANT",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.465277777778,
+    "lon": -5.0636111111111
+  },
+  {
+    "ident": "PMR",
+    "name": "PAMIERS LES PUJOLS",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.092777777778,
+    "lon": 1.5961111111111
+  },
+  {
+    "ident": "BT",
+    "name": "PARIS LE BOURGET",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.974722222222,
+    "lon": 2.4552777777778
+  },
+  {
+    "ident": "PO",
+    "name": "PAU",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.314166666667,
+    "lon": -0.16611111111111
+  },
+  {
+    "ident": "PU",
+    "name": "PAU",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.320555555556,
+    "lon": -0.305
+  },
+  {
+    "ident": "PPG",
+    "name": "PERPIGNAN",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 42.750555555556,
+    "lon": 2.8672222222222
+  },
+  {
+    "ident": "PHG",
+    "name": "PHALSBOURG",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.767222222222,
+    "lon": 7.1994444444444
+  },
+  {
+    "ident": "POI",
+    "name": "POITIERS",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 46.581111111111,
+    "lon": 0.29805555555556
+  },
+  {
+    "ident": "PON",
+    "name": "PONTOISE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.096111111111,
+    "lon": 2.0358333333333
+  },
+  {
+    "ident": "QPR",
+    "name": "QUIMPER PLUGUFFAN",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.957222222222,
+    "lon": -4.1847222222222
+  },
+  {
+    "ident": "RBT",
+    "name": "RAMBOUILLET",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.653888888889,
+    "lon": 1.9941666666667
+  },
+  {
+    "ident": "REM",
+    "name": "REIMS",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.311666666667,
+    "lon": 4.0452777777778
+  },
+  {
+    "ident": "REN",
+    "name": "RENNES SAINT JACQUES",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.06914,
+    "lon": -1.74169
+  },
+  {
+    "ident": "ROA",
+    "name": "ROANNE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 46.059166666667,
+    "lon": 3.9991666666667
+  },
+  {
+    "ident": "RNN",
+    "name": "ROANNE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.112222222222,
+    "lon": 4.0372222222222
+  },
+  {
+    "ident": "ROC",
+    "name": "ROCHEFORT",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 45.888333333333,
+    "lon": -0.98611111111111
+  },
+  {
+    "ident": "RLP",
+    "name": "ROLAMPONT",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 47.906388888889,
+    "lon": 5.2491666666667
+  },
+  {
+    "ident": "ROU",
+    "name": "ROUEN VALLEE DE SEINE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 49.465555555556,
+    "lon": 1.2805555555556
+  },
+  {
+    "ident": "ING",
+    "name": "SAINT INGLEVERT",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 50.883055555556,
+    "lon": 1.7416666666667
+  },
+  {
+    "ident": "MT",
+    "name": "SAINT NAZAIRE MONTOIR",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 47.333611111111,
+    "lon": -2.0444444444444
+  },
+  {
+    "ident": "STP",
+    "name": "SAINT TROPEZ",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.219444444444,
+    "lon": 6.6016666666667
+  },
+  {
+    "ident": "SN",
+    "name": "SAINT YAN",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 46.294444444444,
+    "lon": 4.1213888888889
+  },
+  {
+    "ident": "SAL",
+    "name": "SAINTE LEOCADIE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 42.446666666667,
+    "lon": 2.0125
+  },
+  {
+    "ident": "SAV",
+    "name": "SAVERNE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.796111111111,
+    "lon": 7.4480555555556
+  },
+  {
+    "ident": "STR",
+    "name": "STRASBOURG",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.505277777778,
+    "lon": 7.5719444444444
+  },
+  {
+    "ident": "TBO",
+    "name": "TARBES",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.332222222222,
+    "lon": 0.14583333333333
+  },
+  {
+    "ident": "TL",
+    "name": "TARBES LOURDES",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.288333333333,
+    "lon": 0.049722222222222
+  },
+  {
+    "ident": "TW",
+    "name": "TOULOUSE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.530555555556,
+    "lon": 1.0252777777778
+  },
+  {
+    "ident": "TOU",
+    "name": "TOULOUSE",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 43.680833333333,
+    "lon": 1.3097222222222
+  },
+  {
+    "ident": "TOE",
+    "name": "TOULOUSE",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.481111111111,
+    "lon": 1.68
+  },
+  {
+    "ident": "TLF",
+    "name": "TOULOUSE FRANCAZAL",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 43.597222222222,
+    "lon": 1.2113888888889
+  },
+  {
+    "ident": "TSU",
+    "name": "TOUSSUS",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.753611111111,
+    "lon": 2.1022222222222
+  },
+  {
+    "ident": "TY",
+    "name": "TROYES",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.400277777778,
+    "lon": 4.0038888888889
+  },
+  {
+    "ident": "TRO",
+    "name": "TROYES",
+    "type": "VOR",
+    "country": "FR",
+    "lat": 48.251111111111,
+    "lon": 3.9630555555556
+  },
+  {
+    "ident": "TA",
+    "name": "VILLACOUBLAY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.771666666667,
+    "lon": 2.0975
+  },
+  {
+    "ident": "HOL",
+    "name": "VILLACOUBLAY",
+    "type": "NDB",
+    "country": "FR",
+    "lat": 48.730555555556,
+    "lon": 1.8205555555556
+  }
+]

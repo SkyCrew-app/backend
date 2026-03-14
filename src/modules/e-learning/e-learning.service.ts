@@ -2,6 +2,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -87,7 +88,7 @@ export class ELearningService {
       await this.courseRepository.save(course);
       return course;
     } catch (error) {
-      console.error('Database Error:', error);
+      new Logger(ELearningService.name).error('Database Error', error);
       throw new HttpException(
         {
           status: HttpStatus.BAD_REQUEST,
@@ -134,7 +135,7 @@ export class ELearningService {
         relations: ['course'],
       });
     } catch (error) {
-      console.error('Database Error:', error);
+      new Logger(ELearningService.name).error('Database Error', error);
       throw new HttpException(
         {
           status: HttpStatus.BAD_REQUEST,
@@ -163,7 +164,7 @@ export class ELearningService {
       Object.assign(module, updateModuleDto);
       return await this.moduleRepository.save(module);
     } catch (error) {
-      console.error('Database Error:', error);
+      new Logger(ELearningService.name).error('Database Error', error);
       throw new HttpException(
         {
           status: HttpStatus.BAD_REQUEST,

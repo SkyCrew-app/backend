@@ -3,7 +3,8 @@ import { AuthService } from './auth.service';
 import { LoginResponse } from './dto/login-response.dto';
 import { LoginInput } from './dto/login-input.dto';
 import { Response, Request } from 'express';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 
 @Resolver()
 export class AuthResolver {
@@ -52,6 +53,7 @@ export class AuthResolver {
   }
 
   @Mutation(() => String)
+  @UseGuards(JwtAuthGuard)
   async generate2FASecret(@Args('email') email: string) {
     const { qrCodeUrl } = await this.authService.generate2FASecret(email);
     return qrCodeUrl;

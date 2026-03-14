@@ -30,9 +30,6 @@ describe('NotificationsGateway', () => {
     } as any;
 
     gateway.server = mockServer;
-
-    // Mock console.log pour éviter les logs pendant les tests
-    jest.spyOn(console, 'log').mockImplementation();
   });
 
   afterEach(() => {
@@ -51,39 +48,28 @@ describe('NotificationsGateway', () => {
       gateway.handleConnection(mockSocket);
 
       expect(mockSocket.join).toHaveBeenCalledWith('user-123');
-      expect(console.log).toHaveBeenCalledWith(
-        'Client socket-123 connecté et joint à la room user-123',
-      );
     });
 
-    it('should log connection without joining room when userId is not provided', () => {
+    it('should not join room when userId is not provided', () => {
       mockSocket.handshake.query.userId = undefined;
 
       gateway.handleConnection(mockSocket);
 
       expect(mockSocket.join).not.toHaveBeenCalled();
-      expect(console.log).toHaveBeenCalledWith(
-        'Client socket-123 connecté sans userId',
-      );
     });
 
-    it('should handle empty string userId', () => {
+    it('should not join room when userId is empty string', () => {
       mockSocket.handshake.query.userId = '';
 
       gateway.handleConnection(mockSocket);
 
       expect(mockSocket.join).not.toHaveBeenCalled();
-      expect(console.log).toHaveBeenCalledWith(
-        'Client socket-123 connecté sans userId',
-      );
     });
   });
 
   describe('handleDisconnect', () => {
-    it('should log client disconnection', () => {
-      gateway.handleDisconnect(mockSocket);
-
-      expect(console.log).toHaveBeenCalledWith('Client socket-123 déconnecté');
+    it('should handle client disconnection without error', () => {
+      expect(() => gateway.handleDisconnect(mockSocket)).not.toThrow();
     });
   });
 

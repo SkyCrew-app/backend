@@ -1,39 +1,57 @@
-version: '3.8'
 services:
   app:
-    build: .
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
-      - ./.env:/app/.env
+    build:
+      context: .
+      target: production
     ports:
       - '3000:3000'
     depends_on:
-      - db
-      - redis
-      - mailhog
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    env_file:
+      - .env
     environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DB_USER=root
-      - DB_PASSWORD=password
-      - DB_NAME=mydb
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - MAIL_HOST=mailhog
-      - MAIL_PORT=1025
-      - MAIL_USER=null
-      - MAIL_PASSWORD=null
-      - MAIL_FROM=no-reply@example.com
-      - MAIL_SECURE=false
-      - JWT_SECRET=yourSecretKey
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health/live"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  app-dev:
+    build:
+      context: .
+      target: builder
+    command: npm run start:dev
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    env_file:
+      - .env
+    profiles:
+      - dev
 
   db:
     image: postgres:14
     environment:
-      POSTGRES_DB: mydb
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${DB_NAME:-mydb}
+      POSTGRES_USER: ${DB_USER:-root}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     ports:
       - '5432:5432'
     volumes:
@@ -41,6 +59,13 @@ services:
     networks:
       - default
       - shared-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-root} -d ${DB_NAME:-mydb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
   redis:
     image: redis:alpine
@@ -53,6 +78,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
 
   redisinsight:
     image: redis/redisinsight:latest
@@ -61,7 +87,11 @@ services:
     volumes:
       - redisinsight-data:/db
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    profiles:
+      - dev
+      - tools
 
   redis-commander:
     image: rediscommander/redis-commander:latest
@@ -70,7 +100,11 @@ services:
     environment:
       - REDIS_HOSTS=local:redis:6379
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    profiles:
+      - dev
+      - tools
 
   mailhog:
     image: mailhog/mailhog

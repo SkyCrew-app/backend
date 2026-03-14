@@ -11,8 +11,10 @@ import { CreateAnswerDTO } from './dto/create-answer.input';
 import { UpdateAnswerDTO } from './dto/update-answers.input';
 import { UserAnswerInput } from './dto/user-answer.input';
 import { ObjectType, Field } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { Logger, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ObjectType()
 class ValidationResult {
@@ -40,7 +42,8 @@ export class EvaluationResolver {
   }
 
   @Mutation(() => Evaluation, { name: 'createEvaluation' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createEvaluation(
     @Args('createEvaluationInput') createEvaluationInput: CreateEvaluationDTO,
   ): Promise<Evaluation> {
@@ -48,7 +51,8 @@ export class EvaluationResolver {
   }
 
   @Mutation(() => Evaluation, { name: 'updateEvaluation' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateEvaluation(
     @Args('id') id: number,
     @Args('updateEvaluationInput') updateEvaluationInput: UpdateEvaluationDTO,
@@ -57,13 +61,14 @@ export class EvaluationResolver {
   }
 
   @Mutation(() => Boolean, { name: 'deleteEvaluation' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteEvaluation(@Args('id') id: number): Promise<boolean> {
     try {
       await this.evalService.deleteEvaluation(id);
       return true;
     } catch (error) {
-      console.error(error);
+      new Logger(EvaluationResolver.name).error('Error deleting evaluation', error);
       throw new Error('An error occurred while deleting the evaluation');
     }
   }
@@ -90,7 +95,8 @@ export class QuestionResolver {
   }
 
   @Mutation(() => Question)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createQuestion(
     @Args('evaluationId') evaluationId: number,
     @Args('createQuestionInput') createQuestionInput: CreateQuestionDTO,
@@ -103,7 +109,8 @@ export class QuestionResolver {
   }
 
   @Mutation(() => Question, { name: 'updateQuestion' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateQuestion(
     @Args('id') id: number,
     @Args('updateQuestionInput') updateQuestionInput: UpdateQuestionDTO,
@@ -117,7 +124,8 @@ export class QuestionResolver {
   }
 
   @Mutation(() => Boolean, { name: 'deleteQuestion' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteQuestion(@Args('id') id: number): Promise<boolean> {
     await this.evalService.deleteQuestion(id);
     return true;

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { FinancialReport } from './entity/financial-report.entity';
@@ -299,7 +299,7 @@ export class FinancialService {
       logoImage = await pdfDoc.embedPng(logoBytes);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
-      console.warn('Logo non trouvé, il sera ignoré.');
+      new Logger(FinancialService.name).warn('Logo non trouvé, il sera ignoré.');
     }
     if (logoImage) {
       const logoDims = logoImage.scale(0.5);

@@ -51,6 +51,22 @@ export class Aircraft {
   @Column({ nullable: true })
   consumption: number;
 
+  @Field(() => Float, { nullable: true })
+  @Column('float', { nullable: true })
+  fuel_capacity: number;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  fuel_type: string;
+
+  @Field(() => Float, { nullable: true })
+  @Column('float', { nullable: true })
+  empty_weight: number;
+
+  @Field(() => Float, { nullable: true })
+  @Column('float', { nullable: true })
+  max_takeoff_weight: number;
+
   @Field({ nullable: true })
   @Column({ nullable: true })
   image_url: string;

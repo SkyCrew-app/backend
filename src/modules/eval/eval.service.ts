@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Evaluation } from './entity/evaluation.entity';
@@ -145,7 +145,7 @@ export class EvalService {
 
       return this.questionRepository.save(question);
     } catch (error) {
-      console.error('Database Error:', error);
+      new Logger(EvalService.name).error('Database Error', error);
       throw new Error('Failed to create question');
     }
   }

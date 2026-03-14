@@ -68,9 +68,33 @@ export class Flight {
   @Column('float', { nullable: true })
   estimated_flight_time: number;
 
+  @Field(() => Date, { nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
+  departure_time?: Date;
+
+  @Field(() => Date, { nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
+  arrival_time?: Date;
+
   @Field(() => String, { nullable: true })
   @Column('jsonb', { nullable: true })
   waypoints: string;
+
+  @Field(() => String, { nullable: true })
+  @Column('jsonb', { nullable: true })
+  fuel_policy?: string;
+
+  @Field(() => String, { nullable: true })
+  @Column('jsonb', { nullable: true })
+  wind_summary?: string;
+
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  performance_profile?: string;
+
+  @Field(() => Float, { nullable: true })
+  @Column('float', { nullable: true })
+  estimated_fuel_liters?: number;
 
   @Field(() => String, { nullable: true })
   departure_airport_info?: string;
