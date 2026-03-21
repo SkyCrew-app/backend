@@ -15,6 +15,7 @@ import { Flight } from '../../flights/entity/flights.entity';
 import { Payment } from '../../payments/entity/payments.entity';
 import { Answer } from '../../eval/entity/answer.entity';
 import { UserProgress } from './user-progress.entity';
+import { DashboardWidgetConfig } from '../dto/dashboard-widget-config.type';
 
 @ObjectType()
 @Entity('users')
@@ -146,4 +147,8 @@ export class User {
   @OneToMany(() => UserProgress, (progress) => progress.user)
   @Field(() => [UserProgress])
   userProgresses: UserProgress[];
+
+  @Field(() => [DashboardWidgetConfig], { nullable: true })
+  @Column('jsonb', { nullable: true, default: null })
+  dashboard_widgets: DashboardWidgetConfig[] | null;
 }

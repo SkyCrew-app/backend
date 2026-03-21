@@ -15,6 +15,7 @@ import {
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
 import { Flight } from '../../flights/entity/flights.entity';
+// ChecklistSubmission imported via string-based relation to avoid circular dependency
 
 export enum ReservationStatus {
   PENDING = 'pending',
@@ -111,4 +112,8 @@ export class Reservation {
   @Field({ nullable: true })
   @Column({ nullable: true })
   number_of_passengers: number;
+
+  // Use string-based relation to avoid circular import with ChecklistSubmission
+  @OneToMany('ChecklistSubmission', 'reservation', { nullable: true })
+  checklistSubmissions: any[];
 }

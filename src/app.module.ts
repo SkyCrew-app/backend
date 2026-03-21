@@ -41,6 +41,7 @@ import { GraphQLMetricsPlugin } from './modules/metrics/plugins/metrics.plugin';
 import { DatabaseMetricsInterceptor } from './common/interceptors/database.interceptor';
 import { FinancialModule } from './modules/financial/financial.module';
 import { HealthModule } from './modules/health/health.module';
+import { ChecklistsModule } from './modules/checklists/checklists.module';
 
 @Module({
   imports: [
@@ -160,6 +161,8 @@ import { HealthModule } from './modules/health/health.module';
     FinancialModule,
 
     HealthModule,
+
+    ChecklistsModule,
 
     AuditModule,
 

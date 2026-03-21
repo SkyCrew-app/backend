@@ -96,6 +96,10 @@ export class Flight {
   @Column('float', { nullable: true })
   estimated_fuel_liters?: number;
 
+  @Field({ nullable: true })
+  @Column({ nullable: true })
+  remarks?: string;
+
   @Field(() => String, { nullable: true })
   departure_airport_info?: string;
 

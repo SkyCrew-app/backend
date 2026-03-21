@@ -321,4 +321,11 @@ export class UsersService {
 
     return progress?.completed;
   }
+
+  async updateDashboardWidgets(userId: number, widgets: any[]): Promise<User> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+    user.dashboard_widgets = widgets;
+    return this.usersRepository.save(user);
+  }
 }

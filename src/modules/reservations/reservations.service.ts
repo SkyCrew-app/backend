@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, MoreThan, Between } from 'typeorm';
-import { Reservation, ReservationStatus } from './entity/reservations.entity';
+import { Reservation, ReservationStatus, FlightCategory } from './entity/reservations.entity';
+import { ReservationTemplate } from './entity/reservation-template.entity';
 import { CreateReservationInput } from './dto/create-reservation.input';
 import { UpdateReservationInput } from './dto/update-reservation.input';
+import { CreateReservationTemplateInput } from './dto/create-reservation-template.input';
+import { UpdateReservationTemplateInput } from './dto/update-reservation-template.input';
 import { MailerService } from '../mail/mailer.service';
 import { User } from '../users/entity/users.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
@@ -23,6 +26,8 @@ export class ReservationsService {
   constructor(
     @InjectRepository(Reservation)
     private reservationRepository: Repository<Reservation>,
+    @InjectRepository(ReservationTemplate)
+    private templateRepository: Repository<ReservationTemplate>,
     private readonly mailerService: MailerService,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -332,5 +337,81 @@ export class ReservationsService {
       take: limit,
       relations: ['user', 'aircraft'],
     });
+  }
+
+  // === Reservation Templates ===
+
+  async getUserTemplates(userId: number): Promise<ReservationTemplate[]> {
+    return this.templateRepository.find({
+      where: { user: { id: userId } },
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  async findOneTemplate(id: number): Promise<ReservationTemplate> {
+    const template = await this.templateRepository.findOne({ where: { id } });
+    if (!template) {
+      throw new NotFoundException(`Template avec l'ID ${id} introuvable`);
+    }
+    return template;
+  }
+
+  async createTemplate(
+    userId: number,
+    input: CreateReservationTemplateInput,
+  ): Promise<ReservationTemplate> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`Utilisateur introuvable`);
+    }
+
+    let aircraft: Aircraft | null = null;
+    if (input.aircraft_id) {
+      aircraft = await this.aircraftRepository.findOne({
+        where: { id: input.aircraft_id },
+      });
+    }
+
+    const template = this.templateRepository.create({
+      ...input,
+      user,
+      aircraft,
+    });
+
+    return this.templateRepository.save(template);
+  }
+
+  async updateTemplate(
+    userId: number,
+    input: UpdateReservationTemplateInput,
+  ): Promise<ReservationTemplate> {
+    const template = await this.templateRepository.findOne({
+      where: { id: input.id, user: { id: userId } },
+    });
+    if (!template) {
+      throw new NotFoundException(`Template introuvable ou non autorisé`);
+    }
+
+    if (input.aircraft_id !== undefined) {
+      template.aircraft = input.aircraft_id
+        ? await this.aircraftRepository.findOne({ where: { id: input.aircraft_id } })
+        : null;
+    }
+
+    const { id, aircraft_id, ...rest } = input;
+    Object.assign(template, rest);
+
+    return this.templateRepository.save(template);
+  }
+
+  async deleteTemplate(userId: number, id: number): Promise<boolean> {
+    const template = await this.templateRepository.findOne({
+      where: { id, user: { id: userId } },
+    });
+    if (!template) {
+      throw new NotFoundException(`Template introuvable ou non autorisé`);
+    }
+    await this.templateRepository.remove(template);
+    return true;
   }
 }
