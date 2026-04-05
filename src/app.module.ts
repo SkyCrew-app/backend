@@ -42,6 +42,8 @@ import { DatabaseMetricsInterceptor } from './common/interceptors/database.inter
 import { FinancialModule } from './modules/financial/financial.module';
 import { HealthModule } from './modules/health/health.module';
 import { ChecklistsModule } from './modules/checklists/checklists.module';
+import { APP_GUARD } from '@nestjs/core';
+import { DemoModeGuard } from './common/guards/demo-mode.guard';
 
 @Module({
   imports: [
@@ -186,6 +188,10 @@ import { ChecklistsModule } from './modules/checklists/checklists.module';
     },
     CronService,
     GraphQLMetricsPlugin,
+    {
+      provide: APP_GUARD,
+      useClass: DemoModeGuard,
+    },
   ],
 })
 export class AppModule implements NestModule {
