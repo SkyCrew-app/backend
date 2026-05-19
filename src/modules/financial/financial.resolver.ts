@@ -8,6 +8,10 @@ import { UpdateExpenseInput } from './dto/update-expense.dto';
 import { FinancialService } from './financial.service';
 import { ObjectType } from '@nestjs/graphql';
 import { Field, Float } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @ObjectType()
 export class BudgetForecast {
@@ -26,11 +30,15 @@ export class FinancialResolver {
   constructor(private readonly financialService: FinancialService) {}
 
   @Query(() => [FinancialReport], { name: 'financialReports' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getFinancialReports(): Promise<FinancialReport[]> {
     return this.financialService.findAllFinancialReports();
   }
 
   @Query(() => FinancialReport, { name: 'financialReport' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getFinancialReport(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<FinancialReport> {
@@ -38,6 +46,8 @@ export class FinancialResolver {
   }
 
   @Mutation(() => FinancialReport, { name: 'createFinancialReport' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createFinancialReport(
     @Args('createFinancialReportInput')
     createFinancialReportInput: CreateFinancialReportInput,
@@ -48,6 +58,8 @@ export class FinancialResolver {
   }
 
   @Mutation(() => FinancialReport, { name: 'updateFinancialReport' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateFinancialReport(
     @Args('updateFinancialReportInput')
     updateFinancialReportInput: UpdateFinancialReportInput,
@@ -58,6 +70,8 @@ export class FinancialResolver {
   }
 
   @Mutation(() => Boolean, { name: 'removeFinancialReport' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async removeFinancialReport(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<boolean> {
@@ -65,11 +79,15 @@ export class FinancialResolver {
   }
 
   @Query(() => [Expense], { name: 'expenses' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getExpenses(): Promise<Expense[]> {
     return this.financialService.findAllExpenses();
   }
 
   @Query(() => Expense, { name: 'expense' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getExpense(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<Expense> {
@@ -77,6 +95,8 @@ export class FinancialResolver {
   }
 
   @Query(() => [Expense], { name: 'expenseByPeriod' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getExpenseByPeriod(
     @Args('startDate', { type: () => Date }) startDate: Date,
     @Args('endDate', { type: () => Date }) endDate: Date,
@@ -85,6 +105,8 @@ export class FinancialResolver {
   }
 
   @Mutation(() => Expense, { name: 'createExpense' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createExpense(
     @Args('createExpenseInput')
     createExpenseInput: CreateExpenseInput,
@@ -93,6 +115,8 @@ export class FinancialResolver {
   }
 
   @Mutation(() => Expense, { name: 'updateExpense' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateExpense(
     @Args('updateExpenseInput')
     updateExpenseInput: UpdateExpenseInput,
@@ -101,6 +125,8 @@ export class FinancialResolver {
   }
 
   @Mutation(() => Boolean, { name: 'removeExpense' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async removeExpense(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<boolean> {
@@ -108,6 +134,8 @@ export class FinancialResolver {
   }
 
   @Query(() => BudgetForecast, { name: 'generateBudgetForecast' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async generateBudgetForecast(
     @Args('startDate', { type: () => Date }) startDate: Date,
     @Args('endDate', { type: () => Date }) endDate: Date,
@@ -120,6 +148,8 @@ export class FinancialResolver {
   }
 
   @Mutation(() => String, { name: 'generatePdfFinancialReport' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async generateFinancialReportPDFByPeriod(
     @Args('startDate', { type: () => Date }) startDate: Date,
     @Args('endDate', { type: () => Date }) endDate: Date,

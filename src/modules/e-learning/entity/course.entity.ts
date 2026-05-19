@@ -1,7 +1,7 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
 import { Entity, Column, PrimaryGeneratedColumn, OneToMany } from 'typeorm';
 import { Module } from './module.entity';
-import { LicenseType } from 'src/shared/enums/licence-type.enum';
+import { LicenseType } from '../../../shared/enums/licence-type.enum';
 
 @ObjectType()
 @Entity('courses')

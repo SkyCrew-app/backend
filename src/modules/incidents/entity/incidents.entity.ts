@@ -2,7 +2,7 @@ import { ObjectType, Field, Int } from '@nestjs/graphql';
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
-import { Flight } from 'src/modules/flights/entity/flights.entity';
+import { Flight } from '../../flights/entity/flights.entity';
 
 @ObjectType()
 @Entity('incidents')

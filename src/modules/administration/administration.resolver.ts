@@ -5,17 +5,25 @@ import { CreateAdministrationInput } from './dto/create-admin.input';
 import { UpdateAdministrationInput } from './dto/update-admin.input';
 import { AdminDashboardStats } from 'src/types/administration.types';
 import { adminStatus } from './dto/adminStatus.input';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Resolver(() => Administration)
 export class AdministrationResolver {
   constructor(private readonly administrationService: AdministrationService) {}
 
   @Query(() => [Administration], { name: 'getAllAdministrations' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   findAll() {
     return this.administrationService.findAll();
   }
 
   @Mutation(() => Administration, { name: 'createAdministration' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   create(
     @Args('createAdministrationInput')
     createAdministrationInput: CreateAdministrationInput,
@@ -24,6 +32,8 @@ export class AdministrationResolver {
   }
 
   @Mutation(() => Administration, { name: 'updateAdministration' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   update(
     @Args('updateAdministrationInput')
     updateAdministrationInput: UpdateAdministrationInput,
@@ -35,6 +45,8 @@ export class AdministrationResolver {
   }
 
   @Mutation(() => Boolean, { name: 'deleteAdministration' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   delete(@Args('id', { type: () => Int }) id: number) {
     return this.administrationService.remove(id);
   }
@@ -56,6 +68,8 @@ export class AdministrationResolver {
   }
 
   @Query(() => adminStatus, { name: 'adminDashboardStats' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async adminDashboardStats(): Promise<AdminDashboardStats> {
     return this.administrationService.getAdminDashboardStats();
   }

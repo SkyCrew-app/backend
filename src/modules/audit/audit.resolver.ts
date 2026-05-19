@@ -15,6 +15,10 @@ import { AuditResultType } from './enums/audit-result.enum';
 import { AuditFrequencyType } from './enums/audit-frequency.enum';
 import { AuditCategoryType } from './enums/audit-category.enum';
 import { CriticalityLevel } from './enums/criticality-level.enum';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
 
 @Resolver(() => Audit)
 export class AuditResolver {
@@ -23,6 +27,8 @@ export class AuditResolver {
   // ==================== AUDIT QUERIES ====================
 
   @Query(() => [Audit], { name: 'audits' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async findAllAudits(
     @Args('filter', { nullable: true }) filter?: AuditFilterInput,
   ): Promise<Audit[]> {
@@ -30,6 +36,7 @@ export class AuditResolver {
   }
 
   @Query(() => Audit, { name: 'audit' })
+  @UseGuards(JwtAuthGuard)
   async findAuditById(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<Audit> {
@@ -37,6 +44,7 @@ export class AuditResolver {
   }
 
   @Query(() => [Audit], { name: 'upcomingAudits' })
+  @UseGuards(JwtAuthGuard)
   async getUpcomingAudits(
     @Args('daysAhead', { type: () => Int, defaultValue: 30 }) daysAhead: number,
   ): Promise<Audit[]> {
@@ -44,6 +52,7 @@ export class AuditResolver {
   }
 
   @Query(() => [Audit], { name: 'overdueAudits' })
+  @UseGuards(JwtAuthGuard)
   async getOverdueAudits(): Promise<Audit[]> {
     return this.auditService.getOverdueAudits();
   }
@@ -51,6 +60,8 @@ export class AuditResolver {
   // ==================== AUDIT MUTATIONS ====================
 
   @Mutation(() => Audit)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createAudit(
     @Args('createAuditInput') createAuditInput: CreateAuditInput,
   ): Promise<Audit> {
@@ -58,6 +69,8 @@ export class AuditResolver {
   }
 
   @Mutation(() => Audit)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateAudit(
     @Args('id', { type: () => Int }) id: number,
     @Args('updateAuditInput') updateAuditInput: UpdateAuditInput,
@@ -66,6 +79,8 @@ export class AuditResolver {
   }
 
   @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteAudit(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<boolean> {
@@ -73,6 +88,8 @@ export class AuditResolver {
   }
 
   @Mutation(() => AuditItem)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createAuditItem(
     @Args('auditId', { type: () => Int }) auditId: number,
     @Args('createItemInput') createItemInput: CreateAuditItemInput,
@@ -81,6 +98,8 @@ export class AuditResolver {
   }
 
   @Mutation(() => AuditItem)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateAuditItem(
     @Args('id', { type: () => Int }) id: number,
     @Args('updateItemInput') updateItemInput: UpdateAuditItemInput,
@@ -89,6 +108,8 @@ export class AuditResolver {
   }
 
   @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteAuditItem(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<boolean> {
@@ -98,11 +119,15 @@ export class AuditResolver {
   // ==================== TEMPLATE QUERIES ====================
 
   @Query(() => [AuditTemplate], { name: 'auditTemplates' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async findAllTemplates(): Promise<AuditTemplate[]> {
     return this.auditService.findAllTemplates();
   }
 
   @Query(() => AuditTemplate, { name: 'auditTemplate' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async findTemplateById(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<AuditTemplate> {
@@ -110,6 +135,8 @@ export class AuditResolver {
   }
 
   @Query(() => [AuditTemplate], { name: 'auditTemplatesForAircraftType' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getTemplatesForAircraftType(
     @Args('aircraftType') aircraftType: string,
   ): Promise<AuditTemplate[]> {
@@ -119,6 +146,8 @@ export class AuditResolver {
   // ==================== TEMPLATE MUTATIONS ====================
 
   @Mutation(() => AuditTemplate)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async createAuditTemplate(
     @Args('createTemplateInput') createTemplateInput: CreateAuditTemplateInput,
   ): Promise<AuditTemplate> {
@@ -126,6 +155,8 @@ export class AuditResolver {
   }
 
   @Mutation(() => AuditTemplate)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updateAuditTemplate(
     @Args('id', { type: () => Int }) id: number,
     @Args('updateTemplateInput') updateTemplateInput: UpdateAuditTemplateInput,
@@ -134,6 +165,8 @@ export class AuditResolver {
   }
 
   @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async deleteAuditTemplate(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<boolean> {
@@ -141,6 +174,8 @@ export class AuditResolver {
   }
 
   @Query(() => AuditStatistics, { name: 'auditStatistics' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getAuditStatistics(
     @Args('startDate', { nullable: true }) startDate?: Date,
     @Args('endDate', { nullable: true }) endDate?: Date,
@@ -149,21 +184,29 @@ export class AuditResolver {
   }
 
   @Query(() => [String], { name: 'auditResultTypes' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   getAuditResultTypes() {
     return Object.values(AuditResultType);
   }
 
   @Query(() => [String], { name: 'auditFrequencyTypes' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   getAuditFrequencyTypes() {
     return Object.values(AuditFrequencyType);
   }
 
   @Query(() => [String], { name: 'auditCategoryTypes' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   getAuditCategoryTypes() {
     return Object.values(AuditCategoryType);
   }
 
   @Query(() => [String], { name: 'criticalityLevels' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   getCriticalityLevels() {
     return Object.values(CriticalityLevel);
   }

@@ -2,7 +2,7 @@ import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
 import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
-import { Incident } from 'src/modules/incidents/entity/incidents.entity';
+import { Incident } from '../../incidents/entity/incidents.entity';
 
 @ObjectType()
 @Entity('flights')
