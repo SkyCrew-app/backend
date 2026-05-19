@@ -20,6 +20,7 @@ export class AuthResolver {
     );
 
     if (!user) {
+      // Utilisez une exception NestJS plutôt qu’une Error brute
       throw new UnauthorizedException('Invalid credentials');
     }
 

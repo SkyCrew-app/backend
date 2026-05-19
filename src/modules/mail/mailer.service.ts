@@ -22,7 +22,7 @@ export class MailerService {
       process.cwd(),
       process.env.NODE_ENV === 'production' ? 'dist' : 'src',
       'modules',
-      'templates',
+      'template',
       `${templateName}.hbs`,
     );
     const html = this.loadTemplate(templatePath, variables);

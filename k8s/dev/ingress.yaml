@@ -1,0 +1,77 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: skycrew-ingress
+  namespace: dev
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    # ---------------------------------------------------
+    # 1) HOST pour l’API : api.skycrew.local
+    #    On achemine toutes les requêtes vers /graphql (ou /) vers backend:3000
+    # ---------------------------------------------------
+    - host: api.skycrew.local
+      http:
+        paths:
+          # Si vous voulez que l'API soit accessible uniquement sous /graphql,
+          # décommentez cette ligne et commentez la seconde.
+          #- path: /graphql
+          #  pathType: Prefix
+          #  backend:
+          #    service:
+          #      name: backend
+          #      port:
+          #        number: 3000
+
+          # Pour exposer directement toute la racine vers GraphQL (et laisser NestJS gérer
+          # le préfixe si vous avez défini un prefixed-module), vous pouvez utiliser :
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 3000
+
+    # ---------------------------------------------------
+    # 2) HOST pour le frontend Club 1 : club1.skycrew.local
+    #    On achemine uniquement "/" vers frontend:5173
+    # ---------------------------------------------------
+    - host: club1.skycrew.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 5173
+
+    # ---------------------------------------------------
+    # 3) HOST pour le frontend Club 2 : club2.skycrew.local
+    #    Même structure que pour club1
+    # ---------------------------------------------------
+    - host: club2.skycrew.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 5173
+
+    - host: pgadmin.skycrew.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pgadmin
+                port:
+                  number: 80
+

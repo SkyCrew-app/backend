@@ -15,11 +15,14 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  const originRegex = /^https?:\/\/[a-z0-9-]+\.skycrew\.local(?::\d+)?$/i;
+
   app.enableCors({
     origin: [
       'https://staging.skycrew.fr',
       'http://localhost:5173',
       'https://*.vercel.app',
+      originRegex,
     ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,

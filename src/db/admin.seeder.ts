@@ -31,7 +31,7 @@ export const seedAdministration = async (
     flightHourRate: 180.0,
     clubRules:
       'All pilots must adhere to club safety protocols. Reservations must be made at least 24 hours in advance.',
-    allowGuestPilots: true,
+    allowGuestPilots: false,
     guestPilotFee: 50.0,
     fuelManagement: 'self-service',
     isMaintenanceActive: false,

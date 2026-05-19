@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Annulation de réservation</title>
+    <title>Confirmation de réservation</title>
     <style>
       body {
         background-color: #f4f4f7;
@@ -41,12 +41,13 @@
 
       .email-body {
         padding: 20px;
-        text-align: center;
+        text-align: left;
       }
 
       .email-body p {
         font-size: 16px;
         color: #666666;
+        margin-bottom: 10px;
       }
 
       .email-footer {
@@ -76,19 +77,23 @@
     <div class="email-wrapper">
       <div class="email-content">
         <div class="email-header">
-          <h1>Votre réservation a été annulée</h1>
+          <h1>Confirmation de votre réservation</h1>
         </div>
+
         <div class="email-body">
           <p>Bonjour {{name}},</p>
           <p>
-            Votre réservation pour l'avion immatriculé {{aircraft_registration}} a été annulée. Voici les détails de la réservation annulée :
+            Votre réservation pour l'avion immatriculé <strong>{{aircraft_registration}}</strong> a été confirmée. Voici les détails de votre réservation :
           </p>
           <ul>
-            <li>Date de début : {{start_time}}</li>
-            <li>Date de fin : {{end_time}}</li>
+            <li><strong>Date de début :</strong> {{start_time}}</li>
+            <li><strong>Date de fin :</strong> {{end_time}}</li>
           </ul>
         </div>
+
         <div class="email-footer">
+          <p>Si vous n'avez pas créé de compte, vous pouvez ignorer cet e-mail.</p>
+          <p>Merci d'utiliser notre plateforme !</p>
           <p>&copy; 2024 - 2025 SkyCrew. Tous droits réservés.</p>
         </div>
       </div>

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: myapp-backend:latest       # Image Docker du backend NestJS (doit être construite préalablement)
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: POSTGRES_HOST
+          value: "postgres-postgresql"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: "app"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: REDIS_HOST
+          value: "redis-master"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: NODE_ENV
+          value: "production"
+        ports:
+        - containerPort: 3000   # Port interne où tourne le NestJS (GraphQL API)
