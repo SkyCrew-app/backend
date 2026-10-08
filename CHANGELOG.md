@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/SkyCrew-app/backend/compare/2.3.0...2.3.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **deps:** :arrow_up: align the NestJS packages on version 11 ([#62](https://github.com/SkyCrew-app/backend/issues/62)) ([5041e9e](https://github.com/SkyCrew-app/backend/commit/5041e9edb29cedec67ca0e17c38b78accccc8f00))
+
 ## [2.3.0](https://github.com/SkyCrew-app/backend/compare/2.2.0...2.3.0) (2026-10-08)
 
 
