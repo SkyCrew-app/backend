@@ -122,11 +122,34 @@ describe('FinancialResolver', () => {
   it('generate PDF and CSV URLs', async () => {
     const start = new Date(0),
       end = new Date(1000);
-    service.generateFinancialReportByPeriodPDF.mockResolvedValue('path.pdf');
-    service.generateFinancialReportByPeriodCSV.mockResolvedValue('path.csv');
-    const pdf = await resolver.generateFinancialReportPDFByPeriod(start, end);
-    const csv = await resolver.generateFinancialReportCSVByPeriod(start, end);
-    expect(pdf).toContain('financial-report-0-1000.pdf');
-    expect(csv).toContain('financial-report-0-1000.csv');
+    const context: any = {
+      req: {
+        protocol: 'https',
+        headers: {},
+        get: jest.fn().mockReturnValue('api.skycrew.test'),
+      },
+    };
+    service.generateFinancialReportByPeriodPDF.mockResolvedValue(
+      '/uploads/exports/financial-report-0-1000.pdf',
+    );
+    service.generateFinancialReportByPeriodCSV.mockResolvedValue(
+      '/uploads/exports/financial-report-0-1000.csv',
+    );
+    const pdf = await resolver.generateFinancialReportPDFByPeriod(
+      start,
+      end,
+      context,
+    );
+    const csv = await resolver.generateFinancialReportCSVByPeriod(
+      start,
+      end,
+      context,
+    );
+    expect(pdf).toBe(
+      'https://api.skycrew.test/uploads/exports/financial-report-0-1000.pdf',
+    );
+    expect(csv).toBe(
+      'https://api.skycrew.test/uploads/exports/financial-report-0-1000.csv',
+    );
   });
 });

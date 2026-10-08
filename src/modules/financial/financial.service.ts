@@ -16,10 +16,12 @@ import { Administration } from '../administration/entity/admin.entity';
 import { join } from 'path';
 import { Parser } from 'json2csv';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { readFileSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 
 @Injectable()
 export class FinancialService {
+  private readonly exportsDir = join(__dirname, '../../uploads', 'exports');
+
   constructor(
     @InjectRepository(FinancialReport)
     private readonly financialReportRepository: Repository<FinancialReport>,
@@ -271,6 +273,8 @@ export class FinancialService {
     startDate: Date,
     endDate: Date,
   ): Promise<string> {
+    mkdirSync(this.exportsDir, { recursive: true });
+
     const forecast = await this.generateBudgetForecast(startDate, endDate);
     const reservations = await this.reservationRepository.find({
       where: {
@@ -410,15 +414,17 @@ export class FinancialService {
 
     const pdfBytes = await pdfDoc.save();
     const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.pdf`;
-    const filePath = join(process.cwd(), fileName);
+    const filePath = join(this.exportsDir, fileName);
     writeFileSync(filePath, pdfBytes);
-    return filePath;
+    return `/uploads/exports/${fileName}`;
   }
 
   async generateFinancialReportByPeriodCSV(
     startDate: Date,
     endDate: Date,
   ): Promise<string> {
+    mkdirSync(this.exportsDir, { recursive: true });
+
     const forecast = await this.generateBudgetForecast(startDate, endDate);
 
     // Créer l'objet JSON pour le rapport
@@ -443,8 +449,8 @@ export class FinancialService {
     const csv = parser.parse(data);
 
     const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.csv`;
-    const filePath = join(process.cwd(), fileName);
+    const filePath = join(this.exportsDir, fileName);
     writeFileSync(filePath, csv);
-    return filePath;
+    return `/uploads/exports/${fileName}`;
   }
 }
