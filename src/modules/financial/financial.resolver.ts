@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Int, Context } from '@nestjs/graphql';
 import { FinancialReport } from './entity/financial-report.entity';
 import { Expense } from './entity/expense.entity';
 import { CreateFinancialReportInput } from './dto/create-financial-report.dto';
@@ -12,6 +12,7 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import type { Request } from 'express';
 
 @ObjectType()
 export class BudgetForecast {
@@ -28,6 +29,36 @@ export class BudgetForecast {
 @Resolver()
 export class FinancialResolver {
   constructor(private readonly financialService: FinancialService) {}
+
+  private buildDownloadUrl(
+    req: Request | undefined,
+    publicPath: string,
+  ): string {
+    if (/^https?:\/\//i.test(publicPath)) {
+      return publicPath;
+    }
+
+    const envBaseUrl = process.env.BASE_URL;
+    const parsedBaseUrl = envBaseUrl ? new URL(envBaseUrl) : undefined;
+    const forwardedProto = req?.headers['x-forwarded-proto'];
+    const forwardedHost = req?.headers['x-forwarded-host'];
+    const protocol =
+      (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto)
+        ?.split(',')[0]
+        ?.trim() ||
+      req?.protocol ||
+      parsedBaseUrl?.protocol.replace(':', '') ||
+      'http';
+    const host =
+      (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost)
+        ?.split(',')[0]
+        ?.trim() ||
+      req?.get?.('host') ||
+      parsedBaseUrl?.host ||
+      'localhost:3000';
+
+    return new URL(publicPath, `${protocol}://${host}`).toString();
+  }
 
   @Query(() => [FinancialReport], { name: 'financialReports' })
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -153,31 +184,29 @@ export class FinancialResolver {
   async generateFinancialReportPDFByPeriod(
     @Args('startDate', { type: () => Date }) startDate: Date,
     @Args('endDate', { type: () => Date }) endDate: Date,
+    @Context() context?: { req?: Request },
   ): Promise<string> {
-    await this.financialService.generateFinancialReportByPeriodPDF(
+    const publicPath = await this.financialService.generateFinancialReportByPeriodPDF(
       startDate,
       endDate,
     );
 
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.pdf`;
-    const downloadUrl = `${baseUrl}/${fileName}`;
-    return downloadUrl;
+    return this.buildDownloadUrl(context?.req, publicPath);
   }
 
   @Mutation(() => String, { name: 'generateCsvFinancialReport' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async generateFinancialReportCSVByPeriod(
     @Args('startDate', { type: () => Date }) startDate: Date,
     @Args('endDate', { type: () => Date }) endDate: Date,
+    @Context() context?: { req?: Request },
   ): Promise<string> {
-    await this.financialService.generateFinancialReportByPeriodCSV(
+    const publicPath = await this.financialService.generateFinancialReportByPeriodCSV(
       startDate,
       endDate,
     );
 
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.csv`;
-    const downloadUrl = `${baseUrl}/${fileName}`;
-    return downloadUrl;
+    return this.buildDownloadUrl(context?.req, publicPath);
   }
 }
