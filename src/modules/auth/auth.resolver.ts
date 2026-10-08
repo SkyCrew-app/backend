@@ -10,6 +10,16 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 export class AuthResolver {
   constructor(private authService: AuthService) {}
 
+  private getCookieOptions() {
+    return {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict' as const,
+      maxAge: 7200000,
+      path: '/',
+    };
+  }
+
   @Mutation(() => LoginResponse)
   async login(
     @Args('loginInput') loginInput: LoginInput,
@@ -24,22 +34,25 @@ export class AuthResolver {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const token = await this.authService.login(user);
-
-    const cookieOptions = {
-      httpOnly: true,
-      secure: false,
-      sameSite: 'lax' as const,
-      maxAge: 7200000,
-      path: '/',
-    };
+    const cookieOptions = this.getCookieOptions();
+    const is2FAEnabled = !!user.twoFactorAuthSecret;
 
     res.cookie('email', user.email, cookieOptions);
+
+    if (is2FAEnabled) {
+      res.clearCookie('token', cookieOptions);
+      return {
+        access_token: '',
+        is2FAEnabled: true,
+      };
+    }
+
+    const token = await this.authService.login(user);
     res.cookie('token', token, cookieOptions);
 
     return {
       access_token: token,
-      is2FAEnabled: !!user.twoFactorAuthSecret,
+      is2FAEnabled: false,
     };
   }
 
@@ -59,9 +72,26 @@ export class AuthResolver {
     return qrCodeUrl;
   }
 
-  @Mutation(() => Boolean)
-  async verify2FA(@Args('email') email: string, @Args('token') token: string) {
-    return this.authService.verify2FACode(email, token);
+  @Mutation(() => LoginResponse)
+  async verify2FA(
+    @Args('email') email: string,
+    @Args('token') token: string,
+    @Context('res') res: Response,
+  ) {
+    const jwt = await this.authService.verify2FAAndLogin(email, token);
+
+    if (!jwt) {
+      throw new UnauthorizedException('Invalid 2FA code');
+    }
+
+    const cookieOptions = this.getCookieOptions();
+    res.cookie('email', email, cookieOptions);
+    res.cookie('token', jwt, cookieOptions);
+
+    return {
+      access_token: jwt,
+      is2FAEnabled: true,
+    };
   }
 
   @Mutation(() => Boolean)
