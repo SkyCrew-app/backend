@@ -34,10 +34,22 @@ export class MaintenanceService {
       throw new NotFoundException('Aircraft not found');
     }
 
+    const { technician_id, ...maintenanceFields } = createMaintenanceInput;
+
     const newMaintenance = this.maintenanceRepository.create({
-      ...createMaintenanceInput,
+      ...maintenanceFields,
       aircraft,
     });
+
+    if (technician_id) {
+      const technician = await this.userRepository.findOne({
+        where: { id: technician_id },
+      });
+
+      if (technician) {
+        newMaintenance.technician = technician;
+      }
+    }
 
     await this.maintenanceRepository.save(newMaintenance);
 

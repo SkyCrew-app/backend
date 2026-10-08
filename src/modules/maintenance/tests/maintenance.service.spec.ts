@@ -68,6 +68,29 @@ describe('MaintenanceService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    it('assigns the technician and keeps the status', async () => {
+      const technician = { id: 9 } as User;
+      mockAircraftService.findOne.mockResolvedValue({ id: 1 } as any);
+      mockUserRepo.findOne.mockResolvedValue(technician);
+
+      const result = await service.create(
+        {
+          aircraft_id: 1,
+          technician_id: 9,
+          status: 'IN_PROGRESS',
+          start_date: new Date(),
+          end_date: new Date(),
+        } as any,
+        [],
+        [],
+      );
+
+      expect(mockUserRepo.findOne).toHaveBeenCalledWith({ where: { id: 9 } });
+      expect(result.technician).toBe(technician);
+      expect(result.status).toBe('IN_PROGRESS');
+      expect(result).not.toHaveProperty('technician_id');
+    });
+
     it('saves new maintenance without files/images', async () => {
       mockAircraftService.findOne.mockResolvedValue({ id: 1 } as any);
       const result = await service.create(
