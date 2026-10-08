@@ -34,10 +34,14 @@ export class MaintenanceService {
       throw new NotFoundException('Aircraft not found');
     }
 
+    const { technician_id, ...maintenanceFields } = createMaintenanceInput;
+
     const newMaintenance = this.maintenanceRepository.create({
-      ...createMaintenanceInput,
+      ...maintenanceFields,
       aircraft,
     });
+
+    await this.assignTechnician(newMaintenance, technician_id);
 
     await this.maintenanceRepository.save(newMaintenance);
 
@@ -136,15 +140,10 @@ export class MaintenanceService {
       maintenance.aircraft = aircraft;
     }
 
-    if (updateMaintenanceInput.technician_id) {
-      const technician = await this.userRepository.findOne({
-        where: { id: updateMaintenanceInput.technician_id },
-      });
-
-      if (technician) {
-        maintenance.technician = technician;
-      }
-    }
+    await this.assignTechnician(
+      maintenance,
+      updateMaintenanceInput.technician_id,
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { aircraft_id, technician_id, ...otherFields } =
@@ -152,6 +151,23 @@ export class MaintenanceService {
     Object.assign(maintenance, otherFields);
 
     return this.maintenanceRepository.save(maintenance);
+  }
+
+  private async assignTechnician(
+    maintenance: Maintenance,
+    technicianId?: number,
+  ): Promise<void> {
+    if (!technicianId) {
+      return;
+    }
+
+    const technician = await this.userRepository.findOne({
+      where: { id: technicianId },
+    });
+
+    if (technician) {
+      maintenance.technician = technician;
+    }
   }
 
   async findOne(id: number): Promise<Maintenance> {
@@ -162,6 +178,12 @@ export class MaintenanceService {
       throw new NotFoundException('Maintenance not found');
     }
     return maintenance;
+  }
+
+  async remove(id: number): Promise<boolean> {
+    const maintenance = await this.findOne(id);
+    await this.maintenanceRepository.remove(maintenance);
+    return true;
   }
 
   async findAllByAircraft(aircraftId: number): Promise<Maintenance[]> {
