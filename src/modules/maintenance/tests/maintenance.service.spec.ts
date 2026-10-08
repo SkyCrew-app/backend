@@ -39,6 +39,27 @@ describe('MaintenanceService', () => {
     jest.resetAllMocks();
   });
 
+  describe('remove', () => {
+    it('removes an existing maintenance', async () => {
+      const maintenance = { id: 5 } as Maintenance;
+      jest.spyOn(repo, 'findOne').mockResolvedValue(maintenance);
+      const removeSpy = jest
+        .spyOn(repo, 'remove')
+        .mockResolvedValue(maintenance);
+
+      await expect(service.remove(5)).resolves.toBe(true);
+      expect(removeSpy).toHaveBeenCalledWith(maintenance);
+    });
+
+    it('throws if the maintenance does not exist', async () => {
+      jest.spyOn(repo, 'findOne').mockResolvedValue(null);
+      const removeSpy = jest.spyOn(repo, 'remove');
+
+      await expect(service.remove(5)).rejects.toThrow(NotFoundException);
+      expect(removeSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('create', () => {
     it('throws if aircraft not found', async () => {
       mockAircraftService.findOne.mockResolvedValue(null);

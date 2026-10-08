@@ -164,6 +164,12 @@ export class MaintenanceService {
     return maintenance;
   }
 
+  async remove(id: number): Promise<boolean> {
+    const maintenance = await this.findOne(id);
+    await this.maintenanceRepository.remove(maintenance);
+    return true;
+  }
+
   async findAllByAircraft(aircraftId: number): Promise<Maintenance[]> {
     return this.maintenanceRepository.find({
       where: { aircraft: { id: aircraftId } },
