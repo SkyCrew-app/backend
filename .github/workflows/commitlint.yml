@@ -28,9 +28,12 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install commitlint
+        run: npm install --global --ignore-scripts @commitlint/cli@19.8.1
+
       - name: Lint commit messages
         run: >
-          npx --yes @commitlint/cli@19
+          commitlint
           --from ${{ github.event.pull_request.base.sha }}
           --to ${{ github.event.pull_request.head.sha }}
           --verbose
@@ -46,7 +49,10 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install commitlint
+        run: npm install --global --ignore-scripts @commitlint/cli@19.8.1
+
       - name: Lint pull request title
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-        run: printf '%s\n' "$PR_TITLE" | npx --yes @commitlint/cli@19 --verbose
+        run: printf '%s\n' "$PR_TITLE" | commitlint --verbose
