@@ -8,9 +8,10 @@ import * as express from 'express';
 import helmet from 'helmet';
 import { join } from 'path';
 
-const ALLOWED_ORIGINS = [
+const DEFAULT_ALLOWED_ORIGINS = [
   'https://staging.skycrew.fr',
   'https://skycrew.fr',
+  'https://anthonydenin.dev',
   'http://localhost:5173',
   'http://localhost:3000',
 ];
@@ -18,6 +19,9 @@ const ALLOWED_ORIGINS = [
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const port = process.env.PORT || 3000;
+  const enableSwagger =
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_SWAGGER === 'true';
 
   // Security headers
   app.use(
@@ -31,20 +35,32 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  const allowedOrigins = Array.from(
+    new Set([
+      ...DEFAULT_ALLOWED_ORIGINS,
+      ...(process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ]),
+  );
+
   app.enableCors({
-    origin: ALLOWED_ORIGINS,
+    origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
 
-  const config = new DocumentBuilder()
-    .setTitle('SkyCrew API')
-    .setDescription('SkyCrew Aeroclub Management API')
-    .setVersion('1.0')
-    .build();
+  if (enableSwagger) {
+    const config = new DocumentBuilder()
+      .setTitle('SkyCrew API')
+      .setDescription('SkyCrew Aeroclub Management API')
+      .setVersion('1.0')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api', app, document);
+  }
 
   app.use('/uploads', express.static(join(__dirname, 'uploads')));
 
