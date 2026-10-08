@@ -30,23 +30,20 @@ export class UpdateFlightInput {
   number_of_passengers?: number;
 
   @Field({ nullable: true })
-  milestone_reached?: boolean;
-
-  @Field({ nullable: true })
   encoded_polyline?: string;
 
   @Field(() => Float, { nullable: true })
   distance_km?: number;
 
-  @Field(() => Int, { nullable: true })
-  max_altitude?: number;
-
   @Field(() => Float, { nullable: true })
   estimated_flight_time?: number;
 
-  @Field({ nullable: true })
-  map_file?: string;
-
   @Field(() => [String], { nullable: true })
   waypoints?: string[];
+
+  @Field({ nullable: true })
+  departure_time?: Date;
+
+  @Field({ nullable: true })
+  arrival_time?: Date;
 }

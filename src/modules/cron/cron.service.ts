@@ -26,7 +26,7 @@ export class CronService {
   // Vérification quotidienne des statuts des cours
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleCourseStatusUpdate() {
-    console.log('Vérification quotidienne des statuts des cours...');
+    this.logger.log('Vérification quotidienne des statuts des cours...');
     try {
       const expiredCourses = await this.courseService.findExpiredCourses();
       for (const course of expiredCourses) {
@@ -46,7 +46,7 @@ export class CronService {
         });
       }
     } catch (error) {
-      console.error(
+      this.logger.error(
         'Erreur lors de la mise à jour des statuts des cours',
         error,
       );

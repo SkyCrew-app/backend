@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirmation de réservation</title>
+    <style>
+      body {
+        background-color: #f4f4f7;
+        margin: 0;
+        padding: 0;
+        font-family: 'Arial', sans-serif;
+        color: #333333;
+      }
+
+      .email-wrapper {
+        width: 100%;
+        padding: 20px;
+        background-color: #f4f4f7;
+      }
+
+      .email-content {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .email-header {
+        text-align: center;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #dddddd;
+      }
+
+      .email-header h1 {
+        color: #333333;
+        font-size: 24px;
+      }
+
+      .email-body {
+        padding: 20px;
+        text-align: left;
+      }
+
+      .email-body p {
+        font-size: 16px;
+        color: #666666;
+        margin-bottom: 10px;
+      }
+
+      .email-footer {
+        padding-top: 20px;
+        text-align: center;
+        font-size: 12px;
+        color: #999999;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #4CAF50;
+        color: #ffffff;
+        text-decoration: none;
+        font-size: 16px;
+        border-radius: 5px;
+        margin-top: 20px;
+      }
+
+      .btn:hover {
+        background-color: #45a049;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-wrapper">
+      <div class="email-content">
+        <div class="email-header">
+          <h1>Confirmation de votre réservation</h1>
+        </div>
+
+        <div class="email-body">
+          <p>Bonjour {{name}},</p>
+          <p>
+            Votre réservation pour l'avion immatriculé <strong>{{aircraft_registration}}</strong> a été confirmée. Voici les détails de votre réservation :
+          </p>
+          <ul>
+            <li><strong>Date de début :</strong> {{start_time}}</li>
+            <li><strong>Date de fin :</strong> {{end_time}}</li>
+          </ul>
+          <p>Merci d'utiliser notre plateforme !</p>
+        </div>
+
+        <div class="email-footer">
+          <p>&copy; 2024 - 2025 SkyCrew. Tous droits réservés.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

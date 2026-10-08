@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   LessThanOrEqual,
@@ -366,7 +366,7 @@ export class InstructionCoursesService {
         status: course.status,
       }));
     } catch (error) {
-      console.error('Error fetching recent courses:', error);
+      new Logger(InstructionCoursesService.name).error('Error fetching recent courses', error);
       return [];
     }
   }
@@ -529,7 +529,7 @@ export class InstructionCoursesService {
 
       return coursesWithProgress.sort((a, b) => b.progress - a.progress);
     } catch (error) {
-      console.error('Error fetching e-learning courses:', error);
+      new Logger(InstructionCoursesService.name).error('Error fetching e-learning courses', error);
       return [];
     }
   }

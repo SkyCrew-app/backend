@@ -5,6 +5,7 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { UpdateUserInput } from './dto/update-user.input';
 import { UpdateUserPreferencesInput } from './dto/update-user-preferences.input';
+import { DashboardWidgetConfigInput } from './dto/dashboard-widget-config.type';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -151,6 +152,15 @@ export class UsersResolver {
       preference.timezone,
       preference.preferred_aerodrome,
     );
+  }
+
+  @Mutation(() => User)
+  @UseGuards(JwtAuthGuard)
+  async updateDashboardWidgets(
+    @Args('userId', { type: () => Int }) userId: number,
+    @Args('widgets', { type: () => [DashboardWidgetConfigInput] }) widgets: DashboardWidgetConfigInput[],
+  ): Promise<User> {
+    return this.usersService.updateDashboardWidgets(userId, widgets);
   }
 
   @Query(() => User)

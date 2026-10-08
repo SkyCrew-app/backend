@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modification de votre compte</title>
+    <style>
+      body {
+        background-color: #f4f4f7;
+        margin: 0;
+        padding: 0;
+        font-family: 'Arial', sans-serif;
+        color: #333333;
+      }
+
+      .email-wrapper {
+        width: 100%;
+        padding: 20px;
+        background-color: #f4f4f7;
+      }
+
+      .email-content {
+        max-width: 600px;
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .email-header {
+        text-align: center;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #dddddd;
+      }
+
+      .email-header h1 {
+        color: #333333;
+        font-size: 24px;
+      }
+
+      .email-body {
+        padding: 20px;
+        text-align: center;
+      }
+
+      .email-body p {
+        font-size: 16px;
+        color: #666666;
+      }
+
+      .email-footer {
+        padding-top: 20px;
+        text-align: center;
+        font-size: 12px;
+        color: #999999;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: #4CAF50;
+        color: #ffffff;
+        text-decoration: none;
+        font-size: 16px;
+        border-radius: 5px;
+        margin-top: 20px;
+      }
+
+      .btn:hover {
+        background-color: #45a049;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="email-wrapper">
+      <div class="email-content">
+        <div class="email-header">
+          <h1>Bonjour, {{name}} !</h1>
+        </div>
+
+        <div class="email-body">
+          <p>
+            Votre compte SkyCrew a été mis à jour avec succès. Si vous n'êtes pas à l'origine de cette modification, veuillez nous contacter immédiatement.
+          </p>
+        </div>
+
+        <div class="email-footer">
+          <p>&copy; 2024 - 2025 SkyCrew. Tous droits réservés.</p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

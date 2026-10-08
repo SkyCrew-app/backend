@@ -51,4 +51,20 @@ export class AuthService {
       token,
     });
   }
+
+  async verify2FAAndLogin(userEmail: string, token: string): Promise<string | null> {
+    const user = await this.usersService.findOneByEmail(userEmail);
+
+    const isValid = speakeasy.totp.verify({
+      secret: user.twoFactorAuthSecret,
+      encoding: 'base32',
+      token,
+    });
+
+    if (!isValid) {
+      return null;
+    }
+
+    return this.login(user);
+  }
 }

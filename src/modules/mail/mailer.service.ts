@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Transporter } from 'nodemailer';
 import * as Handlebars from 'handlebars';
 import { readFileSync } from 'fs';
@@ -22,7 +22,7 @@ export class MailerService {
       process.cwd(),
       process.env.NODE_ENV === 'production' ? 'dist' : 'src',
       'modules',
-      'template',
+      'templates',
       `${templateName}.hbs`,
     );
     const html = this.loadTemplate(templatePath, variables);
@@ -45,7 +45,7 @@ export class MailerService {
       const template = Handlebars.compile(templateFile);
       return template(variables);
     } catch (error) {
-      console.error(`Erreur lors du chargement du template: ${error.message}`);
+      new Logger(MailerService.name).error(`Erreur lors du chargement du template: ${error.message}`);
       throw error;
     }
   }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Between, Repository } from 'typeorm';
 import { FinancialReport } from './entity/financial-report.entity';
@@ -16,10 +16,12 @@ import { Administration } from '../administration/entity/admin.entity';
 import { join } from 'path';
 import { Parser } from 'json2csv';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { readFileSync, writeFileSync } from 'fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 
 @Injectable()
 export class FinancialService {
+  private readonly exportsDir = join(__dirname, '../../uploads', 'exports');
+
   constructor(
     @InjectRepository(FinancialReport)
     private readonly financialReportRepository: Repository<FinancialReport>,
@@ -271,6 +273,8 @@ export class FinancialService {
     startDate: Date,
     endDate: Date,
   ): Promise<string> {
+    mkdirSync(this.exportsDir, { recursive: true });
+
     const forecast = await this.generateBudgetForecast(startDate, endDate);
     const reservations = await this.reservationRepository.find({
       where: {
@@ -299,7 +303,7 @@ export class FinancialService {
       logoImage = await pdfDoc.embedPng(logoBytes);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
-      console.warn('Logo non trouvé, il sera ignoré.');
+      new Logger(FinancialService.name).warn('Logo non trouvé, il sera ignoré.');
     }
     if (logoImage) {
       const logoDims = logoImage.scale(0.5);
@@ -410,15 +414,17 @@ export class FinancialService {
 
     const pdfBytes = await pdfDoc.save();
     const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.pdf`;
-    const filePath = join(process.cwd(), fileName);
+    const filePath = join(this.exportsDir, fileName);
     writeFileSync(filePath, pdfBytes);
-    return filePath;
+    return `/uploads/exports/${fileName}`;
   }
 
   async generateFinancialReportByPeriodCSV(
     startDate: Date,
     endDate: Date,
   ): Promise<string> {
+    mkdirSync(this.exportsDir, { recursive: true });
+
     const forecast = await this.generateBudgetForecast(startDate, endDate);
 
     // Créer l'objet JSON pour le rapport
@@ -443,8 +449,8 @@ export class FinancialService {
     const csv = parser.parse(data);
 
     const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.csv`;
-    const filePath = join(process.cwd(), fileName);
+    const filePath = join(this.exportsDir, fileName);
     writeFileSync(filePath, csv);
-    return filePath;
+    return `/uploads/exports/${fileName}`;
   }
 }

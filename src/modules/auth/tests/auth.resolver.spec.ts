@@ -16,6 +16,7 @@ describe('AuthResolver', () => {
       login: jest.fn(),
       generate2FASecret: jest.fn(),
       verify2FACode: jest.fn(),
+      verify2FAAndLogin: jest.fn(),
     };
     mockRes = { cookie: jest.fn(), clearCookie: jest.fn() };
     mockReq = { cookies: {} };
@@ -41,22 +42,22 @@ describe('AuthResolver', () => {
       ).rejects.toThrow(UnauthorizedException);
     });
 
-    it('sets cookies and returns token information', async () => {
+    it('does not set auth token when 2FA is required', async () => {
       const user = {
         email: 'a@example.com',
         twoFactorAuthSecret: 'sec',
       } as any;
       (authService.validateUser as jest.Mock).mockResolvedValue(user);
-      (authService.login as jest.Mock).mockResolvedValue('jwt-token');
 
       const response = await resolver.login(
         { email: 'a@example.com', password: 'pass' },
         mockRes as Response,
       );
 
-      expect(mockRes.cookie).toHaveBeenCalledTimes(2);
+      expect(mockRes.cookie).toHaveBeenCalledTimes(1);
+      expect(mockRes.clearCookie).toHaveBeenCalledTimes(1);
       expect(response).toEqual({
-        access_token: 'jwt-token',
+        access_token: '',
         is2FAEnabled: true,
       });
     });
@@ -88,10 +89,19 @@ describe('AuthResolver', () => {
   });
 
   describe('verify2FA', () => {
-    it('returns verification result', async () => {
-      (authService.verify2FACode as jest.Mock).mockResolvedValue(true);
-      const valid = await resolver.verify2FA('a@example.com', '123456');
-      expect(valid).toBe(true);
+    it('sets auth token after successful 2FA verification', async () => {
+      (authService.verify2FAAndLogin as jest.Mock).mockResolvedValue('jwt-token');
+      const result = await resolver.verify2FA(
+        'a@example.com',
+        '123456',
+        mockRes as Response,
+      );
+
+      expect(mockRes.cookie).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({
+        access_token: 'jwt-token',
+        is2FAEnabled: true,
+      });
     });
   });
 

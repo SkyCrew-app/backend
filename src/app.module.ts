@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { typeOrmConfig } from './config/typeorm.config';
 import { MailerModule } from './modules/mail/mailer.module';
 import { AppResolver } from './app.resolver';
@@ -39,12 +40,34 @@ import { MetricsModule } from './modules/metrics/metrics.module';
 import { GraphQLMetricsPlugin } from './modules/metrics/plugins/metrics.plugin';
 import { DatabaseMetricsInterceptor } from './common/interceptors/database.interceptor';
 import { FinancialModule } from './modules/financial/financial.module';
+import { HealthModule } from './modules/health/health.module';
+import { ChecklistsModule } from './modules/checklists/checklists.module';
+import { APP_GUARD } from '@nestjs/core';
+import { DemoModeGuard } from './common/guards/demo-mode.guard';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+
+    ThrottlerModule.forRoot([
+      {
+        name: 'short',
+        ttl: 1000,
+        limit: 10,
+      },
+      {
+        name: 'medium',
+        ttl: 10000,
+        limit: 50,
+      },
+      {
+        name: 'long',
+        ttl: 60000,
+        limit: 200,
+      },
+    ]),
 
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -139,6 +162,10 @@ import { FinancialModule } from './modules/financial/financial.module';
 
     FinancialModule,
 
+    HealthModule,
+
+    ChecklistsModule,
+
     AuditModule,
 
     ScheduleModule.forRoot(),
@@ -161,6 +188,10 @@ import { FinancialModule } from './modules/financial/financial.module';
     },
     CronService,
     GraphQLMetricsPlugin,
+    {
+      provide: APP_GUARD,
+      useClass: DemoModeGuard,
+    },
   ],
 })
 export class AppModule implements NestModule {

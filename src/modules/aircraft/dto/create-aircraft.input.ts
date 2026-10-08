@@ -41,4 +41,16 @@ export class CreateAircraftInput {
 
   @Field(() => Int, { nullable: true })
   consumption?: number;
+
+  @Field(() => Float, { nullable: true })
+  fuel_capacity?: number;
+
+  @Field({ nullable: true })
+  fuel_type?: string;
+
+  @Field(() => Float, { nullable: true })
+  empty_weight?: number;
+
+  @Field(() => Float, { nullable: true })
+  max_takeoff_weight?: number;
 }

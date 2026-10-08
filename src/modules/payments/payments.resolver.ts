@@ -46,6 +46,7 @@ export class PaymentsResolver {
   }
 
   @Mutation(() => PaymentResult)
+  @UseGuards(JwtAuthGuard)
   async processPayment(
     @Args('createPaymentInput') createPaymentInput: CreatePaymentInput,
   ): Promise<PaymentResult> {
@@ -72,6 +73,8 @@ export class PaymentsResolver {
   }
 
   @Mutation(() => Payment)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async updatePaymentStatus(
     @Args('paymentId', { type: () => String }) paymentId: string,
     @Args('status', { type: () => String }) status: string,
@@ -80,6 +83,8 @@ export class PaymentsResolver {
   }
 
   @Mutation(() => Payment)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async processRefund(
     @Args('paymentIntentId', { type: () => String }) paymentIntentId: string,
     @Args('amount', { type: () => Number }) amount: number,

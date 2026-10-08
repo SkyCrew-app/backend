@@ -1,0 +1,247 @@
+{
+  "profiles": {
+    "Cessna 172": {
+      "icao_type": "C172",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 730,
+        "ias_kts": 75,
+        "fuel_lph": 38
+      },
+      "cruise": {
+        "tas_kts": 122,
+        "fuel_lph": 32,
+        "ceiling_ft": 14000
+      },
+      "descent": {
+        "rate_fpm": 500,
+        "ias_kts": 100,
+        "fuel_lph": 20
+      },
+      "approach": {
+        "ias_kts": 65,
+        "vref_kts": 60,
+        "fuel_lph": 25
+      },
+      "taxi_fuel_liters": 5,
+      "usable_fuel_liters": 200,
+      "max_range_nm": 640
+    },
+    "Cessna 152": {
+      "icao_type": "C152",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 715,
+        "ias_kts": 67,
+        "fuel_lph": 28
+      },
+      "cruise": {
+        "tas_kts": 107,
+        "fuel_lph": 23,
+        "ceiling_ft": 14700
+      },
+      "descent": {
+        "rate_fpm": 500,
+        "ias_kts": 90,
+        "fuel_lph": 15
+      },
+      "approach": {
+        "ias_kts": 60,
+        "vref_kts": 55,
+        "fuel_lph": 18
+      },
+      "taxi_fuel_liters": 4,
+      "usable_fuel_liters": 98,
+      "max_range_nm": 415
+    },
+    "Piper PA-28": {
+      "icao_type": "P28A",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 660,
+        "ias_kts": 79,
+        "fuel_lph": 40
+      },
+      "cruise": {
+        "tas_kts": 128,
+        "fuel_lph": 34,
+        "ceiling_ft": 14300
+      },
+      "descent": {
+        "rate_fpm": 500,
+        "ias_kts": 105,
+        "fuel_lph": 22
+      },
+      "approach": {
+        "ias_kts": 70,
+        "vref_kts": 63,
+        "fuel_lph": 26
+      },
+      "taxi_fuel_liters": 5,
+      "usable_fuel_liters": 189,
+      "max_range_nm": 550
+    },
+    "Robin DR400": {
+      "icao_type": "DR40",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 750,
+        "ias_kts": 80,
+        "fuel_lph": 42
+      },
+      "cruise": {
+        "tas_kts": 135,
+        "fuel_lph": 36,
+        "ceiling_ft": 16000
+      },
+      "descent": {
+        "rate_fpm": 550,
+        "ias_kts": 110,
+        "fuel_lph": 22
+      },
+      "approach": {
+        "ias_kts": 70,
+        "vref_kts": 60,
+        "fuel_lph": 28
+      },
+      "taxi_fuel_liters": 5,
+      "usable_fuel_liters": 210,
+      "max_range_nm": 600
+    },
+    "Diamond DA40": {
+      "icao_type": "DA40",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 770,
+        "ias_kts": 80,
+        "fuel_lph": 38
+      },
+      "cruise": {
+        "tas_kts": 145,
+        "fuel_lph": 30,
+        "ceiling_ft": 16400
+      },
+      "descent": {
+        "rate_fpm": 500,
+        "ias_kts": 110,
+        "fuel_lph": 18
+      },
+      "approach": {
+        "ias_kts": 73,
+        "vref_kts": 67,
+        "fuel_lph": 22
+      },
+      "taxi_fuel_liters": 4,
+      "usable_fuel_liters": 148,
+      "max_range_nm": 580
+    },
+    "Cirrus SR22": {
+      "icao_type": "SR22",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 1200,
+        "ias_kts": 100,
+        "fuel_lph": 58
+      },
+      "cruise": {
+        "tas_kts": 176,
+        "fuel_lph": 45,
+        "ceiling_ft": 17500
+      },
+      "descent": {
+        "rate_fpm": 700,
+        "ias_kts": 130,
+        "fuel_lph": 25
+      },
+      "approach": {
+        "ias_kts": 85,
+        "vref_kts": 77,
+        "fuel_lph": 30
+      },
+      "taxi_fuel_liters": 6,
+      "usable_fuel_liters": 227,
+      "max_range_nm": 800
+    },
+    "Tecnam P2002": {
+      "icao_type": "P2002",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 800,
+        "ias_kts": 70,
+        "fuel_lph": 22
+      },
+      "cruise": {
+        "tas_kts": 115,
+        "fuel_lph": 18,
+        "ceiling_ft": 14000
+      },
+      "descent": {
+        "rate_fpm": 500,
+        "ias_kts": 90,
+        "fuel_lph": 12
+      },
+      "approach": {
+        "ias_kts": 60,
+        "vref_kts": 55,
+        "fuel_lph": 14
+      },
+      "taxi_fuel_liters": 3,
+      "usable_fuel_liters": 100,
+      "max_range_nm": 500
+    },
+    "Beechcraft Bonanza": {
+      "icao_type": "BE36",
+      "category": "SEP",
+      "climb": {
+        "rate_fpm": 1100,
+        "ias_kts": 100,
+        "fuel_lph": 60
+      },
+      "cruise": {
+        "tas_kts": 170,
+        "fuel_lph": 50,
+        "ceiling_ft": 18500
+      },
+      "descent": {
+        "rate_fpm": 600,
+        "ias_kts": 130,
+        "fuel_lph": 30
+      },
+      "approach": {
+        "ias_kts": 80,
+        "vref_kts": 75,
+        "fuel_lph": 35
+      },
+      "taxi_fuel_liters": 6,
+      "usable_fuel_liters": 290,
+      "max_range_nm": 850
+    }
+  },
+  "default": {
+    "icao_type": "ZZZZ",
+    "category": "SEP",
+    "climb": {
+      "rate_fpm": 700,
+      "ias_kts": 75,
+      "fuel_lph": 35
+    },
+    "cruise": {
+      "tas_kts": 120,
+      "fuel_lph": 30,
+      "ceiling_ft": 14000
+    },
+    "descent": {
+      "rate_fpm": 500,
+      "ias_kts": 100,
+      "fuel_lph": 18
+    },
+    "approach": {
+      "ias_kts": 65,
+      "vref_kts": 60,
+      "fuel_lph": 22
+    },
+    "taxi_fuel_liters": 5,
+    "usable_fuel_liters": 180,
+    "max_range_nm": 500
+  }
+}

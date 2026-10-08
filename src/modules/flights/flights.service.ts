@@ -1,6 +1,6 @@
 import {
-  BadGatewayException,
   BadRequestException,
+  ForbiddenException,
   HttpException,
   Injectable,
   InternalServerErrorException,
@@ -15,28 +15,23 @@ import { UpdateFlightInput } from './dto/update-flight.input';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import axios from 'axios';
-import { Buffer } from 'buffer';
 import { AirportsService } from './airports.service';
+import { FlightPlanGeneratorService } from './flight-plan-generator.service';
+import { AircraftPerformanceService } from './aircraft-performance.service';
+import { MetarService } from './metar.service';
+import { WeatherResponse } from './interfaces/weather.interface';
+import { computeBearing } from './utils/geo.utils';
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function retry<T>(
-  fn: () => Promise<T>,
-  options: { retries: number; retryIntervalMs: number },
-): Promise<T> {
-  try {
-    return await fn();
-  } catch (error) {
-    if (options.retries <= 0) throw error;
-    await wait(options.retryIntervalMs);
-    return retry(fn, { ...options, retries: options.retries - 1 });
-  }
+export interface AIFlightOptions {
+  preferred_runway_dep?: string;
+  preferred_runway_arr?: string;
+  cruise_altitude_ft?: number;
+  departure_time?: Date;
+  flight_rules?: 'VFR' | 'IFR';
 }
 
 @Injectable()
 export class FlightsService {
-  private readonly FPDB_API_KEY = process.env.FPDB_API_KEY;
-  private readonly FPDB_BASE_URL = 'https://api.flightplandatabase.com';
   private readonly WEATHER_URL =
     'https://api.openweathermap.org/data/2.5/weather';
   private readonly WEATHER_API_KEY = process.env.OPENWEATHERMAP_API_KEY;
@@ -49,22 +44,10 @@ export class FlightsService {
     private reservationsRepository: Repository<Reservation>,
     private readonly notificationsService: NotificationsService,
     private readonly airportsService: AirportsService,
+    private readonly flightPlanGenerator: FlightPlanGeneratorService,
+    private readonly aircraftPerformance: AircraftPerformanceService,
+    private readonly metarService: MetarService,
   ) {}
-
-  private getApiHeaders() {
-    return {
-      Authorization: `Basic ${Buffer.from(`${this.FPDB_API_KEY}:`).toString('base64')}`,
-      'Content-Type': 'application/json',
-    };
-  }
-
-  private logApiError(error: any) {
-    this.logger.error(`External API Failure: ${error.config?.url}`, {
-      status: error.response?.status,
-      response: error.response?.data,
-      stack: error.stack,
-    });
-  }
 
   async createFlightByUser(
     createFlightInput: CreateFlightInput,
@@ -95,7 +78,7 @@ export class FlightsService {
       user_id: user_id,
       notification_type: 'FLIGHT_CREATED',
       notification_date: new Date(),
-      message: `Votre plan de vol de ${flight.origin_icao} à ${flight.destination_icao} a été créé`,
+      message: `Votre plan de vol de ${flight.origin_icao} a ${flight.destination_icao} a ete cree`,
       is_read: false,
     });
 
@@ -107,6 +90,7 @@ export class FlightsService {
     destination_icao: string,
     user_id: number,
     reservation_id?: number,
+    options?: AIFlightOptions,
   ): Promise<Flight> {
     try {
       if (!reservation_id) {
@@ -127,86 +111,128 @@ export class FlightsService {
         throw new BadRequestException('Aircraft configuration incomplete');
       }
 
-      const [departure, arrival] = await Promise.all([
-        this.airportsService.getAirportInfo(origin_icao),
-        this.airportsService.getAirportInfo(destination_icao),
-      ]);
-
-      const flightPlanResponse = await retry(
-        async () => {
-          const response = await axios.post(
-            `${this.FPDB_BASE_URL}/auto/generate`,
-            {
-              fromICAO: origin_icao,
-              toICAO: destination_icao,
-              cruiseSpeed: aircraft.cruiseSpeed,
-              maxAltitude: aircraft.maxAltitude,
-            },
-            {
-              headers: this.getApiHeaders(),
-              timeout: 10000,
-            },
-          );
-          return response;
-        },
-        { retries: 3, retryIntervalMs: 1000 },
+      // Get performance profile for this aircraft model
+      const perfProfile = this.aircraftPerformance.getProfile(
+        aircraft.model,
+        aircraft.cruiseSpeed,
+        aircraft.consumption,
       );
 
-      if (!flightPlanResponse.data?.id) {
-        throw new BadGatewayException('Invalid flight plan response');
+      const departure = this.airportsService.getAirportInfo(origin_icao);
+      const arrival = this.airportsService.getAirportInfo(destination_icao);
+
+      // Fetch weather + METAR in parallel
+      const [weatherDeparture, weatherArrival, metarDep, metarArr] =
+        await Promise.all([
+          this.fetchWeatherSafe(departure.lat, departure.lon),
+          this.fetchWeatherSafe(arrival.lat, arrival.lon),
+          this.metarService.fetchMetarSafe(origin_icao),
+          this.metarService.fetchMetarSafe(destination_icao),
+        ]);
+
+      // Generate flight plan with performance data + METAR
+      const flightPlan = this.flightPlanGenerator.generateFlightPlan(
+        departure,
+        arrival,
+        aircraft.cruiseSpeed,
+        aircraft.maxAltitude,
+        reservation.flight_category,
+        aircraft.consumption,
+        {
+          preferred_runway_dep: options?.preferred_runway_dep,
+          preferred_runway_arr: options?.preferred_runway_arr,
+          cruise_altitude_ft: options?.cruise_altitude_ft,
+          flight_rules: options?.flight_rules,
+          metar_departure: metarDep,
+          metar_arrival: metarArr,
+          performance: perfProfile,
+        },
+      );
+
+      // Use flight_hours from the enriched flight plan (includes WCA/GS)
+      const adjustedFlightHours = flightPlan.flight_hours;
+
+      // Compute departure and arrival times
+      const departureTime = options?.departure_time ?? reservation.start_time;
+      const arrivalTime = new Date(
+        departureTime.getTime() + adjustedFlightHours * 3_600_000,
+      );
+
+      // Build weather conditions string
+      const weatherParts: string[] = [];
+      weatherParts.push(
+        `DEP ${departure.icao}(${departure.name}) ${weatherDeparture?.weather?.[0]?.description ?? 'Unavailable'} ${weatherDeparture?.main?.temp ?? 'N/A'}C`,
+      );
+      if (metarDep?.rawOb) {
+        weatherParts.push(`METAR DEP: ${metarDep.rawOb}`);
+      }
+      weatherParts.push(
+        `ARR ${arrival.icao}(${arrival.name}) ${weatherArrival?.weather?.[0]?.description ?? 'Unavailable'} ${weatherArrival?.main?.temp ?? 'N/A'}C`,
+      );
+      if (metarArr?.rawOb) {
+        weatherParts.push(`METAR ARR: ${metarArr.rawOb}`);
       }
 
-      const waypointsResponse = await axios
-        .get(`${this.FPDB_BASE_URL}/plan/${flightPlanResponse.data.id}`, {
-          headers: this.getApiHeaders(),
-          timeout: 10000,
-        })
-        .catch((error) => {
-          this.logApiError(error);
-          throw new HttpException(
-            `Flight plan API error: ${error.response?.data?.message || error.message}`,
-            error.response?.status || 500,
-          );
-        });
+      // Append weather info to first/last waypoint names
+      const waypointsWithContext = flightPlan.waypoints.map(
+        (waypoint, index, allWaypoints) => {
+          if (index === 0) {
+            return {
+              ...waypoint,
+              name: `${waypoint.name} | METEO ${weatherDeparture?.weather?.[0]?.description ?? 'Unavailable'} | WIND ${metarDep?.wspd ?? weatherDeparture?.wind?.speed ?? 'N/A'}kt`,
+            };
+          }
 
-      const waypointsData = waypointsResponse.data?.route?.nodes;
-      if (!Array.isArray(waypointsData)) {
-        throw new BadGatewayException('Invalid waypoints structure');
-      }
+          if (index === allWaypoints.length - 1) {
+            return {
+              ...waypoint,
+              name: `${waypoint.name} | METEO ${weatherArrival?.weather?.[0]?.description ?? 'Unavailable'} | WIND ${metarArr?.wspd ?? weatherArrival?.wind?.speed ?? 'N/A'}kt`,
+            };
+          }
 
-      const waypoints = waypointsData.map((wp) => ({
-        ident: wp.ident,
-        type: wp.type,
-        lat: wp.lat,
-        lon: wp.lon,
-        alt: wp.alt,
-        name: wp.name,
-      }));
-
-      const [weatherDeparture, weatherArrival] = await Promise.all([
-        this.fetchWeather(departure.lat, departure.lon),
-        this.fetchWeather(arrival.lat, arrival.lon),
-      ]);
+          return waypoint;
+        },
+      );
 
       const flight = this.flightsRepository.create({
         origin_icao,
         destination_icao,
         user: { id: user_id },
         reservation: { id: reservation_id },
-        flight_hours: this.computeFlightTime(
-          flightPlanResponse.data.distance * 1.852,
-          aircraft.cruiseSpeed,
-        ),
+        flight_hours: adjustedFlightHours,
+        estimated_flight_time: adjustedFlightHours,
         flight_type: reservation.flight_category,
-        distance_km: flightPlanResponse.data.distance * 1.852,
-        encoded_polyline: flightPlanResponse.data.encodedPolyline,
-        weather_conditions: `Departure: ${weatherDeparture.weather[0]?.description}, Arrival: ${weatherArrival.weather[0]?.description}`,
-        waypoints: JSON.stringify(waypoints),
+        distance_km: flightPlan.distance_km,
+        encoded_polyline: flightPlan.encoded_polyline,
+        weather_conditions: weatherParts.join(' | '),
+        waypoints: JSON.stringify(waypointsWithContext),
         number_of_passengers: reservation.number_of_passengers || 1,
+        departure_time: departureTime,
+        arrival_time: arrivalTime,
+        fuel_policy: flightPlan.fuel_policy
+          ? JSON.stringify(flightPlan.fuel_policy)
+          : null,
+        wind_summary: flightPlan.wind_summary
+          ? JSON.stringify(flightPlan.wind_summary)
+          : null,
+        performance_profile: flightPlan.performance_profile ?? null,
+        estimated_fuel_liters: flightPlan.fuel_policy?.total_liters ?? null,
       });
 
-      return await this.flightsRepository.save(flight);
-    } catch (error) {
+      const savedFlight = await this.flightsRepository.save(flight);
+
+      await this.notificationsService.create({
+        user_id: user_id,
+        notification_type: 'FLIGHT_CREATED',
+        notification_date: new Date(),
+        message: `Votre plan de vol de ${origin_icao} a ${destination_icao} a ete genere automatiquement`,
+        is_read: false,
+      });
+
+      savedFlight.departure_airport_info = JSON.stringify(departure);
+      savedFlight.arrival_airport_info = JSON.stringify(arrival);
+      return savedFlight;
+    } catch (error: any) {
       this.logger.error(
         `Flight creation failed: ${error.message}`,
         error.stack,
@@ -255,12 +281,27 @@ export class FlightsService {
     return this.flightsRepository.save(flight);
   }
 
-  async removeFlight(id: number): Promise<boolean> {
+  async removeFlight(id: number, requestingUserId: number): Promise<boolean> {
+    const flight = await this.flightsRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+
+    if (!flight) {
+      throw new NotFoundException(`Flight with ID ${id} not found`);
+    }
+
+    if (flight.user.id !== requestingUserId) {
+      throw new ForbiddenException(
+        'Vous ne pouvez supprimer que vos propres vols',
+      );
+    }
+
     const result = await this.flightsRepository.delete(id);
     return result.affected > 0;
   }
 
-  async fetchWeather(lat: number, lon: number): Promise<any> {
+  async fetchWeather(lat: number, lon: number): Promise<WeatherResponse> {
     try {
       const response = await axios.get(this.WEATHER_URL, {
         params: {
@@ -272,11 +313,24 @@ export class FlightsService {
         },
       });
       return response.data;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
+    } catch {
       throw new Error(
         `Failed to fetch weather data for coordinates (${lat}, ${lon})`,
       );
+    }
+  }
+
+  private async fetchWeatherSafe(
+    lat: number,
+    lon: number,
+  ): Promise<WeatherResponse | null> {
+    try {
+      return await this.fetchWeather(lat, lon);
+    } catch (error: any) {
+      this.logger.warn(
+        `Weather unavailable for (${lat}, ${lon}): ${error.message}`,
+      );
+      return null;
     }
   }
 
@@ -289,24 +343,35 @@ export class FlightsService {
 
   async getDetailedWaypoints(waypointsJson: string): Promise<string[]> {
     const waypoints = JSON.parse(waypointsJson);
-    return Promise.all(
-      waypoints.map(async (wp) => {
-        try {
-          const response = await axios.get(
-            `${this.FPDB_BASE_URL}/nav/waypoint/${wp.ident}`,
-            {
-              headers: {
-                Authorization: `Basic ${Buffer.from(`${this.FPDB_API_KEY}:`).toString('base64')}`,
-              },
-            },
-          );
-          const data = response.data;
-          return `${wp.ident}: ${data.name}, Lat: ${data.lat}, Lon: ${data.lon}`;
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        } catch (error) {
-          return `${wp.ident}: Info not available`;
-        }
-      }),
+    return waypoints.map(
+      (wp: {
+        ident: string;
+        type?: string;
+        name?: string;
+        lat?: number;
+        lon?: number;
+        alt?: number;
+        phase?: string;
+        speed_kts?: number;
+        ground_speed_kts?: number;
+        wind_correction_deg?: number;
+        fuel_remaining_liters?: number;
+        time_from_dep_min?: number;
+        leg_distance_nm?: number;
+      }) => {
+        const parts = [
+          `${wp.ident} (${wp.type ?? 'FIX'}) [${wp.phase ?? ''}]`,
+          wp.name ?? 'Waypoint',
+          `Lat: ${wp.lat ?? 'N/A'}, Lon: ${wp.lon ?? 'N/A'}`,
+          `Alt: ${wp.alt ?? 'N/A'}ft`,
+        ];
+        if (wp.speed_kts) parts.push(`IAS: ${wp.speed_kts}kt`);
+        if (wp.ground_speed_kts) parts.push(`GS: ${wp.ground_speed_kts}kt`);
+        if (wp.wind_correction_deg) parts.push(`WCA: ${wp.wind_correction_deg > 0 ? '+' : ''}${wp.wind_correction_deg}°`);
+        if (wp.time_from_dep_min != null) parts.push(`T+${wp.time_from_dep_min}min`);
+        if (wp.leg_distance_nm) parts.push(`LEG: ${wp.leg_distance_nm}NM`);
+        return parts.join(', ');
+      },
     );
   }
 

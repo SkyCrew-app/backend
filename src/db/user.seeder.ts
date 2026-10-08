@@ -25,10 +25,7 @@ export const seedAdminUser = async (dataSource: DataSource): Promise<void> => {
   }
 
   const saltRounds = 10;
-  const hashedPassword = await bcrypt.hash(
-    'uAsLYpaZSV3guAj-e-biupo',
-    saltRounds,
-  );
+  const hashedPassword = await bcrypt.hash('adminpassword123', saltRounds);
 
   const adminUser = userRepository.create({
     first_name: 'Admin',
