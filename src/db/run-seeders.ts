@@ -21,15 +21,45 @@ import { seedDemoInstruction } from './demo/demo-instruction.seeder';
 import { seedDemoAudits } from './demo/demo-audits.seeder';
 import { seedDemoEvaluations } from './demo/demo-evaluations.seeder';
 import { seedDemoReservationTemplates } from './demo/demo-reservation-templates.seeder';
+import { FlightsService } from '../modules/flights/flights.service';
 
 const isDemoSeed = process.argv.includes('--demo');
+const isFreshSeed = process.argv.includes('--fresh');
+
+async function resetPublicSchemaData(dataSource: DataSource) {
+  const tables: Array<{ tablename: string }> = await dataSource.query(`
+    SELECT tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+  `);
+
+  const tableNames = tables
+    .map(({ tablename }) => `"public"."${tablename}"`)
+    .filter((tableName) => !tableName.includes('"migrations"'));
+
+  if (!tableNames.length) {
+    console.log('No public tables found to truncate');
+    return;
+  }
+
+  await dataSource.query(
+    `TRUNCATE TABLE ${tableNames.join(', ')} RESTART IDENTITY CASCADE;`,
+  );
+  console.log(`Fresh seed mode: truncated ${tableNames.length} tables`);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  await app.init();
   const dataSource = app.get(DataSource);
+  const flightsService = app.get(FlightsService);
 
   try {
     console.log('Starting database seeding...');
+
+    if (isFreshSeed) {
+      await resetPublicSchemaData(dataSource);
+    }
 
     // Base seeders (toujours exécutés)
     await seedRoles(dataSource);
@@ -43,7 +73,7 @@ async function bootstrap() {
       const users = await seedDemoUsers(dataSource);
       const aircraft = await seedDemoAircraft(dataSource);
       const reservations = await seedDemoReservations(dataSource, users, aircraft);
-      await seedDemoFlights(dataSource, users, reservations);
+      await seedDemoFlights(dataSource, flightsService, reservations);
       await seedDemoMaintenance(dataSource, users, aircraft);
       await seedDemoIncidents(dataSource, users, aircraft);
       await seedDemoLicenses(dataSource, users);
