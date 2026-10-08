@@ -120,4 +120,23 @@ describe('AuthService', () => {
       expect(isValid).toBe(true);
     });
   });
+
+  describe('verify2FAAndLogin', () => {
+    it('returns a JWT when the OTP is valid', async () => {
+      const user = {
+        email: 'a@example.com',
+        id: 1,
+        role: { role_name: 'admin' },
+        twoFactorAuthSecret: 'base32secret',
+      } as User;
+
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(user);
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+      (jwtService.sign as jest.Mock).mockReturnValue('jwt-token');
+
+      const result = await service.verify2FAAndLogin('a@example.com', '123456');
+
+      expect(result).toBe('jwt-token');
+    });
+  });
 });
