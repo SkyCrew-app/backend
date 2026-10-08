@@ -125,6 +125,15 @@ export class MaintenanceResolver {
     );
   }
 
+  @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Technicien', 'Administrateur')
+  async deleteMaintenance(
+    @Args('id', { type: () => Int }) id: number,
+  ): Promise<boolean> {
+    return this.maintenanceService.remove(id);
+  }
+
   @Query(() => Maintenance, { name: 'getMaintenance' })
   @UseGuards(JwtAuthGuard)
   async getMaintenance(

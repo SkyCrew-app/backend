@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 const mockService = {
   create: jest.fn(),
   update: jest.fn(),
+  remove: jest.fn(),
   findOne: jest.fn(),
   findAllByAircraft: jest.fn(),
   findAll: jest.fn(),
@@ -35,6 +36,15 @@ describe('MaintenanceResolver', () => {
 
   it('should be defined', () => {
     expect(resolver).toBeDefined();
+  });
+
+  describe('deleteMaintenance', () => {
+    it('forwards to service.remove', async () => {
+      mockService.remove.mockResolvedValue(true);
+      const result = await resolver.deleteMaintenance(7);
+      expect(mockService.remove).toHaveBeenCalledWith(7);
+      expect(result).toBe(true);
+    });
   });
 
   describe('createMaintenance', () => {

@@ -32,4 +32,7 @@ export class CreateMaintenanceInput {
 
   @Field(() => [String], { nullable: true })
   documents_url?: string[];
+
+  @Field({ nullable: true })
+  status?: string;
 }

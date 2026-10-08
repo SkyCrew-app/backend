@@ -39,12 +39,56 @@ describe('MaintenanceService', () => {
     jest.resetAllMocks();
   });
 
+  describe('remove', () => {
+    it('removes an existing maintenance', async () => {
+      const maintenance = { id: 5 } as Maintenance;
+      jest.spyOn(repo, 'findOne').mockResolvedValue(maintenance);
+      const removeSpy = jest
+        .spyOn(repo, 'remove')
+        .mockResolvedValue(maintenance);
+
+      await expect(service.remove(5)).resolves.toBe(true);
+      expect(removeSpy).toHaveBeenCalledWith(maintenance);
+    });
+
+    it('throws if the maintenance does not exist', async () => {
+      jest.spyOn(repo, 'findOne').mockResolvedValue(null);
+      const removeSpy = jest.spyOn(repo, 'remove');
+
+      await expect(service.remove(5)).rejects.toThrow(NotFoundException);
+      expect(removeSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('create', () => {
     it('throws if aircraft not found', async () => {
       mockAircraftService.findOne.mockResolvedValue(null);
       await expect(
         service.create({ aircraft_id: 1 } as any, [], []),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('assigns the technician and keeps the status', async () => {
+      const technician = { id: 9 } as User;
+      mockAircraftService.findOne.mockResolvedValue({ id: 1 } as any);
+      mockUserRepo.findOne.mockResolvedValue(technician);
+
+      const result = await service.create(
+        {
+          aircraft_id: 1,
+          technician_id: 9,
+          status: 'IN_PROGRESS',
+          start_date: new Date(),
+          end_date: new Date(),
+        } as any,
+        [],
+        [],
+      );
+
+      expect(mockUserRepo.findOne).toHaveBeenCalledWith({ where: { id: 9 } });
+      expect(result.technician).toBe(technician);
+      expect(result.status).toBe('IN_PROGRESS');
+      expect(result).not.toHaveProperty('technician_id');
     });
 
     it('saves new maintenance without files/images', async () => {
