@@ -5,6 +5,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
+RUN npm install -g --ignore-scripts npm@11.11.0
+
 COPY package*.json ./
 RUN npm ci --force
 
@@ -20,8 +22,9 @@ RUN apk add --no-cache dumb-init
 
 WORKDIR /usr/src/app
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
+# Pin npm and create non-root user
+RUN npm install -g --ignore-scripts npm@11.11.0 && \
+    addgroup -g 1001 -S nodejs && \
     adduser -S nestjs -u 1001
 
 COPY package*.json ./
