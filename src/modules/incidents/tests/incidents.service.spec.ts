@@ -48,7 +48,10 @@ describe('IncidentsService', () => {
     const inc = { id: 2 } as Incident;
     incidentRepo.findOne.mockResolvedValue(inc as any);
     expect(await service.getIncident(2)).toBe(inc);
-    expect(incidentRepo.findOne).toHaveBeenCalledWith({ where: { id: 2 } });
+    expect(incidentRepo.findOne).toHaveBeenCalledWith({
+      where: { id: 2 },
+      relations: ['aircraft', 'flight', 'user'],
+    });
   });
 
   it('should filter by status, priority, category, flight', async () => {
@@ -57,18 +60,22 @@ describe('IncidentsService', () => {
     expect(await service.getIncidentsByStatus('OPEN')).toBe(by);
     expect(incidentRepo.find).toHaveBeenCalledWith({
       where: { status: 'OPEN' },
+      relations: ['aircraft', 'flight', 'user'],
     });
     expect(await service.getIncidentsByPriority('HIGH')).toBe(by);
     expect(incidentRepo.find).toHaveBeenLastCalledWith({
       where: { priority: 'HIGH' },
+      relations: ['aircraft', 'flight', 'user'],
     });
     expect(await service.getIncidentsByCategory('MECHANICAL')).toBe(by);
     expect(incidentRepo.find).toHaveBeenLastCalledWith({
       where: { category: 'MECHANICAL' },
+      relations: ['aircraft', 'flight', 'user'],
     });
     expect(await service.getIncidentsByFlight('5')).toBe(by);
     expect(incidentRepo.find).toHaveBeenLastCalledWith({
       where: { flight: { id: 5 } },
+      relations: ['aircraft', 'flight', 'user'],
     });
   });
 
@@ -137,6 +144,7 @@ describe('IncidentsService', () => {
     incidentRepo.find.mockResolvedValue(rec as any);
     expect(await service.getRecentIncidents(2)).toBe(rec);
     expect(incidentRepo.find).toHaveBeenCalledWith({
+      relations: ['aircraft', 'flight', 'user'],
       order: { incident_date: 'DESC' },
       take: 2,
     });
