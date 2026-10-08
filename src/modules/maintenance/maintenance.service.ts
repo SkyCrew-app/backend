@@ -41,15 +41,7 @@ export class MaintenanceService {
       aircraft,
     });
 
-    if (technician_id) {
-      const technician = await this.userRepository.findOne({
-        where: { id: technician_id },
-      });
-
-      if (technician) {
-        newMaintenance.technician = technician;
-      }
-    }
+    await this.assignTechnician(newMaintenance, technician_id);
 
     await this.maintenanceRepository.save(newMaintenance);
 
@@ -148,15 +140,10 @@ export class MaintenanceService {
       maintenance.aircraft = aircraft;
     }
 
-    if (updateMaintenanceInput.technician_id) {
-      const technician = await this.userRepository.findOne({
-        where: { id: updateMaintenanceInput.technician_id },
-      });
-
-      if (technician) {
-        maintenance.technician = technician;
-      }
-    }
+    await this.assignTechnician(
+      maintenance,
+      updateMaintenanceInput.technician_id,
+    );
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { aircraft_id, technician_id, ...otherFields } =
@@ -164,6 +151,23 @@ export class MaintenanceService {
     Object.assign(maintenance, otherFields);
 
     return this.maintenanceRepository.save(maintenance);
+  }
+
+  private async assignTechnician(
+    maintenance: Maintenance,
+    technicianId?: number,
+  ): Promise<void> {
+    if (!technicianId) {
+      return;
+    }
+
+    const technician = await this.userRepository.findOne({
+      where: { id: technicianId },
+    });
+
+    if (technician) {
+      maintenance.technician = technician;
+    }
   }
 
   async findOne(id: number): Promise<Maintenance> {
