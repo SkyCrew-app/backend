@@ -8,6 +8,7 @@ import {
   ReservationStatus,
   FlightCategory,
 } from '../entity/reservations.entity';
+import { ReservationTemplate } from '../entity/reservation-template.entity';
 import { User } from '../../users/entity/users.entity';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { MailerService } from '../../mail/mailer.service';
@@ -58,6 +59,14 @@ describe('ReservationsService', () => {
     findAll: jest.fn(),
   };
 
+  const mockTemplateRepository = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
+    remove: jest.fn(),
+  };
+
   const mockPaymentService = {
     createWithdrawal: jest.fn(),
     refund: jest.fn(),
@@ -74,6 +83,10 @@ describe('ReservationsService', () => {
         {
           provide: getRepositoryToken(Reservation),
           useValue: mockReservationRepository,
+        },
+        {
+          provide: getRepositoryToken(ReservationTemplate),
+          useValue: mockTemplateRepository,
         },
         {
           provide: getRepositoryToken(User),
