@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgadmin
+  namespace: dev
+  labels:
+    app: pgadmin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pgadmin
+  template:
+    metadata:
+      labels:
+        app: pgadmin
+    spec:
+      containers:
+        - name: pgadmin
+          image: dpage/pgadmin4:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - secretRef:
+                name: pgadmin-credentials
+          # Persistance optionnelle (volume vide ici)
+          volumeMounts:
+            - name: pgadmin-data
+              mountPath: /var/lib/pgadmin
+      volumes:
+        - name: pgadmin-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgadmin
+  namespace: dev
+spec:
+  type: ClusterIP
+  selector:
+    app: pgadmin
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
