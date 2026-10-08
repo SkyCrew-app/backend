@@ -7,7 +7,13 @@ import {
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { ConfigService } from '@nestjs/config';
 
-const ALLOWED_MUTATIONS = ['login', 'logout'];
+const ALLOWED_MUTATIONS = [
+  'login',
+  'logout',
+  'generatePdfFinancialReport',
+  'generateCsvFinancialReport',
+  'exportLogbookPDF',
+];
 
 @Injectable()
 export class DemoModeGuard implements CanActivate {

@@ -40,6 +40,13 @@ export class NotificationsGateway
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendNotification(userId: number, payload: any) {
+    if (!this.server) {
+      this.logger.debug(
+        `Skipping realtime notification for user-${userId}: gateway not initialized`,
+      );
+      return;
+    }
+
     this.server.to(`user-${userId}`).emit('notification', payload);
   }
 }
