@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/SkyCrew-app/backend/compare/2.2.0...2.3.0) (2026-10-08)
+
+
+### Features
+
+* **maintenance:** :sparkles: add deletion and honour status and technician on creation ([#58](https://github.com/SkyCrew-app/backend/issues/58)) ([f76b8f7](https://github.com/SkyCrew-app/backend/commit/f76b8f7077a54661030b31246f1cc70cc461bd2e))
+
 ## [2.2.0](https://github.com/SkyCrew-app/backend/compare/2.1.0...2.2.0) (2026-10-08)
 
 
