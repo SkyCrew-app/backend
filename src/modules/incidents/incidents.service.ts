@@ -10,6 +10,8 @@ import { User } from '../users/entity/users.entity';
 
 @Injectable()
 export class IncidentsService {
+  private readonly incidentRelations = ['aircraft', 'flight', 'user'] as const;
+
   constructor(
     @InjectRepository(Incident)
     private readonly incidentRepository: Repository<Incident>,
@@ -22,28 +24,43 @@ export class IncidentsService {
   ) {}
 
   async getAllIncidents(): Promise<Incident[]> {
-    return this.incidentRepository.find();
+    return this.incidentRepository.find({
+      relations: [...this.incidentRelations],
+    });
   }
 
   async getIncident(id: number): Promise<Incident> {
-    return this.incidentRepository.findOne({ where: { id: id } });
+    return this.incidentRepository.findOne({
+      where: { id },
+      relations: [...this.incidentRelations],
+    });
   }
 
   async getIncidentsByStatus(status: string): Promise<Incident[]> {
-    return this.incidentRepository.find({ where: { status } });
+    return this.incidentRepository.find({
+      where: { status },
+      relations: [...this.incidentRelations],
+    });
   }
 
   async getIncidentsByPriority(priority: string): Promise<Incident[]> {
-    return this.incidentRepository.find({ where: { priority } });
+    return this.incidentRepository.find({
+      where: { priority },
+      relations: [...this.incidentRelations],
+    });
   }
 
   async getIncidentsByCategory(category: string): Promise<Incident[]> {
-    return this.incidentRepository.find({ where: { category } });
+    return this.incidentRepository.find({
+      where: { category },
+      relations: [...this.incidentRelations],
+    });
   }
 
   async getIncidentsByFlight(flight: string): Promise<Incident[]> {
     return this.incidentRepository.find({
       where: { flight: { id: Number(flight) } },
+      relations: [...this.incidentRelations],
     });
   }
 
@@ -122,6 +139,7 @@ export class IncidentsService {
 
   async getRecentIncidents(limit: number): Promise<Incident[]> {
     return this.incidentRepository.find({
+      relations: [...this.incidentRelations],
       order: { incident_date: 'DESC' },
       take: limit,
     });
