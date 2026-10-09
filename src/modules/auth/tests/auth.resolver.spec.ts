@@ -17,6 +17,8 @@ describe('AuthResolver', () => {
       generate2FASecret: jest.fn(),
       verify2FACode: jest.fn(),
       verify2FAAndLogin: jest.fn(),
+      createTwoFactorChallenge: jest.fn().mockReturnValue('challenge-token'),
+      isValidTwoFactorChallenge: jest.fn(),
     };
     mockRes = { cookie: jest.fn(), clearCookie: jest.fn() };
     mockReq = { cookies: {} };
@@ -54,8 +56,22 @@ describe('AuthResolver', () => {
         mockRes as Response,
       );
 
-      expect(mockRes.cookie).toHaveBeenCalledTimes(1);
-      expect(mockRes.clearCookie).toHaveBeenCalledTimes(1);
+      expect(mockRes.clearCookie).toHaveBeenCalledWith(
+        'token',
+        expect.any(Object),
+      );
+      expect(mockRes.cookie).toHaveBeenCalledTimes(2);
+      expect(mockRes.cookie).toHaveBeenCalledWith(
+        'two_factor_challenge',
+        'challenge-token',
+        expect.objectContaining({ httpOnly: true, maxAge: 300000 }),
+      );
+      expect(mockRes.cookie).not.toHaveBeenCalledWith(
+        'token',
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(authService.login).not.toHaveBeenCalled();
       expect(response).toEqual({
         access_token: '',
         is2FAEnabled: true,
@@ -83,25 +99,96 @@ describe('AuthResolver', () => {
       (authService.generate2FASecret as jest.Mock).mockResolvedValue({
         qrCodeUrl: 'url',
       });
-      const url = await resolver.generate2FASecret('a@example.com');
+      const url = await resolver.generate2FASecret({
+        user: { email: 'a@example.com' },
+      } as any);
+      expect(authService.generate2FASecret).toHaveBeenCalledWith(
+        'a@example.com',
+      );
       expect(url).toBe('url');
+    });
+
+    it('ignores an email supplied by the caller', async () => {
+      (authService.generate2FASecret as jest.Mock).mockResolvedValue({
+        qrCodeUrl: 'url',
+      });
+      await resolver.generate2FASecret(
+        { user: { email: 'a@example.com' } } as any,
+        'victim@example.com',
+      );
+      expect(authService.generate2FASecret).toHaveBeenCalledTimes(1);
+      expect(authService.generate2FASecret).toHaveBeenCalledWith(
+        'a@example.com',
+      );
     });
   });
 
   describe('verify2FA', () => {
     it('sets auth token after successful 2FA verification', async () => {
-      (authService.verify2FAAndLogin as jest.Mock).mockResolvedValue('jwt-token');
+      (authService.isValidTwoFactorChallenge as jest.Mock).mockReturnValue(
+        true,
+      );
+      (authService.verify2FAAndLogin as jest.Mock).mockResolvedValue(
+        'jwt-token',
+      );
+      const req = { cookies: { two_factor_challenge: 'challenge-token' } };
+
       const result = await resolver.verify2FA(
         'a@example.com',
         '123456',
         mockRes as Response,
+        req as any,
       );
 
+      expect(authService.isValidTwoFactorChallenge).toHaveBeenCalledWith(
+        'challenge-token',
+        'a@example.com',
+      );
+      expect(mockRes.clearCookie).toHaveBeenCalledWith(
+        'two_factor_challenge',
+        expect.any(Object),
+      );
       expect(mockRes.cookie).toHaveBeenCalledTimes(2);
       expect(result).toEqual({
         access_token: 'jwt-token',
         is2FAEnabled: true,
       });
+    });
+
+    it('rejects a verification that does not follow a password login', async () => {
+      (authService.isValidTwoFactorChallenge as jest.Mock).mockReturnValue(
+        false,
+      );
+
+      await expect(
+        resolver.verify2FA(
+          'a@example.com',
+          '123456',
+          mockRes as Response,
+          { cookies: {} } as any,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(authService.verify2FAAndLogin).not.toHaveBeenCalled();
+      expect(mockRes.cookie).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid code', async () => {
+      (authService.isValidTwoFactorChallenge as jest.Mock).mockReturnValue(
+        true,
+      );
+      (authService.verify2FAAndLogin as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        resolver.verify2FA(
+          'a@example.com',
+          '000000',
+          mockRes as Response,
+          { cookies: { two_factor_challenge: 'challenge-token' } } as any,
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(mockRes.cookie).not.toHaveBeenCalled();
     });
   });
 

@@ -6,6 +6,8 @@ import { User } from '../users/entity/users.entity';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
 
+export const TWO_FACTOR_PURPOSE = '2fa';
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -52,8 +54,42 @@ export class AuthService {
     });
   }
 
-  async verify2FAAndLogin(userEmail: string, token: string): Promise<string | null> {
+  // Proof that the password step succeeded, required to complete a
+  // two-factor login. It is not a session token.
+  createTwoFactorChallenge(user: User): string {
+    return this.jwtService.sign(
+      { email: user.email, sub: user.id, purpose: TWO_FACTOR_PURPOSE },
+      { expiresIn: '5m' },
+    );
+  }
+
+  isValidTwoFactorChallenge(
+    challenge: string | undefined,
+    userEmail: string,
+  ): boolean {
+    if (!challenge) {
+      return false;
+    }
+
+    try {
+      const payload = this.jwtService.verify(challenge);
+      return (
+        payload.purpose === TWO_FACTOR_PURPOSE && payload.email === userEmail
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  async verify2FAAndLogin(
+    userEmail: string,
+    token: string,
+  ): Promise<string | null> {
     const user = await this.usersService.findOneByEmail(userEmail);
+
+    if (!user?.twoFactorAuthSecret) {
+      return null;
+    }
 
     const isValid = speakeasy.totp.verify({
       secret: user.twoFactorAuthSecret,
