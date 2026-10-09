@@ -2,7 +2,10 @@
 import { Controller, Post, Body, Headers, HttpException } from '@nestjs/common';
 import { PaymentsService } from '../../modules/payments/payments.service';
 import Stripe from 'stripe';
+import { Public } from '../decorators/public.decorator';
 
+// Called by the payment provider; authenticated by its signature.
+@Public()
 @Controller('webhooks')
 export class WebhookController {
   private stripe: Stripe;

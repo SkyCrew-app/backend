@@ -9,6 +9,7 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @Resolver(() => Administration)
 export class AdministrationResolver {
@@ -51,11 +52,14 @@ export class AdministrationResolver {
     return this.administrationService.remove(id);
   }
 
+  // Read by the frontend before any login, to show the maintenance page.
+  @Public()
   @Query(() => Boolean, { name: 'getSiteStatus' })
   getSiteStatus() {
     return this.administrationService.getMaintenance();
   }
 
+  @Public()
   @Query(() => String, { name: 'getMaintenanceDetails' })
   async getMaintenanceDetails() {
     const details = await this.administrationService.getMaintenanceDetails();
@@ -63,6 +67,8 @@ export class AdministrationResolver {
   }
 
   @Mutation(() => Boolean, { name: 'setSiteStatus' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   setSiteStatus() {
     return this.administrationService.setMaintenance();
   }

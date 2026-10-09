@@ -44,6 +44,7 @@ import { HealthModule } from './modules/health/health.module';
 import { ChecklistsModule } from './modules/checklists/checklists.module';
 import { APP_GUARD } from '@nestjs/core';
 import { DemoModeGuard } from './common/guards/demo-mode.guard';
+import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-default.guard';
 
 @Module({
   imports: [
@@ -188,6 +189,11 @@ import { DemoModeGuard } from './common/guards/demo-mode.guard';
     },
     CronService,
     GraphQLMetricsPlugin,
+    // Order matters: authenticate first, then apply the demo restrictions.
+    {
+      provide: APP_GUARD,
+      useClass: AuthenticatedByDefaultGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: DemoModeGuard,

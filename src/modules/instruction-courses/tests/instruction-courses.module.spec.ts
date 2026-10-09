@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { getDataSourceToken, getRepositoryToken } from '@nestjs/typeorm';
 import { InstructionCoursesModule } from '../instruction-courses.module';
 import { InstructionCourse } from '../entity/instruction-courses.entity';
@@ -20,7 +21,9 @@ describe('InstructionCoursesModule', () => {
 
   beforeEach(async () => {
     module = await Test.createTestingModule({
-      imports: [InstructionCoursesModule],
+      // The users module rate-limits some operations; the limiter is
+      // registered by the application module.
+      imports: [ThrottlerModule.forRoot([]), InstructionCoursesModule],
     })
       .overrideProvider(getRepositoryToken(InstructionCourse))
       .useValue({})

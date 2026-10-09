@@ -3,6 +3,12 @@ import { UsersService } from './users.service';
 import { User } from './entity/users.entity';
 import { ForbiddenException, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { Public } from '../../common/decorators/public.decorator';
+import {
+  GqlThrottlerGuard,
+  SECRET_ATTEMPT_LIMITS,
+} from '../../common/guards/gql-throttler.guard';
+import { Throttle } from '@nestjs/throttler';
 import { UpdateUserInput } from './dto/update-user.input';
 import { UpdateUserPreferencesInput } from './dto/update-user-preferences.input';
 import { DashboardWidgetConfigInput } from './dto/dashboard-widget-config.type';
@@ -140,7 +146,8 @@ export class UsersResolver {
   }
 
   @Mutation(() => User)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   async updatePassword(
     @Args('currentPassword') currentPassword: string,
     @Args('newPassword') newPassword: string,
@@ -164,6 +171,9 @@ export class UsersResolver {
     return this.visibleTo(currentUser, user);
   }
 
+  @Public()
+  @UseGuards(GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   @Mutation(() => User)
   async confirmEmailAndSetPassword(
     @Args('validation_token') token: string,
