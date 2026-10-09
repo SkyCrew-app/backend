@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.0](https://github.com/SkyCrew-app/backend/compare/2.6.7...2.7.0) (2026-10-09)
+
+
+### Features
+
+* **users:** :sparkles: add the members directory ([#119](https://github.com/SkyCrew-app/backend/issues/119)) ([b3ca220](https://github.com/SkyCrew-app/backend/commit/b3ca2205f49f3bbfb991d5d4d1d040b01d68a22f))
+
 ## [2.6.7](https://github.com/SkyCrew-app/backend/compare/2.6.6...2.6.7) (2026-10-09)
 
 
