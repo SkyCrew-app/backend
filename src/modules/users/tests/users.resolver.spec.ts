@@ -7,6 +7,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 
+const adminUser = {
+  id: 1,
+  email: 'admin@example.com',
+  role: { role_name: 'Administrateur' },
+} as any;
+
 describe('UsersResolver', () => {
   let resolver: UsersResolver;
   let usersService: Partial<UsersService>;
@@ -66,7 +72,7 @@ describe('UsersResolver', () => {
     const user = { id: 5, email: 'test@mail.com' };
     (usersService.findOneByEmail as jest.Mock).mockResolvedValue(user);
 
-    const result = await resolver.userByEmail('test@mail.com');
+    const result = await resolver.userByEmail('test@mail.com', adminUser);
 
     expect(usersService.findOneByEmail).toHaveBeenCalledWith('test@mail.com');
     expect(result).toBe(user);
@@ -83,9 +89,18 @@ describe('UsersResolver', () => {
       const updatedUser = { id: 1, first_name: 'Foo', last_name: 'Bar' };
       (usersService.updateUser as jest.Mock).mockResolvedValue(updatedUser);
 
-      const result = await resolver.updateUser(updateInput, undefined);
+      const result = await resolver.updateUser(
+        updateInput,
+        undefined,
+        adminUser,
+      );
 
-      expect(usersService.updateUser).toHaveBeenCalledWith(updateInput, null);
+      expect(usersService.updateUser).toHaveBeenCalledWith(
+        'foo@bar.com',
+        updateInput,
+        null,
+        { asAdmin: true },
+      );
       expect(result).toBe(updatedUser);
     });
 
@@ -123,6 +138,7 @@ describe('UsersResolver', () => {
       const result = await resolver.updateUser(
         updateInput,
         await fileUploadPromise,
+        adminUser,
       );
 
       expect(fs.existsSync).toHaveBeenCalledWith(
@@ -133,8 +149,10 @@ describe('UsersResolver', () => {
         { recursive: true },
       );
       expect(usersService.updateUser).toHaveBeenCalledWith(
+        'foo@bar.com',
         updateInput,
         expect.stringContaining('myfile.txt'),
+        { asAdmin: true },
       );
       expect(result).toBe(updatedUser);
     });
@@ -206,7 +224,7 @@ describe('UsersResolver', () => {
     const user = { id: 6, email: 'foo@bar.com' };
     (usersService.findOneById as jest.Mock).mockResolvedValue(user);
 
-    const result = await resolver.getUserDetails(6);
+    const result = await resolver.getUserDetails(6, adminUser);
 
     expect(usersService.findOneById).toHaveBeenCalledWith(6);
     expect(result).toBe(user);
@@ -234,7 +252,7 @@ describe('UsersResolver', () => {
     const user = { id: 8, language: 'fr' };
     (usersService.getUserPreferences as jest.Mock).mockResolvedValue(user);
 
-    const result = await resolver.getUserPreferences(8);
+    const result = await resolver.getUserPreferences(8, adminUser);
 
     expect(usersService.getUserPreferences).toHaveBeenCalledWith(8);
     expect(result).toBe(user);
@@ -253,7 +271,11 @@ describe('UsersResolver', () => {
       preferred_aerodrome: 'XYZ',
     };
 
-    const result = await resolver.updateUserPreferences(9, prefsInput);
+    const result = await resolver.updateUserPreferences(
+      9,
+      prefsInput,
+      adminUser,
+    );
 
     expect(usersService.updateUserPreferences).toHaveBeenCalledWith(
       9,
