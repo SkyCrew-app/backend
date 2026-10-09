@@ -21,6 +21,7 @@ import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { WeatherResponse } from './interfaces/weather.interface';
 import { computeBearing } from './utils/geo.utils';
+import { isAdmin, SessionUser } from '../../common/auth/access';
 
 export interface AIFlightOptions {
   preferred_runway_dep?: string;
@@ -265,19 +266,34 @@ export class FlightsService {
   async updateFlight(
     id: number,
     updateFlightInput: UpdateFlightInput,
+    requester?: SessionUser,
   ): Promise<Flight> {
-    const flight = await this.flightsRepository.findOne({ where: { id } });
+    const flight = await this.flightsRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
     if (!flight) {
       throw new NotFoundException(`Flight with ID ${id} not found`);
     }
 
-    if (updateFlightInput.waypoints) {
-      (updateFlightInput as any).waypoints = JSON.stringify(
-        updateFlightInput.waypoints,
-      );
+    const changes: Partial<UpdateFlightInput> = { ...updateFlightInput };
+
+    if (!isAdmin(requester)) {
+      if (Number(flight.user?.id) !== Number(requester?.id)) {
+        throw new ForbiddenException(
+          'Vous ne pouvez modifier que vos propres vols',
+        );
+      }
+      // Only an administrator moves a flight to another member or reservation.
+      delete changes.user_id;
+      delete changes.reservation_id;
     }
 
-    Object.assign(flight, updateFlightInput);
+    if (changes.waypoints) {
+      (changes as any).waypoints = JSON.stringify(changes.waypoints);
+    }
+
+    Object.assign(flight, changes);
     return this.flightsRepository.save(flight);
   }
 
