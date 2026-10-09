@@ -48,3 +48,16 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 3. Merge `main` back into `dev` afterwards so the version bump and changelog reach `dev`.
 
 Versions follow [Semantic Versioning](https://semver.org/): `fix` bumps the patch, `feat` the minor, a breaking change the major. Tags are never moved or deleted.
+
+## Database schema
+
+- In development the schema follows the entities automatically (`synchronize`).
+- In production (`NODE_ENV=production`) the schema is only changed by migrations, which run at startup. `DB_SYNCHRONIZE=true` or `false` overrides either default.
+- A change to an entity therefore needs a migration in the same pull request:
+
+  ```
+  npm run migration:generate --name=AddAircraftColour
+  ```
+
+  The command compares the entities with the database in `DATABASE_URL`, so run it against a database that is up to date with `dev`.
+- The first migration, `InitialSchema`, is skipped on databases that already had the schema before migrations were introduced.
