@@ -1,3 +1,4 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReservationsResolver } from '../reservations.resolver';
@@ -8,6 +9,22 @@ import { FlightCategory } from '../entity/reservations.entity';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 
+const admin = {
+  id: 1,
+  email: 'admin@example.com',
+  role: { role_name: 'Administrateur' },
+} as any;
+const holder = {
+  id: 3,
+  email: 'holder@example.com',
+  role: { role_name: 'Pilote' },
+} as any;
+const stranger = {
+  id: 7,
+  email: 'stranger@example.com',
+  role: { role_name: 'Pilote' },
+} as any;
+
 describe('ReservationsResolver', () => {
   let resolver: ReservationsResolver;
   let service: ReservationsService;
@@ -16,6 +33,7 @@ describe('ReservationsResolver', () => {
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    findOwnerId: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     findFilteredReservations: jest.fn(),
@@ -43,6 +61,11 @@ describe('ReservationsResolver', () => {
     service = module.get<ReservationsService>(ReservationsService);
   });
 
+  beforeEach(() => {
+    // By default the reservation exists and is held by user 3.
+    mockService.findOwnerId.mockResolvedValue(3);
+  });
+
   afterEach(() => {
     jest.clearAllMocks();
   });
@@ -65,7 +88,10 @@ describe('ReservationsResolver', () => {
       const expectedReservation = { id: 1, ...createReservationInput };
       mockService.create.mockResolvedValue(expectedReservation);
 
-      const result = await resolver.createReservation(createReservationInput);
+      const result = await resolver.createReservation(
+        createReservationInput,
+        admin,
+      );
 
       expect(mockService.create).toHaveBeenCalledWith(createReservationInput);
       expect(result).toEqual(expectedReservation);
@@ -83,7 +109,10 @@ describe('ReservationsResolver', () => {
       const expectedReservation = { id: 1, ...updateReservationInput };
       mockService.update.mockResolvedValue(expectedReservation);
 
-      const result = await resolver.updateReservation(updateReservationInput);
+      const result = await resolver.updateReservation(
+        updateReservationInput,
+        admin,
+      );
 
       expect(mockService.update).toHaveBeenCalledWith(updateReservationInput);
       expect(result).toEqual(expectedReservation);
@@ -95,7 +124,7 @@ describe('ReservationsResolver', () => {
       const id = 1;
       mockService.delete.mockResolvedValue(undefined);
 
-      const result = await resolver.deleteReservation(id);
+      const result = await resolver.deleteReservation(id, admin);
 
       expect(mockService.delete).toHaveBeenCalledWith(id);
       expect(result).toBe(true);
@@ -195,6 +224,70 @@ describe('ReservationsResolver', () => {
 
       expect(mockService.findRecentReservations).toHaveBeenCalledWith(limit);
       expect(result).toEqual(expectedReservations);
+    });
+  });
+  describe('authorization', () => {
+    const input = {
+      aircraft_id: 2,
+      user_id: 3,
+      start_time: new Date('2030-01-01T09:00:00Z'),
+      end_time: new Date('2030-01-01T11:00:00Z'),
+    } as any;
+
+    it('books for the session user, whatever user id is sent', async () => {
+      mockService.create.mockResolvedValue({ id: 1 });
+
+      await resolver.createReservation(input, stranger);
+
+      expect(mockService.create).toHaveBeenCalledWith({ ...input, user_id: 7 });
+    });
+
+    it('lets an administrator book for another user', async () => {
+      mockService.create.mockResolvedValue({ id: 1 });
+
+      await resolver.createReservation(input, admin);
+
+      expect(mockService.create).toHaveBeenCalledWith(input);
+    });
+
+    it('refuses a member changing a reservation they do not hold', async () => {
+      await expect(
+        resolver.updateReservation({ id: 10, purpose: 'x' } as any, stranger),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a member cancelling a reservation they do not hold', async () => {
+      await expect(resolver.deleteReservation(10, stranger)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockService.delete).not.toHaveBeenCalled();
+    });
+
+    it('lets the holder change and cancel their reservation', async () => {
+      mockService.update.mockResolvedValue({ id: 10 });
+
+      await resolver.updateReservation({ id: 10, purpose: 'x' } as any, holder);
+      await expect(resolver.deleteReservation(10, holder)).resolves.toBe(true);
+
+      expect(mockService.update).toHaveBeenCalledWith({ id: 10, purpose: 'x' });
+      expect(mockService.delete).toHaveBeenCalledWith(10);
+    });
+
+    it('does not let the holder hand the reservation to someone else', async () => {
+      mockService.update.mockResolvedValue({ id: 10 });
+
+      await resolver.updateReservation({ id: 10, user_id: 7 } as any, holder);
+
+      expect(mockService.update).toHaveBeenCalledWith({ id: 10 });
+    });
+
+    it('answers not found for an unknown reservation', async () => {
+      mockService.findOwnerId.mockResolvedValue(null);
+
+      await expect(resolver.deleteReservation(99, holder)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

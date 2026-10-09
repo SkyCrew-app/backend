@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   CourseResolver,
@@ -6,6 +7,13 @@ import {
 } from '../e-learning.resolver';
 import { ELearningService } from '../e-learning.service';
 import { UsersService } from '../../users/users.service';
+
+const admin = { id: 1, email: 'admin@example.com', role: 'Administrateur' };
+const member = (id: number) => ({
+  id,
+  email: `user${id}@example.com`,
+  role: { role_name: 'Pilote' },
+});
 
 describe('E-Learning Resolvers', () => {
   let courseResolver: CourseResolver;
@@ -97,11 +105,35 @@ describe('E-Learning Resolvers', () => {
     (eLearningService.getLessonContent as jest.Mock).mockResolvedValue({
       id: 7,
     });
-    expect(await lessonResolver.getLessonContent(7, 8)).toEqual({ id: 7 });
+    expect(await lessonResolver.getLessonContent(7, 8, admin)).toEqual({
+      id: 7,
+    });
   });
 
   it('completeLesson calls service', async () => {
-    await lessonResolver.completeLesson(9, 10);
+    await lessonResolver.completeLesson(9, 10, admin);
     expect(eLearningService.completeLesson).toHaveBeenCalledWith(10, 9);
+  });
+  describe('authorization', () => {
+    it("refuses recording another user's progress", async () => {
+      await expect(
+        lessonResolver.completeLesson(9, 7, member(3)),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        lessonResolver.getLessonContent(9, 7, member(3)),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("refuses a member reading a course with another user's progress", async () => {
+      await expect(
+        courseResolver.getCourseById(1, 7, member(3)),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lets a user complete their own lesson', async () => {
+      await expect(
+        lessonResolver.completeLesson(9, 3, member(3)),
+      ).resolves.toBe(true);
+    });
   });
 });

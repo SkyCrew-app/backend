@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, MoreThan, Between } from 'typeorm';
-import { Reservation, ReservationStatus, FlightCategory } from './entity/reservations.entity';
+import {
+  Reservation,
+  ReservationStatus,
+  FlightCategory,
+} from './entity/reservations.entity';
 import { ReservationTemplate } from './entity/reservation-template.entity';
 import { CreateReservationInput } from './dto/create-reservation.input';
 import { UpdateReservationInput } from './dto/update-reservation.input';
@@ -274,6 +278,15 @@ export class ReservationsService {
     return this.reservationRepository.find();
   }
 
+  // Id of the user who holds a reservation, or null if it does not exist.
+  async findOwnerId(id: number): Promise<number | null> {
+    const reservation = await this.reservationRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+    return reservation?.user?.id ?? null;
+  }
+
   async findOne(id: number): Promise<Reservation> {
     return this.reservationRepository.findOne({
       where: { id },
@@ -394,7 +407,9 @@ export class ReservationsService {
 
     if (input.aircraft_id !== undefined) {
       template.aircraft = input.aircraft_id
-        ? await this.aircraftRepository.findOne({ where: { id: input.aircraft_id } })
+        ? await this.aircraftRepository.findOne({
+            where: { id: input.aircraft_id },
+          })
         : null;
     }
 

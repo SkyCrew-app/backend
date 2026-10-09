@@ -16,10 +16,30 @@ import { UpdateChecklistSubmissionInput } from './dto/update-checklist-submissio
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../users/entity/users.entity';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import {
+  assertSelfOrRole,
+  hasRole,
+  isAdmin,
+  ROLE_INSTRUCTOR,
+  ROLE_TECHNICIAN,
+} from '../../common/auth/access';
 
 @Resolver()
 export class ChecklistsResolver {
   constructor(private readonly checklistsService: ChecklistsService) {}
+
+  // Only the pilot who started a submission, or an administrator, fills
+  // it in and completes it.
+  private async assertPilot(
+    user: User | undefined,
+    submissionId: number,
+  ): Promise<void> {
+    const submission =
+      await this.checklistsService.findOneSubmission(submissionId);
+    assertSelfOrRole(user, submission.pilot?.id);
+  }
 
   // ── Template Queries ───────────────────────────────────────
 
@@ -52,24 +72,47 @@ export class ChecklistsResolver {
 
   @Query(() => ChecklistSubmission, { name: 'checklistSubmission' })
   @UseGuards(JwtAuthGuard)
-  findOneSubmission(@Args('id', { type: () => Int }) id: number) {
-    return this.checklistsService.findOneSubmission(id);
+  async findOneSubmission(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() user?: User,
+  ) {
+    // A submission is read by its pilot and by the staff who review it.
+    const submission = await this.checklistsService.findOneSubmission(id);
+    assertSelfOrRole(
+      user,
+      submission.pilot?.id,
+      ROLE_INSTRUCTOR,
+      ROLE_TECHNICIAN,
+    );
+    return submission;
   }
 
   @Query(() => [ChecklistSubmission], {
     name: 'checklistSubmissionsByReservation',
   })
   @UseGuards(JwtAuthGuard)
-  findSubmissionsByReservation(
+  async findSubmissionsByReservation(
     @Args('reservationId', { type: () => Int }) reservationId: number,
+    @CurrentUser() user?: User,
   ) {
-    return this.checklistsService.findSubmissionsByReservation(reservationId);
+    const submissions =
+      await this.checklistsService.findSubmissionsByReservation(reservationId);
+
+    if (isAdmin(user) || hasRole(user, ROLE_INSTRUCTOR, ROLE_TECHNICIAN)) {
+      return submissions;
+    }
+
+    // A member only sees their own submissions for a reservation.
+    return submissions.filter(
+      (submission) => Number(submission.pilot?.id) === Number(user?.id),
+    );
   }
 
   // ── Template Mutations ─────────────────────────────────────
 
   @Mutation(() => ChecklistTemplate)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur', 'Technicien')
   createChecklistTemplate(
     @Args('createChecklistTemplateInput', {
       type: () => CreateChecklistTemplateInput,
@@ -81,7 +124,8 @@ export class ChecklistsResolver {
   }
 
   @Mutation(() => ChecklistTemplate)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur', 'Technicien')
   updateChecklistTemplate(
     @Args('updateChecklistTemplateInput', {
       type: () => UpdateChecklistTemplateInput,
@@ -94,7 +138,8 @@ export class ChecklistsResolver {
   // ── Item Mutations ─────────────────────────────────────────
 
   @Mutation(() => ChecklistItem)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur', 'Technicien')
   createChecklistItem(
     @Args('createChecklistItemInput', {
       type: () => CreateChecklistItemInput,
@@ -105,7 +150,8 @@ export class ChecklistsResolver {
   }
 
   @Mutation(() => ChecklistItem)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur', 'Technicien')
   updateChecklistItem(
     @Args('updateChecklistItemInput', {
       type: () => UpdateChecklistItemInput,
@@ -116,13 +162,15 @@ export class ChecklistsResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur', 'Technicien')
   deleteChecklistItem(@Args('id', { type: () => Int }) id: number) {
     return this.checklistsService.deleteItem(id);
   }
 
   @Mutation(() => [ChecklistItem])
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur', 'Technicien')
   reorderChecklistItems(
     @Args('templateId', { type: () => Int }) templateId: number,
     @Args('itemIds', { type: () => [Int] }) itemIds: number[],
@@ -144,18 +192,24 @@ export class ChecklistsResolver {
 
   @Mutation(() => ChecklistSubmission)
   @UseGuards(JwtAuthGuard)
-  updateChecklistSubmission(
+  async updateChecklistSubmission(
     @Args('updateChecklistSubmissionInput', {
       type: () => UpdateChecklistSubmissionInput,
     })
     input: UpdateChecklistSubmissionInput,
+    @CurrentUser() user?: User,
   ) {
+    await this.assertPilot(user, input.id);
     return this.checklistsService.updateSubmission(input);
   }
 
   @Mutation(() => ChecklistSubmission)
   @UseGuards(JwtAuthGuard)
-  completeChecklistSubmission(@Args('id', { type: () => Int }) id: number) {
+  async completeChecklistSubmission(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() user?: User,
+  ) {
+    await this.assertPilot(user, id);
     return this.checklistsService.completeSubmission(id);
   }
 }

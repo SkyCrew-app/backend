@@ -5,7 +5,17 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Socket, Server } from 'socket.io';
+
+const sessionTokenFrom = (cookieHeader?: string): string | null => {
+  const cookie = (cookieHeader ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => part.startsWith('token='));
+
+  return cookie ? decodeURIComponent(cookie.slice('token='.length)) : null;
+};
 
 @WebSocketGateway({
   cors: {
@@ -26,11 +36,35 @@ export class NotificationsGateway
   @WebSocketServer()
   server: Server;
 
+  // A client only ever joins its own room: the user comes from the session
+  // cookie sent with the handshake, never from a value supplied by the client.
   handleConnection(client: Socket) {
-    const userId = client.handshake.query.userId as string;
-    if (userId) {
-      client.join(`user-${userId}`);
-      this.logger.debug(`Client ${client.id} joined room user-${userId}`);
+    const userId = this.authenticate(client);
+
+    if (!userId) {
+      this.logger.debug(`Client ${client.id} refused: no valid session`);
+      client.disconnect(true);
+      return;
+    }
+
+    client.join(`user-${userId}`);
+    this.logger.debug(`Client ${client.id} joined room user-${userId}`);
+  }
+
+  private authenticate(client: Socket): number | null {
+    const token = sessionTokenFrom(client.handshake.headers?.cookie);
+    const secret = process.env.JWT_SECRET;
+
+    if (!token || !secret) {
+      return null;
+    }
+
+    try {
+      const payload = new JwtService({ secret }).verify(token);
+      // Single-purpose tokens (two-factor challenge…) are not sessions.
+      return payload.purpose ? null : (payload.sub ?? null);
+    } catch {
+      return null;
     }
   }
 
