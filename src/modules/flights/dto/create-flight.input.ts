@@ -8,7 +8,6 @@ import {
   Length,
   Min,
 } from 'class-validator';
-import { FlightCategory } from '../../reservations/entity/reservations.entity';
 
 @InputType()
 export class CreateFlightInput {
@@ -26,9 +25,13 @@ export class CreateFlightInput {
   @Min(0)
   flight_hours: number;
 
-  @Field(() => FlightCategory)
+  // Free text, like on the flight itself and on its update: the flight
+  // rules (VFR, IFR…) when planned by hand, the reservation category when
+  // created from a reservation.
+  @Field()
+  @IsString()
   @IsNotEmpty()
-  flight_type: FlightCategory;
+  flight_type: string;
 
   @Field()
   @IsString()
