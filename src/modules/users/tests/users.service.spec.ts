@@ -178,23 +178,54 @@ describe('UsersService', () => {
   });
 
   describe('set2FASecret', () => {
-    it("devrait enregistrer le secret 2FA de l'utilisateur, envoyer un email et créer une notification", async () => {
+    it('devrait enregistrer le secret en attente sans activer la 2FA ni notifier', async () => {
       const user = {
         id: 10,
         email: 'twofa@example.com',
         first_name: 'Jean',
-        twoFactorAuthSecret: null,
+        twoFactorAuthSecret: 'ACTIF',
+        twoFactorAuthPendingSecret: null,
       } as User;
       userRepository.findOne.mockResolvedValue(user);
-      (mailerService.sendMail as jest.Mock).mockResolvedValue(true);
 
       await service.set2FASecret('twofa@example.com', 'SECRET123');
 
-      expect(userRepository.findOne).toHaveBeenCalledWith({
-        where: { email: 'twofa@example.com' },
-        relations: ['reservations', 'licenses', 'role'],
-      });
+      expect(user.twoFactorAuthPendingSecret).toBe('SECRET123');
+      expect(user.twoFactorAuthSecret).toBe('ACTIF');
+      expect(userRepository.save).toHaveBeenCalledWith(user);
+      expect(mailerService.sendMail).not.toHaveBeenCalled();
+      expect(notificationsService.create).not.toHaveBeenCalled();
+    });
+
+    it("devrait lever une erreur si l'utilisateur n'existe pas", async () => {
+      userRepository.findOne.mockResolvedValue(undefined);
+
+      await expect(
+        service.set2FASecret('unknown@example.com', 'SECRET123'),
+      ).rejects.toThrow('User not found');
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('activate2FA', () => {
+    it('devrait activer le secret en attente, envoyer un email et créer une notification', async () => {
+      const user = {
+        id: 10,
+        email: 'twofa@example.com',
+        first_name: 'Jean',
+        is2FAEnabled: false,
+        twoFactorAuthSecret: null,
+        twoFactorAuthPendingSecret: 'SECRET123',
+      } as User;
+      userRepository.findOne.mockResolvedValue(user);
+      userRepository.save.mockResolvedValue(user);
+      (mailerService.sendMail as jest.Mock).mockResolvedValue(true);
+
+      await service.activate2FA('twofa@example.com');
+
       expect(user.twoFactorAuthSecret).toBe('SECRET123');
+      expect(user.twoFactorAuthPendingSecret).toBeNull();
+      expect(user.is2FAEnabled).toBe(true);
       expect(userRepository.save).toHaveBeenCalledWith(user);
       expect(mailerService.sendMail).toHaveBeenCalledWith(
         'twofa@example.com',
@@ -210,6 +241,40 @@ describe('UsersService', () => {
           message: 'Authentification à deux facteurs activée',
         }),
       );
+    });
+
+    it("devrait confirmer l'activation même si l'email ne part pas", async () => {
+      const user = {
+        id: 10,
+        email: 'twofa@example.com',
+        first_name: 'Jean',
+        is2FAEnabled: false,
+        twoFactorAuthPendingSecret: 'SECRET123',
+      } as User;
+      userRepository.findOne.mockResolvedValue(user);
+      userRepository.save.mockResolvedValue(user);
+      (mailerService.sendMail as jest.Mock).mockRejectedValue(
+        new Error('SMTP indisponible'),
+      );
+
+      await expect(service.activate2FA('twofa@example.com')).resolves.toBe(
+        user,
+      );
+      expect(user.twoFactorAuthSecret).toBe('SECRET123');
+      expect(user.is2FAEnabled).toBe(true);
+    });
+
+    it("devrait refuser s'il n'y a aucun secret en attente", async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 10,
+        twoFactorAuthPendingSecret: null,
+      } as User);
+
+      await expect(service.activate2FA('twofa@example.com')).rejects.toThrow(
+        'No two-factor secret is waiting for confirmation',
+      );
+      expect(userRepository.save).not.toHaveBeenCalled();
+      expect(mailerService.sendMail).not.toHaveBeenCalled();
     });
   });
 
@@ -319,29 +384,40 @@ describe('UsersService', () => {
       });
     });
 
-    it("devrait mettre à jour le statut 2FA de l'utilisateur et envoyer un email", async () => {
+    it("devrait refuser d'activer la 2FA sans secret confirmé", async () => {
       const user = {
         id: 11,
         email: 'foo@bar.com',
-        first_name: 'Foo',
         is2FAEnabled: false,
+        twoFactorAuthSecret: null,
       } as User;
       userRepository.findOne.mockResolvedValue(user);
-      // Simule la sauvegarde pour renvoyer l’utilisateur
+
+      await expect(
+        service.update2FAStatus('foo@bar.com', true),
+      ).rejects.toThrow('Two-factor authentication has not been set up');
+      expect(user.is2FAEnabled).toBe(false);
+      expect(userRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('devrait effacer les secrets quand la 2FA est désactivée', async () => {
+      const user = {
+        id: 11,
+        email: 'foo@bar.com',
+        is2FAEnabled: true,
+        twoFactorAuthSecret: 'ACTIF',
+        twoFactorAuthPendingSecret: 'EN_ATTENTE',
+      } as User;
+      userRepository.findOne.mockResolvedValue(user);
       userRepository.save.mockResolvedValue(user);
-      (mailerService.sendMail as jest.Mock).mockResolvedValue(true);
 
-      const result = await service.update2FAStatus('foo@bar.com', true);
+      const result = await service.update2FAStatus('foo@bar.com', false);
 
-      expect(user.is2FAEnabled).toBe(true);
-      expect(mailerService.sendMail).toHaveBeenCalledWith(
-        'foo@bar.com',
-        'Authentification à deux facteurs activée',
-        expect.any(String),
-        '2fa-enabled',
-        { first_name: 'Foo' },
-      );
+      expect(user.is2FAEnabled).toBe(false);
+      expect(user.twoFactorAuthSecret).toBeNull();
+      expect(user.twoFactorAuthPendingSecret).toBeNull();
       expect(userRepository.save).toHaveBeenCalledWith(user);
+      expect(mailerService.sendMail).not.toHaveBeenCalled();
       expect(result).toEqual(user);
     });
   });

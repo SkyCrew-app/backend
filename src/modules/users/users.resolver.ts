@@ -81,10 +81,17 @@ export class UsersResolver {
   @Mutation(() => User)
   @UseGuards(JwtAuthGuard)
   toggle2FA(
-    @Args('email') email: string,
+    @Context() context: { req: { user: { email: string } } },
     @Args('is2FAEnabled') is2FAEnabled: boolean,
+    // Kept for older clients. The change always applies to the
+    // authenticated user, never to an email supplied by the caller.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Args('email', { nullable: true }) _email?: string,
   ) {
-    return this.usersService.update2FAStatus(email, is2FAEnabled);
+    return this.usersService.update2FAStatus(
+      context.req.user.email,
+      is2FAEnabled,
+    );
   }
 
   @Mutation(() => User)
@@ -158,7 +165,8 @@ export class UsersResolver {
   @UseGuards(JwtAuthGuard)
   async updateDashboardWidgets(
     @Args('userId', { type: () => Int }) userId: number,
-    @Args('widgets', { type: () => [DashboardWidgetConfigInput] }) widgets: DashboardWidgetConfigInput[],
+    @Args('widgets', { type: () => [DashboardWidgetConfigInput] })
+    widgets: DashboardWidgetConfigInput[],
   ): Promise<User> {
     return this.usersService.updateDashboardWidgets(userId, widgets);
   }

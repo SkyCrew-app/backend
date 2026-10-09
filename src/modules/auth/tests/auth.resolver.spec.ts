@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthResolver } from '../auth.resolver';
 import { AuthService } from '../auth.service';
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { Response, Request } from 'express';
 
 describe('AuthResolver', () => {
@@ -17,6 +17,7 @@ describe('AuthResolver', () => {
       generate2FASecret: jest.fn(),
       verify2FACode: jest.fn(),
       verify2FAAndLogin: jest.fn(),
+      confirm2FA: jest.fn(),
       createTwoFactorChallenge: jest.fn().mockReturnValue('challenge-token'),
       isValidTwoFactorChallenge: jest.fn(),
     };
@@ -119,6 +120,28 @@ describe('AuthResolver', () => {
       expect(authService.generate2FASecret).toHaveBeenCalledTimes(1);
       expect(authService.generate2FASecret).toHaveBeenCalledWith(
         'a@example.com',
+      );
+    });
+  });
+
+  describe('confirm2FA', () => {
+    const req = { user: { email: 'a@example.com' } } as any;
+
+    it('confirms the code for the authenticated user', async () => {
+      (authService.confirm2FA as jest.Mock).mockResolvedValue(true);
+
+      await expect(resolver.confirm2FA(req, '123456')).resolves.toBe(true);
+      expect(authService.confirm2FA).toHaveBeenCalledWith(
+        'a@example.com',
+        '123456',
+      );
+    });
+
+    it('rejects a wrong code', async () => {
+      (authService.confirm2FA as jest.Mock).mockResolvedValue(false);
+
+      await expect(resolver.confirm2FA(req, '000000')).rejects.toThrow(
+        BadRequestException,
       );
     });
   });
