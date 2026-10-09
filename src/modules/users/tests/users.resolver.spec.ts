@@ -144,8 +144,11 @@ describe('UsersResolver', () => {
     const user = { id: 3, is2FAEnabled: true };
     (usersService.update2FAStatus as jest.Mock).mockResolvedValue(user);
 
-    const result = await resolver.toggle2FA('user@mail.com', true);
+    const context = { req: { user: { email: 'user@mail.com' } } };
+    const result = await resolver.toggle2FA(context, true, 'victim@mail.com');
 
+    // L'email fourni par l'appelant est ignoré au profit de la session.
+    expect(usersService.update2FAStatus).toHaveBeenCalledTimes(1);
     expect(usersService.update2FAStatus).toHaveBeenCalledWith(
       'user@mail.com',
       true,

@@ -1,4 +1,4 @@
-import { ObjectType, Field, Int } from '@nestjs/graphql';
+import { ObjectType, Field, Int, FieldMiddleware } from '@nestjs/graphql';
 import {
   Entity,
   Column,
@@ -16,6 +16,9 @@ import { Payment } from '../../payments/entity/payments.entity';
 import { Answer } from '../../eval/entity/answer.entity';
 import { UserProgress } from './user-progress.entity';
 import { DashboardWidgetConfig } from '../dto/dashboard-widget-config.type';
+
+// Credentials stay in the schema for older clients but are never returned.
+const neverExposed: FieldMiddleware = async () => null;
 
 @ObjectType()
 @Entity('users')
@@ -36,7 +39,11 @@ export class User {
   @Column({ unique: true })
   email: string;
 
-  @Field({ nullable: true })
+  @Field({
+    nullable: true,
+    deprecationReason: 'Never returned.',
+    middleware: [neverExposed],
+  })
   @Column({ nullable: true })
   password: string;
 
@@ -48,9 +55,12 @@ export class User {
   @Column({ default: false })
   isEmailConfirmed: boolean;
 
-  @Field({ nullable: true })
   @Column({ nullable: true })
   twoFactorAuthSecret: string;
+
+  // Secret shown to the user but not yet confirmed with a first code.
+  @Column({ nullable: true })
+  twoFactorAuthPendingSecret: string;
 
   @Field({ nullable: true })
   @Column({ nullable: true })
@@ -88,7 +98,11 @@ export class User {
   @Column({ default: true })
   newsletter_subscribed: boolean;
 
-  @Field({ nullable: true })
+  @Field({
+    nullable: true,
+    deprecationReason: 'Never returned.',
+    middleware: [neverExposed],
+  })
   @Column({ nullable: true })
   validation_token: string;
 

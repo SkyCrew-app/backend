@@ -19,8 +19,22 @@ describe('FlightPlanGeneratorService', () => {
     continent: 'EU',
     runways: ['09L/27R', '09R/27L', '08L/26R', '08R/26L'],
     runway_details: [
-      { le_ident: '09L', he_ident: '27R', length_ft: 13829, width_ft: 148, surface: 'ASP', lighted: true },
-      { le_ident: '09R', he_ident: '27L', length_ft: 8858, width_ft: 197, surface: 'ASP', lighted: true },
+      {
+        le_ident: '09L',
+        he_ident: '27R',
+        length_ft: 13829,
+        width_ft: 148,
+        surface: 'ASP',
+        lighted: true,
+      },
+      {
+        le_ident: '09R',
+        he_ident: '27L',
+        length_ft: 8858,
+        width_ft: 197,
+        surface: 'ASP',
+        lighted: true,
+      },
     ],
     frequencies: [
       { type: 'TWR', value: '119.250' },
@@ -43,7 +57,14 @@ describe('FlightPlanGeneratorService', () => {
     continent: 'EU',
     runways: ['07/25', '03/21'],
     runway_details: [
-      { le_ident: '07', he_ident: '25', length_ft: 9843, width_ft: 148, surface: 'ASP', lighted: true },
+      {
+        le_ident: '07',
+        he_ident: '25',
+        length_ft: 9843,
+        width_ft: 148,
+        surface: 'ASP',
+        lighted: true,
+      },
     ],
     frequencies: [
       { type: 'TWR', value: '120.900' },
@@ -64,8 +85,22 @@ describe('FlightPlanGeneratorService', () => {
     continent: 'EU',
     runways: ['14L/32R', '14R/32L'],
     runway_details: [
-      { le_ident: '14L', he_ident: '32R', length_ft: 11483, width_ft: 148, surface: 'ASP', lighted: true },
-      { le_ident: '14R', he_ident: '32L', length_ft: 9842, width_ft: 148, surface: 'ASP', lighted: true },
+      {
+        le_ident: '14L',
+        he_ident: '32R',
+        length_ft: 11483,
+        width_ft: 148,
+        surface: 'ASP',
+        lighted: true,
+      },
+      {
+        le_ident: '14R',
+        he_ident: '32L',
+        length_ft: 9842,
+        width_ft: 148,
+        surface: 'ASP',
+        lighted: true,
+      },
     ],
     frequencies: [
       { type: 'TWR', value: '118.100' },
@@ -87,7 +122,14 @@ describe('FlightPlanGeneratorService', () => {
     continent: 'NA',
     runways: ['04L/22R', '04R/22L', '13L/31R', '13R/31L'],
     runway_details: [
-      { le_ident: '04L', he_ident: '22R', length_ft: 12079, width_ft: 200, surface: 'ASP', lighted: true },
+      {
+        le_ident: '04L',
+        he_ident: '22R',
+        length_ft: 12079,
+        width_ft: 200,
+        surface: 'ASP',
+        lighted: true,
+      },
     ],
     frequencies: [
       { type: 'TWR', value: '119.100' },
@@ -254,7 +296,7 @@ describe('FlightPlanGeneratorService', () => {
       rawOb: 'METAR LFPG 09012KT',
       temp: 15,
       dewp: 8,
-      wdir: 90,  // wind from 090
+      wdir: 90, // wind from 090
       wspd: 12,
       wgst: null,
       visib: 10,
@@ -361,7 +403,9 @@ describe('FlightPlanGeneratorService', () => {
     // With the airway graph, FIX idents should be short real navaid names
     // (e.g., "BT", "TOU", "LMG") not coordinate-based (e.g., "N4530E00335")
     if (fixes.length > 0) {
-      const hasRealNavaid = fixes.some((f) => f.ident.length <= 5 && !/^[NS]\d/.test(f.ident));
+      const hasRealNavaid = fixes.some(
+        (f) => f.ident.length <= 5 && !/^[NS]\d/.test(f.ident),
+      );
       expect(hasRealNavaid).toBe(true);
     }
   });

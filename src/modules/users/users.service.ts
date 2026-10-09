@@ -67,12 +67,28 @@ export class UsersService {
     return this.usersRepository.save(newUser);
   }
 
+  // Stores the secret shown to the user. It only becomes active once
+  // confirmed with a first code, see activate2FA.
   async set2FASecret(email: string, secret: string): Promise<void> {
     const user = await this.findOneByEmail(email);
-    if (user) {
-      user.twoFactorAuthSecret = secret;
-      await this.usersRepository.save(user);
+    if (!user) {
+      throw new Error('User not found');
     }
+
+    user.twoFactorAuthPendingSecret = secret;
+    await this.usersRepository.save(user);
+  }
+
+  async activate2FA(email: string): Promise<User> {
+    const user = await this.findOneByEmail(email);
+    if (!user?.twoFactorAuthPendingSecret) {
+      throw new Error('No two-factor secret is waiting for confirmation');
+    }
+
+    user.twoFactorAuthSecret = user.twoFactorAuthPendingSecret;
+    user.twoFactorAuthPendingSecret = null;
+    user.is2FAEnabled = true;
+    const savedUser = await this.usersRepository.save(user);
 
     await this.emailService.sendMail(
       user.email,
@@ -89,6 +105,8 @@ export class UsersService {
       message: 'Authentification à deux facteurs activée',
       is_read: false,
     });
+
+    return savedUser;
   }
 
   async setPassword(email: string, password: string): Promise<void> {
@@ -149,15 +167,18 @@ export class UsersService {
       throw new Error('User not found');
     }
 
-    await this.emailService.sendMail(
-      user.email,
-      'Authentification à deux facteurs activée',
-      "L'authentification à deux facteurs a été activée avec succès",
-      '2fa-enabled',
-      { first_name: user.first_name },
-    );
+    if (is2FAEnabled) {
+      // Enabling goes through generate2FASecret then confirm2FA.
+      if (!user.twoFactorAuthSecret) {
+        throw new Error('Two-factor authentication has not been set up');
+      }
+      user.is2FAEnabled = true;
+      return this.usersRepository.save(user);
+    }
 
-    user.is2FAEnabled = is2FAEnabled;
+    user.is2FAEnabled = false;
+    user.twoFactorAuthSecret = null;
+    user.twoFactorAuthPendingSecret = null;
     return this.usersRepository.save(user);
   }
 
