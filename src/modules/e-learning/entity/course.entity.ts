@@ -28,7 +28,10 @@ export class Course {
   @OneToMany(() => Module, (module) => module.course)
   modules: Module[];
 
-  @Field(() => LicenseType, { description: 'Required license for this course' })
+  @Field(() => LicenseType, {
+    description: 'Required license for this course',
+    nullable: true,
+  })
   @Column({ type: 'enum', enum: LicenseType, nullable: true })
   required_license?: LicenseType;
 }

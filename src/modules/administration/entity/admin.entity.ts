@@ -61,7 +61,7 @@ export class Administration {
   @Column('float')
   flightHourRate: number;
 
-  @Field()
+  @Field({ nullable: true })
   @Column('text', { nullable: true })
   clubRules: string;
 
@@ -89,7 +89,7 @@ export class Administration {
   @Column({ type: 'timestamp', nullable: true })
   maintenanceTime: Date;
 
-  @Field(() => Taxonomies)
+  @Field(() => Taxonomies, { nullable: true })
   @Column('jsonb', { nullable: true })
   taxonomies: Taxonomies;
 

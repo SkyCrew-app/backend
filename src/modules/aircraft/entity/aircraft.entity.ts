@@ -39,15 +39,15 @@ export class Aircraft {
   @Column()
   year_of_manufacture: number;
 
-  @Field(() => Int)
+  @Field(() => Int, { nullable: true })
   @Column({ nullable: true })
   maxAltitude: number;
 
-  @Field(() => Int)
+  @Field(() => Int, { nullable: true })
   @Column({ nullable: true })
   cruiseSpeed: number;
 
-  @Field(() => Int)
+  @Field(() => Int, { nullable: true })
   @Column({ nullable: true })
   consumption: number;
 
