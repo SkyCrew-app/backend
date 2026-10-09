@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.6](https://github.com/SkyCrew-app/backend/compare/2.6.5...2.6.6) (2026-10-09)
+
+
+### Bug Fixes
+
+* **api:** :bug: accept empty optional fields on aircraft, club settings and courses ([#112](https://github.com/SkyCrew-app/backend/issues/112)) ([2df8a32](https://github.com/SkyCrew-app/backend/commit/2df8a327c461febbca116f49fd3da2d5c7986fa5))
+
 ## [2.6.5](https://github.com/SkyCrew-app/backend/compare/2.6.4...2.6.5) (2026-10-09)
 
 
