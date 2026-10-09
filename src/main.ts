@@ -9,6 +9,7 @@ import * as express from 'express';
 import helmet from 'helmet';
 import { join } from 'path';
 import { protectUploads } from './common/middleware/protect-uploads.middleware';
+import { validationPipeOptions } from './config/validation.config';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://staging.skycrew.fr',
@@ -77,13 +78,7 @@ async function bootstrap() {
     express.static(join(__dirname, 'uploads')),
   );
 
-  app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-    }),
-  );
+  app.useGlobalPipes(new ValidationPipe(validationPipeOptions));
 
   await app.listen(port, () => {
     console.log(`🚀 Application is running on: http://localhost:${port}`);
