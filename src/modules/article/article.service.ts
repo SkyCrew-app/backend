@@ -109,8 +109,11 @@ export class ArticlesService {
 
   async remove(id: number): Promise<Article> {
     const article = await this.findOne(id);
+    // The repository clears the identifier of the entity it removes; the API
+    // still answers with the article that was deleted.
+    const removed = { ...article } as Article;
     await this.articlesRepository.remove(article);
-    return article;
+    return removed;
   }
 
   private generateCalendarLink(
