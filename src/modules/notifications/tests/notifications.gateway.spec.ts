@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsGateway } from '../notifications.gateway';
 import { Socket, Server } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
 
 describe('NotificationsGateway', () => {
   let gateway: NotificationsGateway;
@@ -27,6 +28,7 @@ describe('NotificationsGateway', () => {
         query: {},
       },
       join: jest.fn(),
+      disconnect: jest.fn(),
     } as any;
 
     gateway.server = mockServer;
@@ -42,28 +44,54 @@ describe('NotificationsGateway', () => {
   });
 
   describe('handleConnection', () => {
-    it('should join user room when userId is provided', () => {
-      mockSocket.handshake.query.userId = '123';
-
+    const SECRET = 'gateway-test-secret';
+    const sign = (payload: object, secret = SECRET) =>
+      new JwtService({ secret }).sign(payload, { expiresIn: '5m' });
+    const connectWith = (cookie?: string, query: object = {}) => {
+      (mockSocket.handshake as any) = { query, headers: { cookie } };
       gateway.handleConnection(mockSocket);
+    };
 
+    beforeEach(() => {
+      process.env.JWT_SECRET = SECRET;
+    });
+
+    it('joins the room of the user in the session cookie', () => {
+      connectWith(`email=a%40b.c; token=${sign({ sub: 123, email: 'a@b.c' })}`);
+
+      expect(mockSocket.join).toHaveBeenCalledWith('user-123');
+      expect(mockSocket.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('ignores a user id supplied by the client', () => {
+      connectWith(`token=${sign({ sub: 123 })}`, { userId: '999' });
+
+      expect(mockSocket.join).toHaveBeenCalledTimes(1);
       expect(mockSocket.join).toHaveBeenCalledWith('user-123');
     });
 
-    it('should not join room when userId is not provided', () => {
-      mockSocket.handshake.query.userId = undefined;
+    it.each([
+      ['no cookie', undefined],
+      ['a cookie without token', 'email=a%40b.c'],
+      ['a malformed token', 'token=not-a-jwt'],
+      ['a token signed with another secret', `token=${'PLACEHOLDER'}`],
+    ])('refuses and disconnects a client with %s', (label, cookie) => {
+      const value =
+        label === 'a token signed with another secret'
+          ? `token=${sign({ sub: 123 }, 'another-secret')}`
+          : cookie;
 
-      gateway.handleConnection(mockSocket);
+      connectWith(value, { userId: '123' });
 
       expect(mockSocket.join).not.toHaveBeenCalled();
+      expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
     });
 
-    it('should not join room when userId is empty string', () => {
-      mockSocket.handshake.query.userId = '';
-
-      gateway.handleConnection(mockSocket);
+    it('refuses a single-purpose token such as the two-factor challenge', () => {
+      connectWith(`token=${sign({ sub: 123, purpose: '2fa' })}`);
 
       expect(mockSocket.join).not.toHaveBeenCalled();
+      expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
     });
   });
 
