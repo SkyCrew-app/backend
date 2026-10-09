@@ -25,6 +25,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any): Promise<User> {
+    // Single-purpose tokens (two-factor challenge…) are not session tokens.
+    if (payload.purpose) {
+      throw new UnauthorizedException();
+    }
+
     const user = await this.usersService.findOneByEmail(payload.email);
     if (!user) {
       throw new UnauthorizedException();
