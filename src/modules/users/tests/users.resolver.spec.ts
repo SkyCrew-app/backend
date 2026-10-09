@@ -78,6 +78,37 @@ describe('UsersResolver', () => {
     expect(result).toBe(user);
   });
 
+  it('membersDirectory only exposes the directory entry of each member', async () => {
+    const role = { id: 2, role_name: 'Instructeur' };
+    (usersService.findAll as jest.Mock).mockResolvedValue([
+      {
+        id: 4,
+        first_name: 'Marie',
+        last_name: 'Laurent',
+        email: 'marie@example.com',
+        phone_number: '0102030405',
+        profile_picture: null,
+        role,
+        password: 'hash',
+        user_account_balance: 2100,
+        date_of_birth: new Date('1985-01-01'),
+        address: '1 rue du Test',
+      },
+    ]);
+
+    await expect(resolver.membersDirectory()).resolves.toEqual([
+      {
+        id: 4,
+        first_name: 'Marie',
+        last_name: 'Laurent',
+        email: 'marie@example.com',
+        phone_number: '0102030405',
+        profile_picture: null,
+        role,
+      },
+    ]);
+  });
+
   describe('updateUser mutation', () => {
     const updateInput: UpdateUserInput = {
       email: 'foo@bar.com',

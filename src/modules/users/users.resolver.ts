@@ -39,6 +39,15 @@ export class UsersResolver {
     return this.usersService.findAll();
   }
 
+  // The club directory: every member sees the name, contact and role of the
+  // others, which is what booking a course or reaching someone requires.
+  @Query(() => [User])
+  @UseGuards(JwtAuthGuard)
+  async membersDirectory() {
+    const users = await this.usersService.findAll();
+    return users.map((user) => this.directoryEntry(user));
+  }
+
   @Mutation(() => User)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
@@ -238,6 +247,10 @@ export class UsersResolver {
       return user;
     }
 
+    return this.directoryEntry(user);
+  }
+
+  private directoryEntry(user: User) {
     return {
       id: user.id,
       first_name: user.first_name,
@@ -245,6 +258,7 @@ export class UsersResolver {
       email: user.email,
       phone_number: user.phone_number,
       profile_picture: user.profile_picture,
+      role: user.role,
     };
   }
 
