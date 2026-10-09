@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Transporter } from 'nodemailer';
 import * as Handlebars from 'handlebars';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 @Injectable()
@@ -17,12 +17,8 @@ export class MailerService {
     templateName: string,
     variables: { [key: string]: any },
   ): Promise<void> {
-    // Utiliser un chemin qui fonctionnera en développement et en production
     const templatePath = join(
-      process.cwd(),
-      process.env.NODE_ENV === 'production' ? 'dist' : 'src',
-      'modules',
-      'templates',
+      this.resolveTemplatesDirectory(),
       `${templateName}.hbs`,
     );
     const html = this.loadTemplate(templatePath, variables);
@@ -36,6 +32,17 @@ export class MailerService {
     });
   }
 
+  // Templates sit next to the compiled modules once built
+  // (dist/src/modules/templates). When running from sources without a
+  // build, they are only present in the source tree.
+  private resolveTemplatesDirectory(): string {
+    const besideCompiledModules = join(__dirname, '..', 'templates');
+
+    return existsSync(besideCompiledModules)
+      ? besideCompiledModules
+      : join(process.cwd(), 'src', 'modules', 'templates');
+  }
+
   private loadTemplate(
     templatePath: string,
     variables: { [key: string]: any },
@@ -45,7 +52,9 @@ export class MailerService {
       const template = Handlebars.compile(templateFile);
       return template(variables);
     } catch (error) {
-      new Logger(MailerService.name).error(`Erreur lors du chargement du template: ${error.message}`);
+      new Logger(MailerService.name).error(
+        `Erreur lors du chargement du template: ${error.message}`,
+      );
       throw error;
     }
   }
