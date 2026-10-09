@@ -20,6 +20,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { ELearningService } from '../e-learning/e-learning.service';
 import { UserProgress } from '../users/entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
+import { User } from '../users/entity/users.entity';
 
 @Injectable()
 export class InstructionCoursesService {
@@ -165,7 +166,20 @@ export class InstructionCoursesService {
     input: UpdateCourseInstructionInput,
   ): Promise<InstructionCourse> {
     const course = await this.findOne(id);
-    Object.assign(course, input);
+
+    // The instructor and the student are relations: their ids cannot simply
+    // be copied onto the course.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _id, instructorId, studentId, ...fields } = input;
+    Object.assign(course, fields);
+
+    if (instructorId) {
+      course.instructor = { id: instructorId } as User;
+    }
+    if (studentId) {
+      course.student = { id: studentId } as User;
+    }
+
     return this.courseRepository.save(course);
   }
 
