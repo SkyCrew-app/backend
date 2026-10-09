@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.4](https://github.com/SkyCrew-app/backend/compare/2.6.3...2.6.4) (2026-10-09)
+
+
+### Bug Fixes
+
+* **flights:** :bug: accept the flight rules as flight type when a flight is created ([#102](https://github.com/SkyCrew-app/backend/issues/102)) ([2d432cc](https://github.com/SkyCrew-app/backend/commit/2d432cc25ea2ba896dfbf2ab5d8fb3579eee35b6))
+* **flights:** :bug: let a member update their own flight ([#103](https://github.com/SkyCrew-app/backend/issues/103)) ([19a429c](https://github.com/SkyCrew-app/backend/commit/19a429cc9378e7163dc19a58d3bb7eeb159a0c6a))
+
 ## [2.6.3](https://github.com/SkyCrew-app/backend/compare/2.6.2...2.6.3) (2026-10-09)
 
 
