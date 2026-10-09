@@ -87,4 +87,15 @@ describe('ArticlesService', () => {
     await expect(service.findAll()).resolves.toEqual([]);
     await expect(service.remove(1)).resolves.toEqual({ id: 1 });
   });
+
+  it('remove answers with the article even though its id is cleared', async () => {
+    (repo.findOne as jest.Mock).mockResolvedValue({ id: 7, title: 'T' });
+    // TypeORM empties the identifier of the entity it removes.
+    (repo.remove as jest.Mock).mockImplementation(async (entity) => {
+      delete entity.id;
+      return entity;
+    });
+
+    await expect(service.remove(7)).resolves.toEqual({ id: 7, title: 'T' });
+  });
 });
