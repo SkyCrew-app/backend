@@ -50,6 +50,56 @@ describe('MailerService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('templates', () => {
+    const shippedTemplates = [
+      '2fa-enabled',
+      'change-password',
+      'confirmation-email',
+      'reservation-cancellation',
+      'reservation-confirmation',
+      'reservation-modification',
+      'update-user',
+    ];
+
+    it.each(shippedTemplates)(
+      'finds and renders the %s template from the module directory',
+      async (templateName) => {
+        jest.restoreAllMocks();
+
+        await service.sendMail(
+          'user@example.com',
+          'Subject',
+          'Text',
+          templateName,
+          {
+            first_name: 'Jean',
+          },
+        );
+
+        const [{ html }] = (transporter.sendMail as jest.Mock).mock.calls.at(
+          -1,
+        );
+        expect(html).toContain('<');
+        expect(html.length).toBeGreaterThan(100);
+      },
+    );
+
+    it('does not depend on the working directory or NODE_ENV', async () => {
+      jest.restoreAllMocks();
+      const cwd = jest.spyOn(process, 'cwd').mockReturnValue('/somewhere/else');
+      process.env.NODE_ENV = 'production';
+
+      await expect(
+        service.sendMail('user@example.com', 'Subject', 'Text', '2fa-enabled', {
+          first_name: 'Jean',
+        }),
+      ).resolves.toBeUndefined();
+
+      cwd.mockRestore();
+      process.env.NODE_ENV = 'test';
+    });
+  });
+
   describe('sendMail', () => {
     it('should load the template, compile variables and send email', async () => {
       const to = 'user@example.com';
