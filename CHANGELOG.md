@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.5](https://github.com/SkyCrew-app/backend/compare/2.6.4...2.6.5) (2026-10-09)
+
+
+### Bug Fixes
+
+* **checklists:** :bug: keep a checklist completed when a save arrives at the same time ([#105](https://github.com/SkyCrew-app/backend/issues/105)) ([c9fff25](https://github.com/SkyCrew-app/backend/commit/c9fff250bfaba21bb0133cc985c7133efa58a230))
+* **courses:** :bug: return the author with a new course comment ([#108](https://github.com/SkyCrew-app/backend/issues/108)) ([cb4b73c](https://github.com/SkyCrew-app/backend/commit/cb4b73c0b2d450b422514ccbf431912dd2062f4f))
+
 ## [2.6.4](https://github.com/SkyCrew-app/backend/compare/2.6.3...2.6.4) (2026-10-09)
 
 
