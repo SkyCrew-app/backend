@@ -37,11 +37,75 @@ describe('User Seeder', () => {
 
     consoleSpy = jest.spyOn(console, 'log').mockImplementation();
     bcryptSpy = bcrypt.hash as jest.Mock;
+    process.env.ADMIN_PASSWORD = 'configured-password';
+    delete process.env.ADMIN_EMAIL;
   });
 
   afterEach(() => {
     jest.clearAllMocks();
     consoleSpy.mockRestore();
+    delete process.env.ADMIN_PASSWORD;
+    delete process.env.ADMIN_EMAIL;
+  });
+
+  it('should generate a random password when none is configured', async () => {
+    delete process.env.ADMIN_PASSWORD;
+    userRepository.findOne.mockResolvedValue(null);
+    roleRepository.findOne.mockResolvedValue({
+      id: 1,
+      role_name: 'Administrateur',
+    } as any);
+    bcryptSpy.mockResolvedValue('hashed');
+    userRepository.create.mockReturnValue({} as any);
+    userRepository.save.mockResolvedValue({} as any);
+
+    await seedAdminUser(dataSource);
+    await seedAdminUser(dataSource);
+
+    const [first, second] = bcryptSpy.mock.calls.map(([password]) => password);
+    expect(first).toHaveLength(24);
+    expect(second).toHaveLength(24);
+    expect(first).not.toBe(second);
+    expect(consoleSpy).toHaveBeenCalledWith(
+      `ADMIN_PASSWORD is not set. Generated password for admin@example.com: ${first}`,
+    );
+  });
+
+  it('should not print the password when it is configured', async () => {
+    userRepository.findOne.mockResolvedValue(null);
+    roleRepository.findOne.mockResolvedValue({
+      id: 1,
+      role_name: 'Administrateur',
+    } as any);
+    bcryptSpy.mockResolvedValue('hashed');
+    userRepository.create.mockReturnValue({} as any);
+    userRepository.save.mockResolvedValue({} as any);
+
+    await seedAdminUser(dataSource);
+
+    const printed = consoleSpy.mock.calls.flat().join(' ');
+    expect(printed).not.toContain('configured-password');
+  });
+
+  it('should use the configured admin email', async () => {
+    process.env.ADMIN_EMAIL = 'chief@skycrew.test';
+    userRepository.findOne.mockResolvedValue(null);
+    roleRepository.findOne.mockResolvedValue({
+      id: 1,
+      role_name: 'Administrateur',
+    } as any);
+    bcryptSpy.mockResolvedValue('hashed');
+    userRepository.create.mockReturnValue({} as any);
+    userRepository.save.mockResolvedValue({} as any);
+
+    await seedAdminUser(dataSource);
+
+    expect(userRepository.findOne).toHaveBeenCalledWith({
+      where: { email: 'chief@skycrew.test' },
+    });
+    expect(userRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'chief@skycrew.test' }),
+    );
   });
 
   it('should create admin user when none exists', async () => {
@@ -65,7 +129,7 @@ describe('User Seeder', () => {
     expect(roleRepository.findOne).toHaveBeenCalledWith({
       where: { role_name: 'Administrateur' },
     });
-    expect(bcrypt.hash).toHaveBeenCalledWith('adminpassword123', 10);
+    expect(bcrypt.hash).toHaveBeenCalledWith('configured-password', 10);
 
     expect(userRepository.create).toHaveBeenCalledWith({
       first_name: 'Admin',
@@ -134,7 +198,7 @@ describe('User Seeder', () => {
     await seedAdminUser(dataSource);
 
     // Assert
-    expect(bcrypt.hash).toHaveBeenCalledWith('adminpassword123', 10);
+    expect(bcrypt.hash).toHaveBeenCalledWith('configured-password', 10);
   });
 
   it('should create user with correct default values', async () => {
