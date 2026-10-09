@@ -260,15 +260,23 @@ describe('InstructionCoursesService', () => {
       const course = { id: 9, student: { id: 10 } } as any;
       jest.spyOn(service, 'findOne').mockResolvedValue(course);
       const comment = { id: 11 } as any;
+      const withAuthor = { id: 11, author: { id: 10, first_name: 'Jean' } };
       (commentRepo.create as jest.Mock).mockReturnValue(comment);
       (commentRepo.save as jest.Mock).mockResolvedValue(comment);
+      (commentRepo.findOne as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue(withAuthor);
       expect(
         await service.addComment({
           courseId: 9,
           content: 'Nice',
           author: 10,
         } as any),
-      ).toBe(comment);
+      ).toBe(withAuthor);
+      expect(commentRepo.findOne).toHaveBeenCalledWith({
+        where: { id: 11 },
+        relations: ['author'],
+      });
       expect(notifications.create).toHaveBeenCalledWith(
         expect.objectContaining({ notification_type: 'COURSE_COMMENT' }),
       );
