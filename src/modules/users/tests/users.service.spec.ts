@@ -332,7 +332,11 @@ describe('UsersService', () => {
       });
 
       // Appel sans imagePath (imagePath = null)
-      const updatedUser = await service.updateUser(updateInput, null);
+      const updatedUser = await service.updateUser(
+        'update@example.com',
+        updateInput,
+        null,
+      );
 
       expect(mailerService.sendMail).toHaveBeenCalledWith(
         existingUser.email,
@@ -357,7 +361,7 @@ describe('UsersService', () => {
 
       // Appel avec un chemin d'image fourni
       const imagePath = '/uploads/tmp/profile.png';
-      await service.updateUser(updateInput, imagePath);
+      await service.updateUser('update@example.com', updateInput, imagePath);
       expect(fs.existsSync).toHaveBeenCalledWith(
         expect.stringContaining(`/uploads/users/3`),
       );
@@ -369,6 +373,95 @@ describe('UsersService', () => {
       expect(existingUser.profile_picture).toEqual(
         expect.stringContaining(`/uploads/users/3/profile.png`),
       );
+    });
+  });
+
+  describe('updateUser, champs autorisés', () => {
+    const mockFilesystem = () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    };
+
+    it("ne laisse pas l'intéressé changer son mot de passe, son rôle ni ses dates d'adhésion", async () => {
+      mockFilesystem();
+      const user = {
+        id: 3,
+        email: 'pilot@example.com',
+        first_name: 'Old',
+        password: 'hash-existant',
+        is_instructor: false,
+        role: { id: 2 },
+      } as any;
+      userRepository.findOneOrFail.mockResolvedValue(user);
+      userRepository.save.mockImplementation(async (u) => u);
+
+      await service.updateUser(
+        'pilot@example.com',
+        {
+          first_name: 'New',
+          password: 'pirate',
+          roleId: 1,
+          is_instructor: true,
+          membership_end_date: new Date('2099-01-01'),
+          profile_picture: '/uploads/users/1/autre.png',
+          id: 999,
+        } as any,
+        null,
+      );
+
+      expect(user.first_name).toBe('New');
+      expect(user.password).toBe('hash-existant');
+      expect(user.role).toEqual({ id: 2 });
+      expect(user.is_instructor).toBe(false);
+      expect(user.membership_end_date).toBeUndefined();
+      expect(user.profile_picture).toBeUndefined();
+      expect(user.id).toBe(3);
+    });
+
+    it("laisse un administrateur changer le rôle et l'adhésion, mais jamais le mot de passe", async () => {
+      mockFilesystem();
+      const user = {
+        id: 3,
+        email: 'pilot@example.com',
+        password: 'hash-existant',
+        is_instructor: false,
+        role: { id: 2 },
+      } as any;
+      userRepository.findOneOrFail.mockResolvedValue(user);
+      userRepository.save.mockImplementation(async (u) => u);
+      const end = new Date('2099-01-01');
+
+      await service.updateUser(
+        'pilot@example.com',
+        {
+          password: 'pirate',
+          roleId: 4,
+          is_instructor: true,
+          membership_end_date: end,
+        } as any,
+        null,
+        { asAdmin: true },
+      );
+
+      expect(user.role).toEqual({ id: 4 });
+      expect(user.is_instructor).toBe(true);
+      expect(user.membership_end_date).toBe(end);
+      expect(user.password).toBe('hash-existant');
+    });
+
+    it("cible le compte demandé par l'appelant, pas l'email du formulaire", async () => {
+      mockFilesystem();
+      userRepository.findOneOrFail.mockResolvedValue({ id: 3 } as any);
+      userRepository.save.mockImplementation(async (u) => u);
+
+      await service.updateUser(
+        'pilot@example.com',
+        { email: 'victim@example.com', first_name: 'X' } as any,
+        null,
+      );
+
+      expect(userRepository.findOneOrFail).toHaveBeenCalledWith({
+        where: { email: 'pilot@example.com' },
+      });
     });
   });
 

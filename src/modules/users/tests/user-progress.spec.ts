@@ -2,6 +2,12 @@ import { UserProgressResolver } from '../users.resolver';
 import { UsersService } from '../users.service';
 import { EvalService } from '../../eval/eval.service';
 
+const adminUser = {
+  id: 1,
+  email: 'admin@example.com',
+  role: { role_name: 'Administrateur' },
+} as any;
+
 describe('UserProgressResolver', () => {
   let resolver: UserProgressResolver;
   let usersService: Partial<UsersService>;
@@ -30,7 +36,7 @@ describe('UserProgressResolver', () => {
       evalResults,
     );
 
-    const result = await resolver.getUserProgressByEvaluation(5);
+    const result = await resolver.getUserProgressByEvaluation(5, adminUser);
 
     expect(evalService.getUserEvaluationResults).toHaveBeenCalledWith(5);
     expect(result).toBe(evalResults);
@@ -39,7 +45,7 @@ describe('UserProgressResolver', () => {
   it('getCourseProgress devrait renvoyer le pourcentage de progression via UsersService.getCourseProgress', async () => {
     (usersService.getCourseProgress as jest.Mock).mockResolvedValue(50);
 
-    const result = await resolver.getCourseProgress(2, 100);
+    const result = await resolver.getCourseProgress(2, 100, adminUser);
 
     expect(usersService.getCourseProgress).toHaveBeenCalledWith(2, 100);
     expect(result).toBe(50);
@@ -48,7 +54,7 @@ describe('UserProgressResolver', () => {
   it('markLessonStarted devrait appeler UsersService.markLessonStarted et retourner true', async () => {
     (usersService.markLessonStarted as jest.Mock).mockResolvedValue(undefined);
 
-    const result = await resolver.markLessonStarted(1, 10);
+    const result = await resolver.markLessonStarted(1, 10, adminUser);
 
     expect(usersService.markLessonStarted).toHaveBeenCalledWith(1, 10);
     expect(result).toBe(true);
@@ -59,7 +65,7 @@ describe('UserProgressResolver', () => {
       undefined,
     );
 
-    const result = await resolver.markLessonCompleted(1, 10);
+    const result = await resolver.markLessonCompleted(1, 10, adminUser);
 
     expect(usersService.markLessonCompleted).toHaveBeenCalledWith(1, 10);
     expect(result).toBe(true);
@@ -71,7 +77,7 @@ describe('UserProgressResolver', () => {
       progressList,
     );
 
-    const result = await resolver.getUserEvaluationResults(7);
+    const result = await resolver.getUserEvaluationResults(7, adminUser);
 
     expect(usersService.getEvaluationResults).toHaveBeenCalledWith(7);
     expect(result).toBe(progressList);
@@ -80,7 +86,7 @@ describe('UserProgressResolver', () => {
   it('getUserProgress devrait indiquer si la leçon est complétée via UsersService.getUserProgress', async () => {
     (usersService.getUserProgress as jest.Mock).mockResolvedValue(true);
 
-    const result = await resolver.getUserProgress(3, 8);
+    const result = await resolver.getUserProgress(3, 8, adminUser);
 
     expect(usersService.getUserProgress).toHaveBeenCalledWith(3, 8);
     expect(result).toBe(true);

@@ -3,6 +3,7 @@ import { AuthResolver } from '../auth.resolver';
 import { AuthService } from '../auth.service';
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { Response, Request } from 'express';
+import { GqlThrottlerGuard } from '../../../common/guards/gql-throttler.guard';
 
 describe('AuthResolver', () => {
   let resolver: AuthResolver;
@@ -29,7 +30,10 @@ describe('AuthResolver', () => {
         AuthResolver,
         { provide: AuthService, useValue: authService },
       ],
-    }).compile();
+    })
+      .overrideGuard(GqlThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     resolver = module.get<AuthResolver>(AuthResolver);
   });

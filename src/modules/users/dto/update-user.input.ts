@@ -11,8 +11,10 @@ export class UpdateUserInput {
   @Field({ nullable: true })
   last_name?: string;
 
-  @Field({ nullable: false })
-  email: string;
+  // Identifies the user to update. Only administrators may target
+  // someone else; other callers always update their own account.
+  @Field({ nullable: true })
+  email?: string;
 
   @Field({ nullable: true })
   password?: string;

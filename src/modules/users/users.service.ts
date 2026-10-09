@@ -11,6 +11,25 @@ import { v4 as uuidv4 } from 'uuid';
 import { UserProgress } from './entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { Role } from '../roles/entity/roles.entity';
+
+const SELF_EDITABLE_FIELDS = [
+  'first_name',
+  'last_name',
+  'phone_number',
+  'address',
+  'date_of_birth',
+  'language',
+  'speed_unit',
+  'distance_unit',
+  'timezone',
+] as const;
+
+const ADMIN_EDITABLE_FIELDS = [
+  'membership_start_date',
+  'membership_end_date',
+  'is_instructor',
+] as const;
 
 @Injectable()
 export class UsersService {
@@ -128,11 +147,13 @@ export class UsersService {
   }
 
   async updateUser(
+    targetEmail: string,
     updateUserInput: UpdateUserInput,
     imagePath: string | null,
+    { asAdmin = false }: { asAdmin?: boolean } = {},
   ): Promise<User> {
     const user = await this.usersRepository.findOneOrFail({
-      where: { email: updateUserInput.email },
+      where: { email: targetEmail },
     });
 
     const userDir = path.join(
@@ -150,7 +171,21 @@ export class UsersService {
       user.profile_picture = `/uploads/users/${user.id}/${path.basename(imagePath)}`;
     }
 
-    Object.assign(user, updateUserInput);
+    // Only copy the fields the caller may change. The password has its own
+    // mutation, and the picture only changes through an upload.
+    const editableFields = asAdmin
+      ? [...SELF_EDITABLE_FIELDS, ...ADMIN_EDITABLE_FIELDS]
+      : SELF_EDITABLE_FIELDS;
+
+    for (const field of editableFields) {
+      if (updateUserInput[field] !== undefined) {
+        (user as any)[field] = updateUserInput[field];
+      }
+    }
+
+    if (asAdmin && updateUserInput.roleId) {
+      user.role = { id: updateUserInput.roleId } as Role;
+    }
 
     await this.emailService.sendMail(
       user.email,

@@ -6,12 +6,14 @@ import {
   PrometheusModule,
 } from '@willsoto/nestjs-prometheus';
 import { MetricsService } from './metrics.service';
+import { MetricsController } from './metrics.controller';
 import { GraphQLMetricsPlugin } from './plugins/metrics.plugin';
 
 @Module({
   imports: [
     PrometheusModule.register({
       path: '/metrics',
+      controller: MetricsController,
       defaultMetrics: {
         enabled: false,
         config: {

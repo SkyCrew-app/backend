@@ -37,6 +37,16 @@ describe('JwtAuthGuard', () => {
       expect(result).toBe(fakeReq);
     });
 
+    it('devrait retourner la requête HTTP pour une route REST', () => {
+      const httpRequest = { cookies: { token: 'jwt' } };
+      const httpContext = {
+        getType: () => 'http',
+        switchToHttp: () => ({ getRequest: () => httpRequest }),
+      } as unknown as ExecutionContext;
+
+      expect(guard.getRequest(httpContext)).toBe(httpRequest);
+    });
+
     it('devrait retourner undefined si aucun request trouvé', () => {
       // Simulation d'un contexte sans req
       (GqlExecutionContext.create as jest.Mock).mockReturnValue({

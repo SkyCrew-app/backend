@@ -1,3 +1,4 @@
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
@@ -17,7 +18,14 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Behind a reverse proxy, the client address comes from X-Forwarded-For.
+  // TRUST_PROXY is the number of proxies in front of the application; leave
+  // it unset when the application is reached directly.
+  if (process.env.TRUST_PROXY) {
+    app.set('trust proxy', Number(process.env.TRUST_PROXY));
+  }
   const port = process.env.PORT || 3000;
   const enableSwagger =
     process.env.NODE_ENV !== 'production' ||

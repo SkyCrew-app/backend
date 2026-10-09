@@ -6,7 +6,10 @@ import {
   MemoryHealthIndicator,
   DiskHealthIndicator,
 } from '@nestjs/terminus';
+import { Public } from '../../common/decorators/public.decorator';
 
+// Probed by orchestrators and load balancers, which have no session.
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(

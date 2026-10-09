@@ -1,8 +1,14 @@
 import { Resolver, Query, Mutation, Args, Context, Int } from '@nestjs/graphql';
 import { UsersService } from './users.service';
 import { User } from './entity/users.entity';
-import { UseGuards } from '@nestjs/common';
+import { ForbiddenException, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { Public } from '../../common/decorators/public.decorator';
+import {
+  GqlThrottlerGuard,
+  SECRET_ATTEMPT_LIMITS,
+} from '../../common/guards/gql-throttler.guard';
+import { Throttle } from '@nestjs/throttler';
 import { UpdateUserInput } from './dto/update-user.input';
 import { UpdateUserPreferencesInput } from './dto/update-user-preferences.input';
 import { DashboardWidgetConfigInput } from './dto/dashboard-widget-config.type';
@@ -14,6 +20,13 @@ import { Evaluation } from '../eval/entity/evaluation.entity';
 import { UserProgress } from './entity/user-progress.entity';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {
+  assertSelfOrRole,
+  hasRole,
+  isAdmin,
+  ROLE_INSTRUCTOR,
+} from '../../common/auth/access';
 
 @Resolver(() => User)
 export class UsersResolver {
@@ -45,8 +58,12 @@ export class UsersResolver {
 
   @Query(() => User)
   @UseGuards(JwtAuthGuard)
-  userByEmail(@Args('email') email: string) {
-    return this.usersService.findOneByEmail(email);
+  async userByEmail(
+    @Args('email') email: string,
+    @CurrentUser() currentUser?: User,
+  ) {
+    const user = await this.usersService.findOneByEmail(email);
+    return this.visibleTo(currentUser, user);
   }
 
   @Mutation(() => User)
@@ -55,7 +72,19 @@ export class UsersResolver {
     @Args('updateUserInput') updateUserInput: UpdateUserInput,
     @Args({ name: 'image', type: () => GraphQLUpload, nullable: true })
     image?: FileUpload,
+    @CurrentUser() currentUser?: User,
   ): Promise<User> {
+    const asAdmin = isAdmin(currentUser);
+    const requestedEmail = updateUserInput.email;
+
+    if (!asAdmin && requestedEmail && requestedEmail !== currentUser.email) {
+      throw new ForbiddenException('You can only update your own account');
+    }
+
+    const targetEmail = asAdmin
+      ? requestedEmail || currentUser.email
+      : currentUser.email;
+
     let imagePath: string | null = null;
 
     if (image) {
@@ -75,7 +104,12 @@ export class UsersResolver {
       });
     }
 
-    return this.usersService.updateUser(updateUserInput, imagePath);
+    return this.usersService.updateUser(
+      targetEmail,
+      updateUserInput,
+      imagePath,
+      { asAdmin },
+    );
   }
 
   @Mutation(() => User)
@@ -112,7 +146,8 @@ export class UsersResolver {
   }
 
   @Mutation(() => User)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   async updatePassword(
     @Args('currentPassword') currentPassword: string,
     @Args('newPassword') newPassword: string,
@@ -128,10 +163,17 @@ export class UsersResolver {
 
   @Query(() => User)
   @UseGuards(JwtAuthGuard)
-  async getUserDetails(@Args('id', { type: () => Int }) id: number) {
-    return this.usersService.findOneById(id);
+  async getUserDetails(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() currentUser?: User,
+  ) {
+    const user = await this.usersService.findOneById(id);
+    return this.visibleTo(currentUser, user);
   }
 
+  @Public()
+  @UseGuards(GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   @Mutation(() => User)
   async confirmEmailAndSetPassword(
     @Args('validation_token') token: string,
@@ -142,15 +184,22 @@ export class UsersResolver {
 
   @Query(() => User)
   @UseGuards(JwtAuthGuard)
-  async getUserPreferences(@Args('userId') userId: number): Promise<User> {
+  async getUserPreferences(
+    @Args('userId') userId: number,
+    @CurrentUser() currentUser?: User,
+  ): Promise<User> {
+    assertSelfOrRole(currentUser, userId);
     return this.usersService.getUserPreferences(userId);
   }
   @Mutation(() => User)
+  @UseGuards(JwtAuthGuard)
   async updateUserPreferences(
     @Args('userId', { type: () => Number }) userId: number,
     @Args('preference', { type: () => UpdateUserPreferencesInput })
     preference: UpdateUserPreferencesInput,
+    @CurrentUser() currentUser?: User,
   ): Promise<User> {
+    assertSelfOrRole(currentUser, userId);
     return this.usersService.updateUserPreferences(
       userId,
       preference.language,
@@ -167,8 +216,36 @@ export class UsersResolver {
     @Args('userId', { type: () => Int }) userId: number,
     @Args('widgets', { type: () => [DashboardWidgetConfigInput] })
     widgets: DashboardWidgetConfigInput[],
+    @CurrentUser() currentUser?: User,
   ): Promise<User> {
+    assertSelfOrRole(currentUser, userId);
     return this.usersService.updateDashboardWidgets(userId, widgets);
+  }
+
+  // Members see each other's directory entry (name and contact). The full
+  // profile is for the user themselves, instructors and administrators.
+  private visibleTo(currentUser: User | undefined, user: User | null) {
+    if (!user) {
+      return user;
+    }
+
+    const seesFullProfile =
+      Number(currentUser?.id) === Number(user.id) ||
+      isAdmin(currentUser) ||
+      hasRole(currentUser, ROLE_INSTRUCTOR);
+
+    if (seesFullProfile) {
+      return user;
+    }
+
+    return {
+      id: user.id,
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone_number: user.phone_number,
+      profile_picture: user.profile_picture,
+    };
   }
 
   @Query(() => User)
@@ -195,7 +272,9 @@ export class UserProgressResolver {
   @UseGuards(JwtAuthGuard)
   async getUserProgressByEvaluation(
     @Args('userId') userId: number,
+    @CurrentUser() currentUser?: User,
   ): Promise<any[]> {
+    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
     return this.evalService.getUserEvaluationResults(userId);
   }
 
@@ -204,7 +283,9 @@ export class UserProgressResolver {
   async getCourseProgress(
     @Args('userId') userId: number,
     @Args('courseId') courseId: number,
+    @CurrentUser() currentUser?: User,
   ): Promise<number> {
+    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
     return this.usersService.getCourseProgress(userId, courseId);
   }
 
@@ -213,7 +294,9 @@ export class UserProgressResolver {
   async markLessonStarted(
     @Args('userId') userId: number,
     @Args('lessonId') lessonId: number,
+    @CurrentUser() currentUser?: User,
   ): Promise<boolean> {
+    assertSelfOrRole(currentUser, userId);
     await this.usersService.markLessonStarted(userId, lessonId);
     return true;
   }
@@ -223,7 +306,9 @@ export class UserProgressResolver {
   async markLessonCompleted(
     @Args('userId') userId: number,
     @Args('lessonId') lessonId: number,
+    @CurrentUser() currentUser?: User,
   ): Promise<boolean> {
+    assertSelfOrRole(currentUser, userId);
     await this.usersService.markLessonCompleted(userId, lessonId);
     return true;
   }
@@ -232,7 +317,9 @@ export class UserProgressResolver {
   @UseGuards(JwtAuthGuard)
   async getUserEvaluationResults(
     @Args('userId') userId: number,
+    @CurrentUser() currentUser?: User,
   ): Promise<UserProgress[]> {
+    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
     return this.usersService.getEvaluationResults(userId);
   }
 
@@ -241,7 +328,9 @@ export class UserProgressResolver {
   async getUserProgress(
     @Args('userId') userId: number,
     @Args('lessonId') lessonId: number,
+    @CurrentUser() currentUser?: User,
   ): Promise<boolean> {
+    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
     return this.usersService.getUserProgress(userId, lessonId);
   }
 }
