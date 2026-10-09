@@ -46,6 +46,15 @@ export class NotificationsService {
     return await this.notificationRepository.findOne({ where: { id } });
   }
 
+  // Id of the user a notification belongs to, or null if it does not exist.
+  async findOwnerId(id: number): Promise<number | null> {
+    const notification = await this.notificationRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+    return notification?.user?.id ?? null;
+  }
+
   async update(
     updateNotificationInput: UpdateNotificationInput,
   ): Promise<Notification> {
