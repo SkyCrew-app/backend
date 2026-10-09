@@ -1,7 +1,24 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { InvoicesResolver } from '../invoices.resolver';
 import { InvoicesService } from '../invoices.service';
 import { Invoice } from '../entity/invoices.entity';
+
+const admin = {
+  id: 1,
+  email: 'admin@example.com',
+  role: { role_name: 'Administrateur' },
+} as any;
+const holder = {
+  id: 3,
+  email: 'holder@example.com',
+  role: { role_name: 'Pilote' },
+} as any;
+const stranger = {
+  id: 7,
+  email: 'stranger@example.com',
+  role: { role_name: 'Pilote' },
+} as any;
 
 describe('InvoicesResolver', () => {
   let resolver: InvoicesResolver;
@@ -43,9 +60,8 @@ describe('InvoicesResolver', () => {
 
   it('invoice query should return service.findOne', () => {
     const inv = {} as Invoice;
-    (service.findOne as jest.Mock).mockReturnValue(inv);
-    expect(resolver.findOne(2)).toBe(inv);
-    expect(service.findOne).toHaveBeenCalledWith(2);
+    (service.findOne as jest.Mock).mockResolvedValue(inv);
+    return expect(resolver.findOne(2, admin)).resolves.toBe(inv);
   });
 
   it('updateInvoice should call service.update', () => {
@@ -65,7 +81,37 @@ describe('InvoicesResolver', () => {
   it('invoicesByUser should call service.findByUser', () => {
     const arr = [] as Invoice[];
     (service.findByUser as jest.Mock).mockReturnValue(arr);
-    expect(resolver.invoicesByUser(5)).toBe(arr);
+    expect(resolver.invoicesByUser(5, admin)).toBe(arr);
     expect(service.findByUser).toHaveBeenCalledWith(5);
+  });
+  describe('authorization', () => {
+    it("refuses a member listing another user's invoices", () => {
+      expect(() => resolver.invoicesByUser(3, stranger)).toThrow(
+        ForbiddenException,
+      );
+      expect(service.findByUser).not.toHaveBeenCalled();
+    });
+
+    it('lets a member list their own invoices', () => {
+      const invoices = [] as Invoice[];
+      (service.findByUser as jest.Mock).mockReturnValue(invoices);
+
+      expect(resolver.invoicesByUser(3, holder)).toBe(invoices);
+    });
+
+    it("refuses a member reading another user's invoice", async () => {
+      (service.findOne as jest.Mock).mockResolvedValue({ user: { id: 3 } });
+
+      await expect(resolver.findOne(2, stranger)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('lets a member read their own invoice', async () => {
+      const invoice = { user: { id: 3 } };
+      (service.findOne as jest.Mock).mockResolvedValue(invoice);
+
+      await expect(resolver.findOne(2, holder)).resolves.toBe(invoice);
+    });
   });
 });

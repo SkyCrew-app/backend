@@ -8,13 +8,17 @@ import { UpdateInvoiceInput } from './dto/update-invoice.input';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { assertSelfOrRole, SessionUser } from '../../common/auth/access';
 
 @Resolver(() => Invoice)
 export class InvoicesResolver {
   constructor(private readonly invoicesService: InvoicesService) {}
 
+  // Invoices are issued by the application or by an administrator.
   @Mutation(() => Invoice)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   createInvoice(
     @Args('createInvoiceInput') createInvoiceInput: CreateInvoiceInput,
   ) {
@@ -30,8 +34,15 @@ export class InvoicesResolver {
 
   @Query(() => Invoice, { name: 'invoice' })
   @UseGuards(JwtAuthGuard)
-  findOne(@Args('id', { type: () => Int }) id: number) {
-    return this.invoicesService.findOne(id);
+  async findOne(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() currentUser?: SessionUser,
+  ) {
+    const invoice = await this.invoicesService.findOne(id);
+    if (invoice) {
+      assertSelfOrRole(currentUser, invoice.user?.id);
+    }
+    return invoice;
   }
 
   @Mutation(() => Invoice)
@@ -55,7 +66,11 @@ export class InvoicesResolver {
 
   @Query(() => [Invoice])
   @UseGuards(JwtAuthGuard)
-  invoicesByUser(@Args('userId', { type: () => Int }) userId: number) {
+  invoicesByUser(
+    @Args('userId', { type: () => Int }) userId: number,
+    @CurrentUser() currentUser?: SessionUser,
+  ) {
+    assertSelfOrRole(currentUser, userId);
     return this.invoicesService.findByUser(userId);
   }
 }
