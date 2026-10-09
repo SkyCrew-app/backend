@@ -155,42 +155,40 @@ export class ChecklistsService {
     return this.findOneSubmission(saved.id);
   }
 
+  // Saving answers and completing a checklist can reach the server at the same
+  // time. Each one writes only its own columns, so neither undoes the other.
   async updateSubmission(
     input: UpdateChecklistSubmissionInput,
   ): Promise<ChecklistSubmission> {
-    const submission = await this.submissionRepository.findOne({
-      where: { id: input.id },
-      relations: ['template', 'template.items', 'pilot', 'reservation'],
-    });
-    if (!submission) {
-      throw new NotFoundException(
-        `Checklist submission with ID ${input.id} not found`,
-      );
-    }
-
-    submission.responses = input.responses;
-
+    const changes: Partial<ChecklistSubmission> = {
+      responses: input.responses,
+    };
     if (input.completed) {
-      submission.status = ChecklistSubmissionStatus.COMPLETED;
-      submission.completed_at = new Date();
+      changes.status = ChecklistSubmissionStatus.COMPLETED;
+      changes.completed_at = new Date();
     }
 
-    return this.submissionRepository.save(submission);
+    return this.writeSubmission(input.id, changes);
   }
 
   async completeSubmission(id: number): Promise<ChecklistSubmission> {
-    const submission = await this.submissionRepository.findOne({
-      where: { id },
-      relations: ['template', 'template.items', 'pilot', 'reservation'],
+    return this.writeSubmission(id, {
+      status: ChecklistSubmissionStatus.COMPLETED,
+      completed_at: new Date(),
     });
-    if (!submission) {
+  }
+
+  private async writeSubmission(
+    id: number,
+    changes: Partial<ChecklistSubmission>,
+  ): Promise<ChecklistSubmission> {
+    const result = await this.submissionRepository.update(id, changes as any);
+    if (!result.affected) {
       throw new NotFoundException(
         `Checklist submission with ID ${id} not found`,
       );
     }
-    submission.status = ChecklistSubmissionStatus.COMPLETED;
-    submission.completed_at = new Date();
-    return this.submissionRepository.save(submission);
+    return this.findOneSubmission(id);
   }
 
   async findSubmissionsByPilot(

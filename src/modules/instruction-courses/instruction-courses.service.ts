@@ -258,7 +258,14 @@ export class InstructionCoursesService {
       is_read: false,
     });
 
-    return this.commentRepository.save(comment);
+    const saved = await this.commentRepository.save(comment);
+
+    // Reloaded with its author: the saved entity only carries the author id,
+    // and the API returns the author's name with the comment.
+    return this.commentRepository.findOne({
+      where: { id: saved.id },
+      relations: ['author'],
+    });
   }
 
   // Whether the instructor has at least one course with this student.
