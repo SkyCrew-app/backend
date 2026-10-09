@@ -2,7 +2,6 @@ import { DataSource } from 'typeorm';
 import { User } from '../modules/users/entity/users.entity';
 import { Role } from '../modules/roles/entity/roles.entity';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
 
 const DEFAULT_ADMIN_EMAIL = 'admin@example.com';
 
@@ -29,10 +28,14 @@ export const seedAdminUser = async (dataSource: DataSource): Promise<void> => {
     throw new Error('Admin role not found. Please seed roles first.');
   }
 
-  // Never ship a known password: use the configured one or generate one.
-  const configuredPassword = process.env.ADMIN_PASSWORD;
-  const adminPassword =
-    configuredPassword || randomBytes(18).toString('base64url');
+  // Never ship a known password: the operator has to choose one.
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminPassword) {
+    throw new Error(
+      'ADMIN_PASSWORD must be set to create the first administrator.',
+    );
+  }
 
   const saltRounds = 10;
   const hashedPassword = await bcrypt.hash(adminPassword, saltRounds);
@@ -54,10 +57,4 @@ export const seedAdminUser = async (dataSource: DataSource): Promise<void> => {
 
   await userRepository.save(adminUser);
   console.log('Admin user created successfully');
-
-  if (!configuredPassword) {
-    console.log(
-      `ADMIN_PASSWORD is not set. Generated password for ${adminEmail}: ${adminPassword}`,
-    );
-  }
 };
