@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.6.2](https://github.com/SkyCrew-app/backend/compare/2.6.1...2.6.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* :bug: accept mutations whose input has no validation rule ([#93](https://github.com/SkyCrew-app/backend/issues/93)) ([4af3ce0](https://github.com/SkyCrew-app/backend/commit/4af3ce02416600b0ab3d2c99be4e3981443499f8))
+* **eval:** :bug: keep question options that contain a comma in one piece ([#92](https://github.com/SkyCrew-app/backend/issues/92)) ([4e75026](https://github.com/SkyCrew-app/backend/commit/4e75026bbe6d9b521b90aa6f1e3c314f249e416a))
+* **eval:** :lock: keep answer keys and licences from members who should not see them ([#91](https://github.com/SkyCrew-app/backend/issues/91)) ([f05e7b7](https://github.com/SkyCrew-app/backend/commit/f05e7b7b5c3becc6cd745b52ddfc1f03a5ab0e65))
+
 ## [2.6.1](https://github.com/SkyCrew-app/backend/compare/2.6.0...2.6.1) (2026-10-09)
 
 
