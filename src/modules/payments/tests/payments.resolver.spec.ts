@@ -1,9 +1,21 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PaymentsResolver } from '../payments.resolver';
 import { PaymentsService } from '../payments.service';
 import { CreatePaymentInput } from '../dto/create-payment.input';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
+
+const admin = {
+  id: 1,
+  email: 'admin@example.com',
+  role: { role_name: 'Administrateur' },
+};
+const pilot = {
+  id: 3,
+  email: 'pilot@example.com',
+  role: { role_name: 'Pilote' },
+};
 
 describe('PaymentsResolver', () => {
   let resolver: PaymentsResolver;
@@ -90,7 +102,7 @@ describe('PaymentsResolver', () => {
 
       mockService.findOne.mockResolvedValue(expectedPayment);
 
-      const result = await resolver.findOne(id);
+      const result = await resolver.findOne(id, admin);
 
       expect(mockService.findOne).toHaveBeenCalledWith(id);
       expect(result).toEqual(expectedPayment);
@@ -104,7 +116,7 @@ describe('PaymentsResolver', () => {
 
       mockService.findByUser.mockResolvedValue(expectedPayments);
 
-      const result = await resolver.paymentsByUser(userId);
+      const result = await resolver.paymentsByUser(userId, admin);
 
       expect(mockService.findByUser).toHaveBeenCalledWith(userId);
       expect(result).toEqual(expectedPayments);
@@ -118,7 +130,7 @@ describe('PaymentsResolver', () => {
 
       mockService.findByInvoice.mockResolvedValue(expectedPayments);
 
-      const result = await resolver.paymentsByInvoice(invoiceId);
+      const result = await resolver.paymentsByInvoice(invoiceId, admin);
 
       expect(mockService.findByInvoice).toHaveBeenCalledWith(invoiceId);
       expect(result).toEqual(expectedPayments);
@@ -145,7 +157,7 @@ describe('PaymentsResolver', () => {
 
       mockService.processPayment.mockResolvedValue(mockPayment);
 
-      const result = await resolver.processPayment(createPaymentInput);
+      const result = await resolver.processPayment(createPaymentInput, admin);
 
       expect(mockService.processPayment).toHaveBeenCalledWith(
         createPaymentInput,
@@ -180,7 +192,7 @@ describe('PaymentsResolver', () => {
 
       mockService.processPayment.mockResolvedValue(mockPayment);
 
-      const result = await resolver.processPayment(createPaymentInput);
+      const result = await resolver.processPayment(createPaymentInput, admin);
 
       expect(result.client_secret).toBeNull();
     });
@@ -204,9 +216,9 @@ describe('PaymentsResolver', () => {
 
       mockService.processPayment.mockResolvedValue(mockPayment);
 
-      await expect(resolver.processPayment(createPaymentInput)).rejects.toThrow(
-        'User not found for payment',
-      );
+      await expect(
+        resolver.processPayment(createPaymentInput, admin),
+      ).rejects.toThrow('User not found for payment');
     });
   });
 
@@ -251,6 +263,92 @@ describe('PaymentsResolver', () => {
         amount,
       );
       expect(result).toEqual(expectedPayment);
+    });
+  });
+  describe('authorization', () => {
+    it('refuses a member reading the payments of another user', async () => {
+      expect(() => resolver.paymentsByUser(7, pilot)).toThrow(
+        ForbiddenException,
+      );
+      expect(mockService.findByUser).not.toHaveBeenCalled();
+    });
+
+    it('lets a member read their own payments', async () => {
+      mockService.findByUser.mockResolvedValue([{ id: 1 }]);
+
+      await expect(resolver.paymentsByUser(3, pilot)).resolves.toEqual([
+        { id: 1 },
+      ]);
+    });
+
+    it('refuses a member reading a payment that belongs to someone else', async () => {
+      mockService.findOne.mockResolvedValue({ id: 9, user: { id: 7 } });
+
+      await expect(resolver.findOne(9, pilot)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('lets a member read one of their own payments', async () => {
+      const payment = { id: 9, user: { id: 3 } };
+      mockService.findOne.mockResolvedValue(payment);
+
+      await expect(resolver.findOne(9, pilot)).resolves.toBe(payment);
+    });
+
+    it('only shows a member their own payments on an invoice', async () => {
+      mockService.findByInvoice.mockResolvedValue([
+        { id: 1, user: { id: 3 } },
+        { id: 2, user: { id: 7 } },
+      ]);
+
+      await expect(resolver.paymentsByInvoice(5, pilot)).resolves.toEqual([
+        { id: 1, user: { id: 3 } },
+      ]);
+    });
+
+    it('starts a top-up for the session user, whatever user id is sent', async () => {
+      mockService.processPayment.mockResolvedValue({
+        id: 1,
+        amount: 50,
+        payment_method: 'stripe',
+        payment_status: 'pending',
+        external_payment_id: 'pi_1',
+        payment_details: null,
+        user: { id: 3 },
+      });
+
+      await resolver.processPayment(
+        { user_id: 7, amount: 50, payment_method: 'stripe' },
+        pilot,
+      );
+
+      expect(mockService.processPayment).toHaveBeenCalledWith({
+        user_id: 3,
+        amount: 50,
+        payment_method: 'stripe',
+      });
+    });
+
+    it('lets an administrator start a payment for another user', async () => {
+      mockService.processPayment.mockResolvedValue({
+        id: 1,
+        amount: 50,
+        payment_method: 'stripe',
+        payment_status: 'pending',
+        external_payment_id: 'pi_1',
+        payment_details: null,
+        user: { id: 7 },
+      });
+
+      await resolver.processPayment(
+        { user_id: 7, amount: 50, payment_method: 'stripe' },
+        admin,
+      );
+
+      expect(mockService.processPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ user_id: 7 }),
+      );
     });
   });
 });
