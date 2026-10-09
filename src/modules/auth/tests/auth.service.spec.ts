@@ -20,6 +20,7 @@ describe('AuthService', () => {
     usersService = {
       findOneByEmail: jest.fn(),
       set2FASecret: jest.fn(),
+      activate2FA: jest.fn(),
     };
     jwtService = {
       sign: jest.fn(),
@@ -170,6 +171,53 @@ describe('AuthService', () => {
       ).resolves.toBeNull();
 
       expect(jwtService.sign).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('confirm2FA', () => {
+    it('activates the pending secret when the first code is valid', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        email: 'a@example.com',
+        twoFactorAuthPendingSecret: 'pendingsecret',
+      } as User);
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+
+      await expect(service.confirm2FA('a@example.com', '123456')).resolves.toBe(
+        true,
+      );
+
+      expect(speakeasy.totp.verify).toHaveBeenCalledWith({
+        secret: 'pendingsecret',
+        encoding: 'base32',
+        token: '123456',
+      });
+      expect(usersService.activate2FA).toHaveBeenCalledWith('a@example.com');
+    });
+
+    it('leaves two-factor untouched when the code is wrong', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        email: 'a@example.com',
+        twoFactorAuthPendingSecret: 'pendingsecret',
+      } as User);
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(false);
+
+      await expect(service.confirm2FA('a@example.com', '000000')).resolves.toBe(
+        false,
+      );
+      expect(usersService.activate2FA).not.toHaveBeenCalled();
+    });
+
+    it('refuses when no secret is waiting for confirmation', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        email: 'a@example.com',
+        twoFactorAuthPendingSecret: null,
+      } as User);
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+
+      await expect(service.confirm2FA('a@example.com', '123456')).resolves.toBe(
+        false,
+      );
+      expect(usersService.activate2FA).not.toHaveBeenCalled();
     });
   });
 

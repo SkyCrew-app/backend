@@ -44,6 +44,29 @@ export class AuthService {
     return { secret: secret.base32, qrCodeUrl };
   }
 
+  // Activates the secret generated for the user once they prove, with a
+  // first code, that their authenticator app holds it.
+  async confirm2FA(userEmail: string, token: string): Promise<boolean> {
+    const user = await this.usersService.findOneByEmail(userEmail);
+
+    if (!user?.twoFactorAuthPendingSecret) {
+      return false;
+    }
+
+    const isValid = speakeasy.totp.verify({
+      secret: user.twoFactorAuthPendingSecret,
+      encoding: 'base32',
+      token,
+    });
+
+    if (!isValid) {
+      return false;
+    }
+
+    await this.usersService.activate2FA(userEmail);
+    return true;
+  }
+
   async verify2FACode(userEmail: string, token: string): Promise<boolean> {
     const user = await this.usersService.findOneByEmail(userEmail);
 

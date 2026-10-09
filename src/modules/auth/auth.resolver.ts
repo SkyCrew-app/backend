@@ -3,7 +3,11 @@ import { AuthService } from './auth.service';
 import { LoginResponse } from './dto/login-response.dto';
 import { LoginInput } from './dto/login-input.dto';
 import { Response, Request } from 'express';
-import { UnauthorizedException, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 
 const TWO_FACTOR_CHALLENGE_COOKIE = 'two_factor_challenge';
@@ -89,6 +93,21 @@ export class AuthResolver {
       req.user.email,
     );
     return qrCodeUrl;
+  }
+
+  @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard)
+  async confirm2FA(
+    @Context('req') req: Request & { user: { email: string } },
+    @Args('token') token: string,
+  ): Promise<boolean> {
+    const confirmed = await this.authService.confirm2FA(req.user.email, token);
+
+    if (!confirmed) {
+      throw new BadRequestException('Invalid 2FA code');
+    }
+
+    return true;
   }
 
   @Mutation(() => LoginResponse)

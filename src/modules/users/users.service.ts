@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcrypt';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { IsNull, Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
@@ -14,6 +14,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
@@ -67,28 +69,54 @@ export class UsersService {
     return this.usersRepository.save(newUser);
   }
 
+  // Stores the secret shown to the user. It only becomes active once
+  // confirmed with a first code, see activate2FA.
   async set2FASecret(email: string, secret: string): Promise<void> {
     const user = await this.findOneByEmail(email);
-    if (user) {
-      user.twoFactorAuthSecret = secret;
-      await this.usersRepository.save(user);
+    if (!user) {
+      throw new Error('User not found');
     }
 
-    await this.emailService.sendMail(
-      user.email,
-      'Authentification à deux facteurs activée',
-      "L'authentification à deux facteurs a été activée avec succès",
-      '2fa-enabled',
-      { first_name: user.first_name },
-    );
+    user.twoFactorAuthPendingSecret = secret;
+    await this.usersRepository.save(user);
+  }
 
-    await this.notificationService.create({
-      user_id: user.id,
-      notification_type: '2FA_ENABLED',
-      notification_date: new Date(),
-      message: 'Authentification à deux facteurs activée',
-      is_read: false,
-    });
+  async activate2FA(email: string): Promise<User> {
+    const user = await this.findOneByEmail(email);
+    if (!user?.twoFactorAuthPendingSecret) {
+      throw new Error('No two-factor secret is waiting for confirmation');
+    }
+
+    user.twoFactorAuthSecret = user.twoFactorAuthPendingSecret;
+    user.twoFactorAuthPendingSecret = null;
+    user.is2FAEnabled = true;
+    const savedUser = await this.usersRepository.save(user);
+
+    // The account is already protected at this point: a failed email or
+    // notification must not make the confirmation look like it failed.
+    try {
+      await this.emailService.sendMail(
+        user.email,
+        'Authentification à deux facteurs activée',
+        "L'authentification à deux facteurs a été activée avec succès",
+        '2fa-enabled',
+        { first_name: user.first_name },
+      );
+
+      await this.notificationService.create({
+        user_id: user.id,
+        notification_type: '2FA_ENABLED',
+        notification_date: new Date(),
+        message: 'Authentification à deux facteurs activée',
+        is_read: false,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Two-factor confirmation notice not delivered: ${error.message}`,
+      );
+    }
+
+    return savedUser;
   }
 
   async setPassword(email: string, password: string): Promise<void> {
@@ -149,15 +177,18 @@ export class UsersService {
       throw new Error('User not found');
     }
 
-    await this.emailService.sendMail(
-      user.email,
-      'Authentification à deux facteurs activée',
-      "L'authentification à deux facteurs a été activée avec succès",
-      '2fa-enabled',
-      { first_name: user.first_name },
-    );
+    if (is2FAEnabled) {
+      // Enabling goes through generate2FASecret then confirm2FA.
+      if (!user.twoFactorAuthSecret) {
+        throw new Error('Two-factor authentication has not been set up');
+      }
+      user.is2FAEnabled = true;
+      return this.usersRepository.save(user);
+    }
 
-    user.is2FAEnabled = is2FAEnabled;
+    user.is2FAEnabled = false;
+    user.twoFactorAuthSecret = null;
+    user.twoFactorAuthPendingSecret = null;
     return this.usersRepository.save(user);
   }
 
