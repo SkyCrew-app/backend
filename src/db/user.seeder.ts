@@ -2,13 +2,18 @@ import { DataSource } from 'typeorm';
 import { User } from '../modules/users/entity/users.entity';
 import { Role } from '../modules/roles/entity/roles.entity';
 import * as bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
+
+const DEFAULT_ADMIN_EMAIL = 'admin@example.com';
 
 export const seedAdminUser = async (dataSource: DataSource): Promise<void> => {
   const userRepository = dataSource.getRepository(User);
   const roleRepository = dataSource.getRepository(Role);
 
+  const adminEmail = process.env.ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL;
+
   const existingAdmin = await userRepository.findOne({
-    where: { email: 'admin@example.com' },
+    where: { email: adminEmail },
   });
 
   if (existingAdmin) {
@@ -24,13 +29,18 @@ export const seedAdminUser = async (dataSource: DataSource): Promise<void> => {
     throw new Error('Admin role not found. Please seed roles first.');
   }
 
+  // Never ship a known password: use the configured one or generate one.
+  const configuredPassword = process.env.ADMIN_PASSWORD;
+  const adminPassword =
+    configuredPassword || randomBytes(18).toString('base64url');
+
   const saltRounds = 10;
-  const hashedPassword = await bcrypt.hash('adminpassword123', saltRounds);
+  const hashedPassword = await bcrypt.hash(adminPassword, saltRounds);
 
   const adminUser = userRepository.create({
     first_name: 'Admin',
     last_name: 'User',
-    email: 'admin@example.com',
+    email: adminEmail,
     password: hashedPassword,
     is2FAEnabled: false,
     isEmailConfirmed: true,
@@ -44,4 +54,10 @@ export const seedAdminUser = async (dataSource: DataSource): Promise<void> => {
 
   await userRepository.save(adminUser);
   console.log('Admin user created successfully');
+
+  if (!configuredPassword) {
+    console.log(
+      `ADMIN_PASSWORD is not set. Generated password for ${adminEmail}: ${adminPassword}`,
+    );
+  }
 };
