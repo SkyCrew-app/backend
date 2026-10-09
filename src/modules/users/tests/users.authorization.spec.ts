@@ -5,6 +5,7 @@ import { UsersService } from '../users.service';
 import { EvalService } from '../../eval/eval.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
+import { GqlThrottlerGuard } from '../../../common/guards/gql-throttler.guard';
 
 const pilot = {
   id: 3,
@@ -68,6 +69,8 @@ describe('Users authorization', () => {
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(GqlThrottlerGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

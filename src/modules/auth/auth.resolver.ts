@@ -9,6 +9,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
+import { Public } from '../../common/decorators/public.decorator';
+import {
+  GqlThrottlerGuard,
+  SECRET_ATTEMPT_LIMITS,
+} from '../../common/guards/gql-throttler.guard';
+import { Throttle } from '@nestjs/throttler';
 
 const TWO_FACTOR_CHALLENGE_COOKIE = 'two_factor_challenge';
 
@@ -30,6 +36,9 @@ export class AuthResolver {
     return { ...this.getCookieOptions(), maxAge: 300000 };
   }
 
+  @Public()
+  @UseGuards(GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   @Mutation(() => LoginResponse)
   async login(
     @Args('loginInput') loginInput: LoginInput,
@@ -71,6 +80,7 @@ export class AuthResolver {
     };
   }
 
+  @Public()
   @Query(() => String)
   getEmailFromCookie(@Context('req') req: Request): string {
     const email = req.cookies['email'];
@@ -96,7 +106,8 @@ export class AuthResolver {
   }
 
   @Mutation(() => Boolean)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   async confirm2FA(
     @Context('req') req: Request & { user: { email: string } },
     @Args('token') token: string,
@@ -110,6 +121,9 @@ export class AuthResolver {
     return true;
   }
 
+  @Public()
+  @UseGuards(GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   @Mutation(() => LoginResponse)
   async verify2FA(
     @Args('email') email: string,
@@ -145,6 +159,7 @@ export class AuthResolver {
     };
   }
 
+  @Public()
   @Mutation(() => Boolean)
   async logout(@Context('res') res: Response): Promise<boolean> {
     res.clearCookie('token', {
