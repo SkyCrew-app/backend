@@ -8,6 +8,7 @@ import { graphqlUploadExpress } from 'graphql-upload-ts';
 import * as express from 'express';
 import helmet from 'helmet';
 import { join } from 'path';
+import { protectUploads } from './common/middleware/protect-uploads.middleware';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://staging.skycrew.fr',
@@ -70,7 +71,11 @@ async function bootstrap() {
     SwaggerModule.setup('api', app, document);
   }
 
-  app.use('/uploads', express.static(join(__dirname, 'uploads')));
+  app.use(
+    '/uploads',
+    protectUploads,
+    express.static(join(__dirname, 'uploads')),
+  );
 
   app.useGlobalPipes(
     new ValidationPipe({
