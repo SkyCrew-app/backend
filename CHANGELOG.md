@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.3](https://github.com/SkyCrew-app/backend/compare/2.6.2...2.6.3) (2026-10-09)
+
+
+### Bug Fixes
+
+* **administration:** :bug: let every member read the club settings ([#98](https://github.com/SkyCrew-app/backend/issues/98)) ([480f680](https://github.com/SkyCrew-app/backend/commit/480f680e85e08d33cc1d996e4c2dc1a9c67443b5))
+* **instruction:** :bug: apply the status, instructor and student when a course is updated ([#97](https://github.com/SkyCrew-app/backend/issues/97)) ([26fcd41](https://github.com/SkyCrew-app/backend/commit/26fcd41fe6e58b0ae3e2e6845920c1690b80bfa4))
+
 ## [2.6.2](https://github.com/SkyCrew-app/backend/compare/2.6.1...2.6.2) (2026-10-09)
 
 
