@@ -202,6 +202,17 @@ describe('FlightsResolver', () => {
     expect(service.removeFlight).toHaveBeenCalledWith(5, 1);
   });
 
+  it('updateFlight passes the caller for the ownership check', async () => {
+    const caller = { id: 3, email: 'p@example.com', role: 'Pilote' };
+    const input = { id: 9, flight_hours: 1.2 } as any;
+    service.updateFlight.mockResolvedValue({ id: 9 });
+
+    await expect(resolver.updateFlight(input, caller)).resolves.toEqual({
+      id: 9,
+    });
+    expect(service.updateFlight).toHaveBeenCalledWith(9, input, caller);
+  });
+
   it('getFlightsByUser defaults to authenticated user', async () => {
     service.getFlightsByUser.mockResolvedValue([]);
     await resolver.getFlightsByUser(undefined as any, mockContext);
