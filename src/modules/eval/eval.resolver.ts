@@ -15,6 +15,12 @@ import { Logger, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {
+  assertSelfOrRole,
+  ROLE_INSTRUCTOR,
+  SessionUser,
+} from '../../common/auth/access';
 
 @ObjectType()
 class ValidationResult {
@@ -68,7 +74,10 @@ export class EvaluationResolver {
       await this.evalService.deleteEvaluation(id);
       return true;
     } catch (error) {
-      new Logger(EvaluationResolver.name).error('Error deleting evaluation', error);
+      new Logger(EvaluationResolver.name).error(
+        'Error deleting evaluation',
+        error,
+      );
       throw new Error('An error occurred while deleting the evaluation');
     }
   }
@@ -142,7 +151,10 @@ export class AnswerResolver {
     @Args('userId') userId: number,
     @Args('questionId') questionId: number,
     @Args('createAnswerInput') createAnswerInput: CreateAnswerDTO,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Answer> {
+    // A user answers in their own name.
+    assertSelfOrRole(currentUser, userId);
     return this.evalService.createAnswer(
       userId,
       questionId,
@@ -150,8 +162,10 @@ export class AnswerResolver {
     );
   }
 
+  // Correcting or removing a recorded answer is reserved to staff.
   @Mutation(() => Answer, { name: 'updateAnswer' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur')
   async updateAnswer(
     @Args('id') id: number,
     @Args('updateAnswerInput') updateAnswerInput: UpdateAnswerDTO,
@@ -160,7 +174,8 @@ export class AnswerResolver {
   }
 
   @Mutation(() => Boolean, { name: 'deleteAnswer' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Instructeur')
   async deleteAnswer(@Args('id') id: number): Promise<boolean> {
     await this.evalService.deleteAnswer(id);
     return true;
@@ -173,7 +188,10 @@ export class AnswerResolver {
     @Args('userId') userId: number,
     @Args({ name: 'userAnswers', type: () => [UserAnswerInput] })
     userAnswers: UserAnswerInput[],
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<ValidationResult> {
+    // An evaluation is taken, and scored, for the caller only.
+    assertSelfOrRole(currentUser, userId);
     return this.evalService.validateAnswers(evaluationId, userId, userAnswers);
   }
 }

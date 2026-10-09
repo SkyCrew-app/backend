@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   EvaluationResolver,
@@ -5,6 +6,13 @@ import {
   AnswerResolver,
 } from '../eval.resolver';
 import { EvalService } from '../eval.service';
+
+const admin = { id: 1, email: 'admin@example.com', role: 'Administrateur' };
+const member = (id: number) => ({
+  id,
+  email: `user${id}@example.com`,
+  role: { role_name: 'Pilote' },
+});
 
 describe('Eval Resolvers', () => {
   let evalResolver: EvaluationResolver;
@@ -110,11 +118,16 @@ describe('Eval Resolvers', () => {
   it('createAnswer calls service', async () => {
     service.createAnswer.mockResolvedValue({ id: 30 });
     expect(
-      await answerResolver.createAnswer(1, 2, {
-        answer_text: 'A',
-        is_correct: true,
-        questionId: 0,
-      }),
+      await answerResolver.createAnswer(
+        1,
+        2,
+        {
+          answer_text: 'A',
+          is_correct: true,
+          questionId: 0,
+        },
+        admin,
+      ),
     ).toEqual({ id: 30 });
   });
 
@@ -132,9 +145,33 @@ describe('Eval Resolvers', () => {
 
   it('validateAnswers calls service', async () => {
     service.validateAnswers.mockResolvedValue({ score: 100, passed: true });
-    expect(await answerResolver.validateAnswers(1, 2, [])).toEqual({
+    expect(await answerResolver.validateAnswers(1, 2, [], admin)).toEqual({
       score: 100,
       passed: true,
+    });
+  });
+  describe('authorization', () => {
+    it('refuses answering in the name of another user', async () => {
+      await expect(
+        answerResolver.createAnswer(
+          7,
+          2,
+          { answer_text: 'x' } as any,
+          member(3),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('refuses taking an evaluation for another user', async () => {
+      await expect(
+        answerResolver.validateAnswers(1, 7, [], member(3)),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lets a user take their own evaluation', async () => {
+      await expect(
+        answerResolver.validateAnswers(1, 3, [], member(3)),
+      ).resolves.not.toThrow();
     });
   });
 });
