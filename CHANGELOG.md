@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.5.0](https://github.com/SkyCrew-app/backend/compare/2.4.0...2.5.0) (2026-10-09)
+
+
+### Features
+
+* **auth:** :lock: confirm two-factor setup with a first code and stop exposing credentials ([#74](https://github.com/SkyCrew-app/backend/issues/74)) ([0632cf0](https://github.com/SkyCrew-app/backend/commit/0632cf06756eba39b1c11c35c0b539e37a57cb65))
+
+
+### Bug Fixes
+
+* **mail:** :bug: find the email templates in production builds ([#75](https://github.com/SkyCrew-app/backend/issues/75)) ([9a328f9](https://github.com/SkyCrew-app/backend/commit/9a328f9a12ee9039744e2cec57a3b55781055856))
+
 ## [2.4.0](https://github.com/SkyCrew-app/backend/compare/2.3.1...2.4.0) (2026-10-09)
 
 
