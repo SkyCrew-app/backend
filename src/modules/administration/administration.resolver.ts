@@ -15,9 +15,11 @@ import { Public } from '../../common/decorators/public.decorator';
 export class AdministrationResolver {
   constructor(private readonly administrationService: AdministrationService) {}
 
+  // Opening hours, closure days, rates and rules: every member needs them,
+  // starting with the reservation schedule. Changing them stays
+  // administrator-only.
   @Query(() => [Administration], { name: 'getAllAdministrations' })
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrateur')
+  @UseGuards(JwtAuthGuard)
   findAll() {
     return this.administrationService.findAll();
   }

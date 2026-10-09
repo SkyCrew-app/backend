@@ -164,6 +164,46 @@ describe('InstructionCoursesService', () => {
       expect(res.rating).toBe(4);
       expect(res.feedback).toBe('ok');
     });
+    it('updateCourse changes the status, the instructor and the student', async () => {
+      const course = {
+        id: 3,
+        status: 'SCHEDULED',
+        instructor: { id: 4 },
+        student: { id: 3 },
+      } as any;
+      jest.spyOn(service, 'findOne').mockResolvedValue(course);
+      (courseRepo.save as jest.Mock).mockImplementation(async (c) => c);
+
+      const res = await service.updateCourse(3, {
+        id: 99,
+        status: 'COMPLETED',
+        instructorId: 5,
+        studentId: 7,
+      } as any);
+
+      expect(res.status).toBe('COMPLETED');
+      expect(res.instructor).toEqual({ id: 5 });
+      expect(res.student).toEqual({ id: 7 });
+      expect(res.id).toBe(3);
+      expect(res).not.toHaveProperty('instructorId');
+      expect(res).not.toHaveProperty('studentId');
+    });
+
+    it('updateCourse keeps the instructor and the student when they are not sent', async () => {
+      const course = {
+        id: 3,
+        instructor: { id: 4 },
+        student: { id: 3 },
+      } as any;
+      jest.spyOn(service, 'findOne').mockResolvedValue(course);
+      (courseRepo.save as jest.Mock).mockImplementation(async (c) => c);
+
+      const res = await service.updateCourse(3, { id: 3, rating: 5 } as any);
+
+      expect(res.instructor).toEqual({ id: 4 });
+      expect(res.student).toEqual({ id: 3 });
+    });
+
     it('deleteCourse returns true on success', async () => {
       (courseRepo.delete as jest.Mock).mockResolvedValue({ affected: 1 });
       expect(await service.deleteCourse(4)).toBe(true);
