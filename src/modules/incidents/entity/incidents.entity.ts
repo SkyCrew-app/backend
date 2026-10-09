@@ -15,7 +15,7 @@ export class Incident {
   @ManyToOne(() => Aircraft, (aircraft) => aircraft.id)
   aircraft: Aircraft;
 
-  @Field(() => Flight)
+  @Field(() => Flight, { nullable: true })
   @ManyToOne(() => Flight, (flight) => flight.id)
   flight: Flight;
 
