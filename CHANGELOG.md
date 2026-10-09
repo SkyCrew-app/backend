@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.7](https://github.com/SkyCrew-app/backend/compare/2.6.6...2.6.7) (2026-10-09)
+
+
+### Bug Fixes
+
+* **articles:** :bug: answer with the deleted article instead of an error ([#116](https://github.com/SkyCrew-app/backend/issues/116)) ([26ede46](https://github.com/SkyCrew-app/backend/commit/26ede462957bf7f21393646f0e24afaec42ef535))
+
 ## [2.6.6](https://github.com/SkyCrew-app/backend/compare/2.6.5...2.6.6) (2026-10-09)
 
 
