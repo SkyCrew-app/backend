@@ -11,12 +11,14 @@ export class FileController {
     @Param('filename') filename: string,
     @Res() res: Response,
   ) {
-    const filePath = path.join(
-      __dirname,
-      '../../uploads',
-      aircraftId,
-      filename,
-    );
+    const uploadsRoot = path.resolve(__dirname, '../../uploads');
+    const filePath = path.resolve(uploadsRoot, aircraftId, filename);
+
+    // Refuse anything that resolves outside the uploads directory.
+    if (!filePath.startsWith(uploadsRoot + path.sep)) {
+      res.status(404).json({ message: 'File not found' });
+      return;
+    }
 
     if (fs.existsSync(filePath)) {
       res.sendFile(filePath);

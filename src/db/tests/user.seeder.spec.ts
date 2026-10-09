@@ -48,30 +48,31 @@ describe('User Seeder', () => {
     delete process.env.ADMIN_EMAIL;
   });
 
-  it('should generate a random password when none is configured', async () => {
+  it('should refuse to create the administrator without a password', async () => {
     delete process.env.ADMIN_PASSWORD;
     userRepository.findOne.mockResolvedValue(null);
     roleRepository.findOne.mockResolvedValue({
       id: 1,
       role_name: 'Administrateur',
     } as any);
-    bcryptSpy.mockResolvedValue('hashed');
-    userRepository.create.mockReturnValue({} as any);
-    userRepository.save.mockResolvedValue({} as any);
 
-    await seedAdminUser(dataSource);
-    await seedAdminUser(dataSource);
-
-    const [first, second] = bcryptSpy.mock.calls.map(([password]) => password);
-    expect(first).toHaveLength(24);
-    expect(second).toHaveLength(24);
-    expect(first).not.toBe(second);
-    expect(consoleSpy).toHaveBeenCalledWith(
-      `ADMIN_PASSWORD is not set. Generated password for admin@example.com: ${first}`,
+    await expect(seedAdminUser(dataSource)).rejects.toThrow(
+      'ADMIN_PASSWORD must be set to create the first administrator.',
     );
+
+    expect(bcryptSpy).not.toHaveBeenCalled();
+    expect(userRepository.save).not.toHaveBeenCalled();
   });
 
-  it('should not print the password when it is configured', async () => {
+  it('should leave an existing administrator alone without a password', async () => {
+    delete process.env.ADMIN_PASSWORD;
+    userRepository.findOne.mockResolvedValue({ id: 1 } as any);
+
+    await expect(seedAdminUser(dataSource)).resolves.toBeUndefined();
+    expect(userRepository.save).not.toHaveBeenCalled();
+  });
+
+  it('should never print the password', async () => {
     userRepository.findOne.mockResolvedValue(null);
     roleRepository.findOne.mockResolvedValue({
       id: 1,

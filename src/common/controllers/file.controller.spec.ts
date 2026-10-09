@@ -12,6 +12,7 @@ describe('FileController', () => {
   const json = jest.fn();
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [FileController],
     }).compile();
@@ -47,6 +48,22 @@ describe('FileController', () => {
       expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(sendFile).toHaveBeenCalledWith(expectedPath);
     });
+
+    it.each([
+      ['..', 'exists.js'],
+      ['../..', 'exists.env'],
+      ['123', '../../exists.js'],
+      ['..', '..'],
+    ])(
+      'doit refuser un chemin qui sort du dossier des fichiers (%s, %s)',
+      async (aircraftId, filename) => {
+        await controller.getFile(aircraftId, filename, res as Response);
+
+        expect(fs.existsSync).not.toHaveBeenCalled();
+        expect(sendFile).not.toHaveBeenCalled();
+        expect(status).toHaveBeenCalledWith(404);
+      },
+    );
 
     it("doit retourner 404 si le fichier n'existe pas", async () => {
       const aircraftId = '123';
