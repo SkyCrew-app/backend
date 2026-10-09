@@ -243,6 +243,27 @@ describe('UsersService', () => {
       );
     });
 
+    it("devrait confirmer l'activation même si l'email ne part pas", async () => {
+      const user = {
+        id: 10,
+        email: 'twofa@example.com',
+        first_name: 'Jean',
+        is2FAEnabled: false,
+        twoFactorAuthPendingSecret: 'SECRET123',
+      } as User;
+      userRepository.findOne.mockResolvedValue(user);
+      userRepository.save.mockResolvedValue(user);
+      (mailerService.sendMail as jest.Mock).mockRejectedValue(
+        new Error('SMTP indisponible'),
+      );
+
+      await expect(service.activate2FA('twofa@example.com')).resolves.toBe(
+        user,
+      );
+      expect(user.twoFactorAuthSecret).toBe('SECRET123');
+      expect(user.is2FAEnabled).toBe(true);
+    });
+
     it("devrait refuser s'il n'y a aucun secret en attente", async () => {
       userRepository.findOne.mockResolvedValue({
         id: 10,

@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcrypt';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { IsNull, Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
@@ -14,6 +14,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
@@ -90,21 +92,29 @@ export class UsersService {
     user.is2FAEnabled = true;
     const savedUser = await this.usersRepository.save(user);
 
-    await this.emailService.sendMail(
-      user.email,
-      'Authentification à deux facteurs activée',
-      "L'authentification à deux facteurs a été activée avec succès",
-      '2fa-enabled',
-      { first_name: user.first_name },
-    );
+    // The account is already protected at this point: a failed email or
+    // notification must not make the confirmation look like it failed.
+    try {
+      await this.emailService.sendMail(
+        user.email,
+        'Authentification à deux facteurs activée',
+        "L'authentification à deux facteurs a été activée avec succès",
+        '2fa-enabled',
+        { first_name: user.first_name },
+      );
 
-    await this.notificationService.create({
-      user_id: user.id,
-      notification_type: '2FA_ENABLED',
-      notification_date: new Date(),
-      message: 'Authentification à deux facteurs activée',
-      is_read: false,
-    });
+      await this.notificationService.create({
+        user_id: user.id,
+        notification_type: '2FA_ENABLED',
+        notification_date: new Date(),
+        message: 'Authentification à deux facteurs activée',
+        is_read: false,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Two-factor confirmation notice not delivered: ${error.message}`,
+      );
+    }
 
     return savedUser;
   }
