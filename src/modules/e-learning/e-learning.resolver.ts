@@ -23,6 +23,12 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {
+  assertSelfOrRole,
+  ROLE_INSTRUCTOR,
+  SessionUser,
+} from '../../common/auth/access';
 
 @Resolver(() => Course)
 export class CourseResolver {
@@ -45,7 +51,12 @@ export class CourseResolver {
   async getCourseById(
     @Args('id') id: number,
     @Args('userId', { nullable: true }) userId?: number,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Course> {
+    // The optional user id adds that user's progress to the course.
+    if (userId) {
+      assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
+    }
     return this.eLearningService.getCourseById(id, userId);
   }
 
@@ -142,7 +153,10 @@ export class LessonResolver {
   async getLessonContent(
     @Args('lessonId') lessonId: number,
     @Args('userId') userId: number,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Lesson> {
+    // Opening a lesson records progress for that user.
+    assertSelfOrRole(currentUser, userId);
     return this.eLearningService.getLessonContent(lessonId, userId);
   }
 
@@ -186,7 +200,9 @@ export class LessonResolver {
   async completeLesson(
     @Args('lessonId') lessonId: number,
     @Args('userId') userId: number,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<boolean> {
+    assertSelfOrRole(currentUser, userId);
     await this.eLearningService.completeLesson(userId, lessonId);
     return true;
   }

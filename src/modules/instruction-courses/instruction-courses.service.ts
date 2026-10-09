@@ -247,6 +247,30 @@ export class InstructionCoursesService {
     return this.commentRepository.save(comment);
   }
 
+  // Whether the instructor has at least one course with this student.
+  async teaches(instructorId: number, studentId: number): Promise<boolean> {
+    const courses = await this.courseRepository.count({
+      where: { instructor: { id: instructorId }, student: { id: studentId } },
+    });
+    return courses > 0;
+  }
+
+  // Course a competency belongs to, with its instructor and student.
+  async findCourseOfCompetency(
+    competencyId: number,
+  ): Promise<InstructionCourse> {
+    const competency = await this.competencyRepository.findOne({
+      where: { id: competencyId },
+      relations: ['course', 'course.instructor', 'course.student'],
+    });
+    if (!competency) {
+      throw new NotFoundException(
+        `Competency with ID ${competencyId} not found`,
+      );
+    }
+    return competency.course;
+  }
+
   //Trouver les cours par ID utilisateur
   async findCoursesByUserId(userId: number): Promise<InstructionCourse[]> {
     return this.courseRepository.find({
@@ -366,7 +390,10 @@ export class InstructionCoursesService {
         status: course.status,
       }));
     } catch (error) {
-      new Logger(InstructionCoursesService.name).error('Error fetching recent courses', error);
+      new Logger(InstructionCoursesService.name).error(
+        'Error fetching recent courses',
+        error,
+      );
       return [];
     }
   }
@@ -529,7 +556,10 @@ export class InstructionCoursesService {
 
       return coursesWithProgress.sort((a, b) => b.progress - a.progress);
     } catch (error) {
-      new Logger(InstructionCoursesService.name).error('Error fetching e-learning courses', error);
+      new Logger(InstructionCoursesService.name).error(
+        'Error fetching e-learning courses',
+        error,
+      );
       return [];
     }
   }
