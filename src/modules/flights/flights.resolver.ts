@@ -20,6 +20,8 @@ import { UseGuards, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { SessionUser } from '../../common/auth/access';
 
 @Resolver(() => Flight)
 export class FlightsResolver {
@@ -175,15 +177,17 @@ export class FlightsResolver {
     );
   }
 
+  // A member closes their own flight; an administrator can amend any flight.
   @Mutation(() => Flight)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrateur')
+  @UseGuards(JwtAuthGuard)
   updateFlight(
     @Args('updateFlightInput') updateFlightInput: UpdateFlightInput,
+    @CurrentUser() currentUser?: SessionUser,
   ) {
     return this.flightsService.updateFlight(
       updateFlightInput.id,
       updateFlightInput,
+      currentUser,
     );
   }
 

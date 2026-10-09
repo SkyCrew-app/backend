@@ -308,20 +308,70 @@ describe('FlightsService', () => {
   });
 
   describe('updateFlight', () => {
-    it('updates and saves', async () => {
-      repo.findOne.mockResolvedValue({ id: 7, waypoints: '[]' } as any);
-      repo.save.mockResolvedValue({ id: 7 });
-      const res = await service.updateFlight(7, {
-        id: 7,
-        origin_icao: 'XXX',
-      } as any);
-      expect(res).toEqual({ id: 7 });
+    const admin = { id: 1, email: 'a@example.com', role: 'Administrateur' };
+    const owner = { id: 3, email: 'p@example.com', role: 'Pilote' };
+    const other = { id: 4, email: 'o@example.com', role: 'Pilote' };
+    const stored = () => ({ id: 7, waypoints: '[]', user: { id: 3 } }) as any;
+
+    beforeEach(() => {
+      repo.save.mockImplementation(async (flight) => flight);
     });
+
+    it('lets the pilot of the flight record what was flown', async () => {
+      repo.findOne.mockResolvedValue(stored());
+
+      const res = await service.updateFlight(
+        7,
+        { id: 7, flight_hours: 1.2 } as any,
+        owner,
+      );
+
+      expect(res).toMatchObject({ id: 7, flight_hours: 1.2 });
+    });
+
+    it('does not let the pilot move the flight to someone else', async () => {
+      repo.findOne.mockResolvedValue(stored());
+
+      const res = await service.updateFlight(
+        7,
+        { id: 7, user_id: 4, reservation_id: 99, flight_hours: 2 } as any,
+        owner,
+      );
+
+      expect(res).not.toHaveProperty('user_id');
+      expect(res).not.toHaveProperty('reservation_id');
+      expect(res).toMatchObject({ flight_hours: 2, user: { id: 3 } });
+    });
+
+    it.each([
+      ['another member', other],
+      ['an unknown caller', undefined],
+    ])('refuses %s', async (_label, caller) => {
+      repo.findOne.mockResolvedValue(stored());
+
+      await expect(
+        service.updateFlight(7, { id: 7, flight_hours: 9 } as any, caller),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('lets an administrator amend any flight', async () => {
+      repo.findOne.mockResolvedValue(stored());
+
+      const res = await service.updateFlight(
+        7,
+        { id: 7, user_id: 4, waypoints: ['A', 'B'] } as any,
+        admin,
+      );
+
+      expect(res).toMatchObject({ user_id: 4, waypoints: '["A","B"]' });
+    });
+
     it('throws if not found', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(service.updateFlight(8, { id: 8 } as any)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.updateFlight(8, { id: 8 } as any, admin),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
