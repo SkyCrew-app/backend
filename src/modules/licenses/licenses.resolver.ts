@@ -8,6 +8,12 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {
+  assertSelfOrRole,
+  ROLE_INSTRUCTOR,
+  SessionUser,
+} from '../../common/auth/access';
 
 @Resolver(() => License)
 export class LicensesResolver {
@@ -22,8 +28,14 @@ export class LicensesResolver {
 
   @Query(() => License, { name: 'getLicenseById', nullable: true })
   @UseGuards(JwtAuthGuard)
-  findOne(@Args('id', { type: () => Int }) id: number) {
-    return this.licensesService.findOne(id);
+  async findOne(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() currentUser?: SessionUser,
+  ) {
+    // A licence is read by its holder, instructors and administrators.
+    const license = await this.licensesService.findOne(id);
+    assertSelfOrRole(currentUser, license.user?.id, ROLE_INSTRUCTOR);
+    return license;
   }
 
   @Mutation(() => License)

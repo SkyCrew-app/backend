@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LicensesResolver } from '../licenses.resolver';
 import { LicensesService } from '../licenses.service';
@@ -34,11 +35,35 @@ describe('LicensesResolver', () => {
     expect(service.findAll).toHaveBeenCalled();
   });
 
-  it('getLicenseById should call service.findOne', () => {
-    const lic = {} as License;
-    (service.findOne as jest.Mock).mockReturnValue(lic);
-    expect(resolver.findOne(3)).toBe(lic);
-    expect(service.findOne).toHaveBeenCalledWith(3);
+  describe('getLicenseById', () => {
+    const license = { id: 3, user: { id: 3 } } as License;
+    const caller = (id: number, role: string) => ({
+      id,
+      email: `user${id}@example.com`,
+      role: { role_name: role },
+    });
+
+    beforeEach(() => {
+      (service.findOne as jest.Mock).mockResolvedValue(license);
+    });
+
+    it.each([
+      ['its holder', caller(3, 'Pilote')],
+      ['an instructor', caller(4, 'Instructeur')],
+      ['an administrator', caller(1, 'Administrateur')],
+    ])('returns the licence to %s', async (_label, currentUser) => {
+      await expect(resolver.findOne(3, currentUser)).resolves.toBe(license);
+      expect(service.findOne).toHaveBeenCalledWith(3);
+    });
+
+    it.each([
+      ['another member', caller(7, 'Pilote')],
+      ['a technician', caller(6, 'Technicien')],
+    ])('refuses %s', async (_label, currentUser) => {
+      await expect(resolver.findOne(3, currentUser)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
   });
 
   it('createLicense should upload files and call service.create', async () => {

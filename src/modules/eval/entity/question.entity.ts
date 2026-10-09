@@ -1,4 +1,9 @@
-import { ObjectType, Field, Int } from '@nestjs/graphql';
+import { ObjectType, Field, Int, FieldMiddleware } from '@nestjs/graphql';
+import {
+  hasRole,
+  ROLE_ADMIN,
+  ROLE_INSTRUCTOR,
+} from '../../../common/auth/access';
 import {
   Entity,
   Column,
@@ -10,6 +15,16 @@ import {
 import { Evaluation } from './evaluation.entity';
 import { Answer } from './answer.entity';
 import GraphQLJSON from 'graphql-type-json';
+
+// Resolves a field to `hidden` unless the caller is an instructor or an
+// administrator.
+const staffOnly =
+  (hidden: unknown): FieldMiddleware =>
+  async (ctx, next) => {
+    const value = await next();
+    const user = ctx.context?.req?.user;
+    return hasRole(user, ROLE_ADMIN, ROLE_INSTRUCTOR) ? value : hidden;
+  };
 
 @ObjectType()
 @Entity('questions')
@@ -26,7 +41,8 @@ export class Question {
   @Column('simple-array')
   options: string[];
 
-  @Field()
+  // Students answer without seeing the key: scoring happens on the server.
+  @Field({ nullable: true, middleware: [staffOnly(null)] })
   @Column()
   correct_answer: string;
 
@@ -39,7 +55,11 @@ export class Question {
   @JoinColumn({ name: 'evaluation_id' })
   evaluation: Evaluation;
 
-  @Field(() => [Answer], { description: 'The answers to the question' })
+  // Answers recorded by every user: for the staff who correct them.
+  @Field(() => [Answer], {
+    description: 'The answers to the question',
+    middleware: [staffOnly([])],
+  })
   @OneToMany(() => Answer, (answer) => answer.question, { cascade: true })
   answers: Answer[];
 }
