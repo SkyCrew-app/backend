@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.4.0](https://github.com/SkyCrew-app/backend/compare/2.3.1...2.4.0) (2026-10-09)
+
+
+### Features
+
+* **database:** :card_file_box: manage the production schema with migrations ([#68](https://github.com/SkyCrew-app/backend/issues/68)) ([d733674](https://github.com/SkyCrew-app/backend/commit/d733674c423656878ed5d8090413421392c7b82f))
+
+
+### Bug Fixes
+
+* **auth:** :lock: bind two-factor setup and verification to the signed-in user ([#69](https://github.com/SkyCrew-app/backend/issues/69)) ([ba9eed1](https://github.com/SkyCrew-app/backend/commit/ba9eed10b0fc29ee92a359a30c785e47e99ee7dd))
+* **demo:** :bug: seed maintenance statuses with the codes the app uses ([#67](https://github.com/SkyCrew-app/backend/issues/67)) ([6be5bdb](https://github.com/SkyCrew-app/backend/commit/6be5bdbefff50092202e77716cb316daf084fcc0))
+* **security:** :lock: require the administrator password and confine served files ([#71](https://github.com/SkyCrew-app/backend/issues/71)) ([c07510a](https://github.com/SkyCrew-app/backend/commit/c07510a6c4b5e0473a3d224f6b680435716f96fb))
+* **seed:** :lock: stop shipping a known administrator password ([#66](https://github.com/SkyCrew-app/backend/issues/66)) ([c3d73a8](https://github.com/SkyCrew-app/backend/commit/c3d73a8137665bf0a619c4f293cc5aaaf5567260))
+
 ## [2.3.1](https://github.com/SkyCrew-app/backend/compare/2.3.0...2.3.1) (2026-10-08)
 
 
