@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.6.1](https://github.com/SkyCrew-app/backend/compare/2.6.0...2.6.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **auth:** :lock: apply the access rules to courses, e-learning, checklists and incidents ([#86](https://github.com/SkyCrew-app/backend/issues/86)) ([101e494](https://github.com/SkyCrew-app/backend/commit/101e4947cdb09959799e79dea2c2bd8112509360))
+* **files:** :lock: require a session for uploaded documents ([#87](https://github.com/SkyCrew-app/backend/issues/87)) ([d49e85a](https://github.com/SkyCrew-app/backend/commit/d49e85ad99db96fa5300a5c11cbaeed0972f4616))
+* **notifications:** :lock: restrict notifications and their live channel to their owner ([#84](https://github.com/SkyCrew-app/backend/issues/84)) ([984123a](https://github.com/SkyCrew-app/backend/commit/984123adc7bbdc17fb7a1002f0326405175f055c))
+* **reservations:** :lock: only the holder or an administrator changes a reservation ([#85](https://github.com/SkyCrew-app/backend/issues/85)) ([7a57e98](https://github.com/SkyCrew-app/backend/commit/7a57e98fdf1b4f4b51d6f57fc6c5824af644e63e))
+
 ## [2.6.0](https://github.com/SkyCrew-app/backend/compare/2.5.0...2.6.0) (2026-10-09)
 
 
