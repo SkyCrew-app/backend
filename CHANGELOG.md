@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.6.0](https://github.com/SkyCrew-app/backend/compare/2.5.0...2.6.0) (2026-10-09)
+
+
+### Features
+
+* **auth:** :lock: require a session by default and rate-limit secret checks ([#80](https://github.com/SkyCrew-app/backend/issues/80)) ([d770ca4](https://github.com/SkyCrew-app/backend/commit/d770ca470feecc202dc7f902c3d446be1688b2bd))
+
+
+### Bug Fixes
+
+* **auth:** :lock: check that the caller owns the account in user and payment operations ([#79](https://github.com/SkyCrew-app/backend/issues/79)) ([08590f2](https://github.com/SkyCrew-app/backend/commit/08590f2f189615b0f97aa04cdd6686ccf360a6b5))
+
 ## [2.5.0](https://github.com/SkyCrew-app/backend/compare/2.4.0...2.5.0) (2026-10-09)
 
 
