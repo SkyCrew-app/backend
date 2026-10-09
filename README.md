@@ -139,7 +139,7 @@ Ensure you have the following installed:
 Once both the backend and frontend are running, navigate to `http://localhost:3000` in your browser to access SkyCrew.
 
 - **GraphQL Playground**: Access it at `http://localhost:3000/graphql` for testing API queries.
-- **Default Credentials**: Use `admin@example.com` with password `admin123` for initial access (if set up).
+- **First administrator**: `npm run seed` creates the account set by `ADMIN_EMAIL` (default `admin@example.com`) with the password in `ADMIN_PASSWORD`. `ADMIN_PASSWORD` is required the first time; the seed stops with an error if it is missing.
 
 ---
 

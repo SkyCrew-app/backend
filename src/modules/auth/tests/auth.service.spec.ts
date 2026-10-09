@@ -23,6 +23,7 @@ describe('AuthService', () => {
     };
     jwtService = {
       sign: jest.fn(),
+      verify: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -137,6 +138,92 @@ describe('AuthService', () => {
       const result = await service.verify2FAAndLogin('a@example.com', '123456');
 
       expect(result).toBe('jwt-token');
+    });
+
+    it('returns null when the OTP is invalid', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        email: 'a@example.com',
+        twoFactorAuthSecret: 'base32secret',
+      } as User);
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(false);
+
+      await expect(
+        service.verify2FAAndLogin('a@example.com', '000000'),
+      ).resolves.toBeNull();
+      expect(jwtService.sign).not.toHaveBeenCalled();
+    });
+
+    it('returns null for an unknown user or one without two-factor', async () => {
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(null);
+      await expect(
+        service.verify2FAAndLogin('nobody@example.com', '123456'),
+      ).resolves.toBeNull();
+
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        email: 'a@example.com',
+        twoFactorAuthSecret: null,
+      } as User);
+      await expect(
+        service.verify2FAAndLogin('a@example.com', '123456'),
+      ).resolves.toBeNull();
+
+      expect(jwtService.sign).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('two-factor challenge', () => {
+    const user = { email: 'a@example.com', id: 1 } as User;
+
+    it('signs a short-lived, single-purpose token', () => {
+      (jwtService.sign as jest.Mock).mockReturnValue('challenge-token');
+
+      expect(service.createTwoFactorChallenge(user)).toBe('challenge-token');
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        { email: 'a@example.com', sub: 1, purpose: '2fa' },
+        { expiresIn: '5m' },
+      );
+    });
+
+    it('accepts a challenge issued for the same email', () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({
+        email: 'a@example.com',
+        purpose: '2fa',
+      });
+
+      expect(
+        service.isValidTwoFactorChallenge('challenge-token', 'a@example.com'),
+      ).toBe(true);
+    });
+
+    it('rejects a missing, foreign, expired or session token', () => {
+      expect(
+        service.isValidTwoFactorChallenge(undefined, 'a@example.com'),
+      ).toBe(false);
+
+      (jwtService.verify as jest.Mock).mockReturnValue({
+        email: 'other@example.com',
+        purpose: '2fa',
+      });
+      expect(
+        service.isValidTwoFactorChallenge('challenge-token', 'a@example.com'),
+      ).toBe(false);
+
+      (jwtService.verify as jest.Mock).mockReturnValue({
+        email: 'a@example.com',
+        role: 'Pilote',
+      });
+      expect(
+        service.isValidTwoFactorChallenge('session-token', 'a@example.com'),
+      ).toBe(false);
+
+      (jwtService.verify as jest.Mock).mockImplementation(() => {
+        throw new Error('jwt expired');
+      });
+      expect(
+        service.isValidTwoFactorChallenge('expired-token', 'a@example.com'),
+      ).toBe(false);
     });
   });
 });

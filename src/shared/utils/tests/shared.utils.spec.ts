@@ -277,6 +277,16 @@ describe('JwtStrategy', () => {
       expect(result).toEqual(mockUser);
     });
 
+    it('should reject a single-purpose token used as a session token', async () => {
+      mockUsersService.findOneByEmail.mockResolvedValue({ id: 1 } as User);
+
+      await expect(
+        strategy.validate({ ...mockPayload, purpose: '2fa' }),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(mockUsersService.findOneByEmail).not.toHaveBeenCalled();
+    });
+
     it('should throw UnauthorizedException when user is not found', async () => {
       mockUsersService.findOneByEmail.mockResolvedValue(null);
 

@@ -6,6 +6,8 @@ import { Response, Request } from 'express';
 import { UnauthorizedException, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 
+const TWO_FACTOR_CHALLENGE_COOKIE = 'two_factor_challenge';
+
 @Resolver()
 export class AuthResolver {
   constructor(private authService: AuthService) {}
@@ -18,6 +20,10 @@ export class AuthResolver {
       maxAge: 7200000,
       path: '/',
     };
+  }
+
+  private getChallengeCookieOptions() {
+    return { ...this.getCookieOptions(), maxAge: 300000 };
   }
 
   @Mutation(() => LoginResponse)
@@ -41,6 +47,11 @@ export class AuthResolver {
 
     if (is2FAEnabled) {
       res.clearCookie('token', cookieOptions);
+      res.cookie(
+        TWO_FACTOR_CHALLENGE_COOKIE,
+        this.authService.createTwoFactorChallenge(user),
+        this.getChallengeCookieOptions(),
+      );
       return {
         access_token: '',
         is2FAEnabled: true,
@@ -67,8 +78,16 @@ export class AuthResolver {
 
   @Mutation(() => String)
   @UseGuards(JwtAuthGuard)
-  async generate2FASecret(@Args('email') email: string) {
-    const { qrCodeUrl } = await this.authService.generate2FASecret(email);
+  async generate2FASecret(
+    @Context('req') req: Request & { user: { email: string } },
+    // Kept for older clients. The secret is always generated for the
+    // authenticated user, never for an email supplied by the caller.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    @Args('email', { nullable: true }) _email?: string,
+  ) {
+    const { qrCodeUrl } = await this.authService.generate2FASecret(
+      req.user.email,
+    );
     return qrCodeUrl;
   }
 
@@ -77,7 +96,16 @@ export class AuthResolver {
     @Args('email') email: string,
     @Args('token') token: string,
     @Context('res') res: Response,
+    @Context('req') req: Request,
   ) {
+    const challenge = req.cookies?.[TWO_FACTOR_CHALLENGE_COOKIE];
+
+    if (!this.authService.isValidTwoFactorChallenge(challenge, email)) {
+      throw new UnauthorizedException(
+        'Two-factor verification must follow a password login',
+      );
+    }
+
     const jwt = await this.authService.verify2FAAndLogin(email, token);
 
     if (!jwt) {
@@ -85,6 +113,10 @@ export class AuthResolver {
     }
 
     const cookieOptions = this.getCookieOptions();
+    res.clearCookie(
+      TWO_FACTOR_CHALLENGE_COOKIE,
+      this.getChallengeCookieOptions(),
+    );
     res.cookie('email', email, cookieOptions);
     res.cookie('token', jwt, cookieOptions);
 
