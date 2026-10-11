@@ -100,6 +100,11 @@ export class Flight {
   @Column({ nullable: true })
   remarks?: string;
 
+  // Set when the pilot closes the flight; empty while it is still open.
+  @Field({ nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
+  closed_at?: Date;
+
   @Field(() => String, { nullable: true })
   departure_airport_info?: string;
 
