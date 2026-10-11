@@ -10,6 +10,8 @@ import helmet from 'helmet';
 import { join } from 'path';
 import { protectUploads } from './common/middleware/protect-uploads.middleware';
 import { validationPipeOptions } from './config/validation.config';
+import { DataSource } from 'typeorm';
+import { ensureBaseData } from './db/ensure-base-data';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://staging.skycrew.fr',
@@ -79,6 +81,11 @@ async function bootstrap() {
   );
 
   app.useGlobalPipes(new ValidationPipe(validationPipeOptions));
+
+  // A new installation creates its roles, first administrator and settings.
+  if (process.env.SEED_ON_START === 'true') {
+    await ensureBaseData(app.get(DataSource));
+  }
 
   await app.listen(port, () => {
     console.log(`🚀 Application is running on: http://localhost:${port}`);

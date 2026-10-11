@@ -33,6 +33,11 @@ RUN npm ci --force --omit=dev && npm cache clean --force
 # Copy built app from builder
 COPY --from=builder /usr/src/app/dist ./dist
 
+# Uploaded files (licences, maintenance documents, pictures) are written here
+# by the application user. Mount a volume on it to keep them across releases.
+RUN mkdir -p dist/src/uploads && chown -R nestjs:nodejs dist/src/uploads
+VOLUME ["/usr/src/app/dist/src/uploads"]
+
 # Switch to non-root user
 USER nestjs
 
