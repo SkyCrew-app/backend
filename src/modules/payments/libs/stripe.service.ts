@@ -5,7 +5,8 @@ import { stripeClient } from './stripe.client';
 export class StripeService {
   async createPaymentIntent(amount: number, currency: string = 'eur') {
     return stripeClient().paymentIntents.create({
-      amount: amount * 100,
+      // Stripe counts in cents.
+      amount: Math.round(amount * 100),
       currency,
       automatic_payment_methods: {
         enabled: true,

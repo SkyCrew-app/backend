@@ -1,5 +1,14 @@
 // webhook.controller.ts
-import { Controller, Post, Body, Headers, HttpException } from '@nestjs/common';
+import {
+  Controller,
+  Headers,
+  HttpException,
+  Logger,
+  Post,
+  RawBodyRequest,
+  Req,
+} from '@nestjs/common';
+import { Request } from 'express';
 import { PaymentsService } from '../../modules/payments/payments.service';
 import Stripe from 'stripe';
 import { Public } from '../decorators/public.decorator';
@@ -9,65 +18,50 @@ import { stripeClient } from '../../modules/payments/libs/stripe.client';
 @Public()
 @Controller('webhooks')
 export class WebhookController {
+  private readonly logger = new Logger(WebhookController.name);
+
   constructor(private paymentsService: PaymentsService) {}
 
   @Post('stripe')
   async handleStripeWebhook(
-    @Body() payload: any,
+    @Req() request: RawBodyRequest<Request>,
     @Headers('stripe-signature') signature: string,
   ) {
+    let event: Stripe.Event;
     try {
-      const event = stripeClient().webhooks.constructEvent(
-        payload,
+      // The signature covers the body exactly as it was sent.
+      event = stripeClient().webhooks.constructEvent(
+        request.rawBody,
         signature,
         process.env.STRIPE_WEBHOOK_SECRET,
       );
-
-      switch (event.type) {
-        case 'payment_intent.succeeded':
-          await this.handlePaymentSuccess(event.data.object);
-          break;
-
-        case 'payment_intent.payment_failed':
-          await this.handlePaymentFailure(
-            (event as Stripe.Event).data.object as Stripe.PaymentIntent,
-          );
-          break;
-
-        case 'charge.refunded':
-          await this.handleRefund(event.data.object);
-          break;
-      }
-
-      return { received: true };
     } catch {
       throw new HttpException('Webhook Error', 400);
     }
-  }
 
-  private async handlePaymentSuccess(paymentIntent: Stripe.PaymentIntent) {
-    await this.paymentsService.updatePaymentStatus(
-      paymentIntent.metadata.paymentId,
-      'completed',
-    );
+    try {
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          await this.paymentsService.settlePayment(event.data.object.id);
+          break;
 
-    await this.paymentsService.updateUserBalance(
-      parseInt(paymentIntent.metadata.userId),
-      parseFloat(paymentIntent.metadata.amount),
-    );
-  }
+        case 'payment_intent.payment_failed':
+          await this.paymentsService.markPaymentFailed(event.data.object.id);
+          break;
 
-  private async handlePaymentFailure(paymentIntent: Stripe.PaymentIntent) {
-    await this.paymentsService.updatePaymentStatus(
-      paymentIntent.metadata.paymentId,
-      'failed',
-    );
-  }
+        case 'charge.refunded':
+          await this.paymentsService.processRefund(
+            event.data.object.payment_intent as string,
+            event.data.object.amount_refunded / 100,
+          );
+          break;
+      }
+    } catch (error) {
+      // An event about a payment this application does not know is not an
+      // error for the provider: answering 4xx would make it retry for days.
+      this.logger.warn(`Stripe event ${event.type} ignored: ${error.message}`);
+    }
 
-  private async handleRefund(charge: Stripe.Charge) {
-    await this.paymentsService.processRefund(
-      charge.payment_intent as string,
-      charge.amount_refunded / 100,
-    );
+    return { received: true };
   }
 }

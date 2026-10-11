@@ -34,6 +34,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException();
     }
+    // The password changed since this session was opened.
+    if ((payload.sv ?? 0) !== (user.sessionVersion ?? 0)) {
+      throw new UnauthorizedException();
+    }
     return user;
   }
 }

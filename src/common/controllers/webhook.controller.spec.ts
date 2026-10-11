@@ -32,7 +32,8 @@ describe('WebhookController', () => {
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
 
     paymentsService = {
-      updatePaymentStatus: jest.fn(),
+      settlePayment: jest.fn(),
+      markPaymentFailed: jest.fn(),
       updateUserBalance: jest.fn(),
       processRefund: jest.fn(),
     };
@@ -59,62 +60,80 @@ describe('WebhookController', () => {
   });
 
   describe('handleStripeWebhook', () => {
-    it('doit traiter payment_intent.succeeded', async () => {
-      const payload = '{}';
-      const signature = 'sig';
-      const paymentIntent = {
-        metadata: { paymentId: 'p1', userId: '42', amount: '100' },
-      };
-      const event = mockEvent('payment_intent.succeeded', paymentIntent);
+    const RAW = Buffer.from('{"id":"evt_1"}');
+    const request = { rawBody: RAW } as any;
 
-      stripeConstructEvent.mockReturnValue(event);
+    it('checks the signature against the body exactly as it was sent', async () => {
+      stripeConstructEvent.mockReturnValue(mockEvent('ping', {}));
 
-      const result = await controller.handleStripeWebhook(payload, signature);
-      expect(paymentsService.updatePaymentStatus).toHaveBeenCalledWith(
-        'p1',
-        'completed',
+      await controller.handleStripeWebhook(request, 'sig');
+
+      expect(stripeConstructEvent).toHaveBeenCalledWith(
+        RAW,
+        'sig',
+        'whsec_test',
       );
-      expect(paymentsService.updateUserBalance).toHaveBeenCalledWith(42, 100);
+    });
+
+    it('settles the payment when the intent succeeds, without crediting itself', async () => {
+      stripeConstructEvent.mockReturnValue(
+        mockEvent('payment_intent.succeeded', { id: 'pi_1' }),
+      );
+
+      const result = await controller.handleStripeWebhook(request, 'sig');
+
+      expect(paymentsService.settlePayment).toHaveBeenCalledWith('pi_1');
+      expect(paymentsService.updateUserBalance).not.toHaveBeenCalled();
       expect(result).toEqual({ received: true });
     });
 
-    it('doit traiter payment_intent.payment_failed', async () => {
-      const payload = '{}';
-      const signature = 'sig';
-      const paymentIntent = { metadata: { paymentId: 'p2' } };
-      const event = mockEvent('payment_intent.payment_failed', paymentIntent);
-
-      stripeConstructEvent.mockReturnValue(event);
-
-      const result = await controller.handleStripeWebhook(payload, signature);
-      expect(paymentsService.updatePaymentStatus).toHaveBeenCalledWith(
-        'p2',
-        'failed',
+    it('records a failed attempt', async () => {
+      stripeConstructEvent.mockReturnValue(
+        mockEvent('payment_intent.payment_failed', { id: 'pi_2' }),
       );
+
+      const result = await controller.handleStripeWebhook(request, 'sig');
+
+      expect(paymentsService.markPaymentFailed).toHaveBeenCalledWith('pi_2');
       expect(result).toEqual({ received: true });
     });
 
-    it('doit traiter charge.refunded', async () => {
-      const payload = '{}';
-      const signature = 'sig';
-      const charge = { payment_intent: 'pi_123', amount_refunded: 500 };
-      const event = mockEvent('charge.refunded', charge);
+    it('records a refund', async () => {
+      stripeConstructEvent.mockReturnValue(
+        mockEvent('charge.refunded', {
+          payment_intent: 'pi_123',
+          amount_refunded: 500,
+        }),
+      );
 
-      stripeConstructEvent.mockReturnValue(event);
+      const result = await controller.handleStripeWebhook(request, 'sig');
 
-      const result = await controller.handleStripeWebhook(payload, signature);
       expect(paymentsService.processRefund).toHaveBeenCalledWith('pi_123', 5);
       expect(result).toEqual({ received: true });
     });
 
-    it('doit renvoyer une erreur 400 si signature invalide', async () => {
+    it('acknowledges an event about a payment it does not know', async () => {
+      stripeConstructEvent.mockReturnValue(
+        mockEvent('payment_intent.succeeded', { id: 'pi_unknown' }),
+      );
+      (paymentsService.settlePayment as jest.Mock).mockRejectedValue(
+        new Error('Payment not found'),
+      );
+
+      await expect(
+        controller.handleStripeWebhook(request, 'sig'),
+      ).resolves.toEqual({ received: true });
+    });
+
+    it('answers 400 when the signature is invalid', async () => {
       stripeConstructEvent.mockImplementation(() => {
         throw new Error('Invalid signature');
       });
 
-      await expect(controller.handleStripeWebhook('{}', 'bad')).rejects.toThrow(
-        HttpException,
-      );
+      await expect(
+        controller.handleStripeWebhook(request, 'bad'),
+      ).rejects.toThrow(HttpException);
+      expect(paymentsService.settlePayment).not.toHaveBeenCalled();
     });
   });
 });

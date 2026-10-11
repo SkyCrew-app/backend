@@ -30,6 +30,7 @@ describe('PaymentsResolver', () => {
     findByInvoice: jest.fn(),
     processPayment: jest.fn(),
     updatePaymentStatus: jest.fn(),
+    settlePayment: jest.fn(),
     processRefund: jest.fn(),
   };
 
@@ -219,6 +220,22 @@ describe('PaymentsResolver', () => {
       await expect(
         resolver.processPayment(createPaymentInput, admin),
       ).rejects.toThrow('User not found for payment');
+    });
+  });
+
+  describe('confirmPayment', () => {
+    it('settles the payment on behalf of the caller', async () => {
+      const caller = { id: 3, email: 'p@example.com', role: 'Pilote' };
+      const settled = { id: 1, payment_status: 'completed' };
+      mockService.settlePayment.mockResolvedValue(settled);
+
+      await expect(resolver.confirmPayment('pi_test123', caller)).resolves.toBe(
+        settled,
+      );
+      expect(mockService.settlePayment).toHaveBeenCalledWith(
+        'pi_test123',
+        caller,
+      );
     });
   });
 

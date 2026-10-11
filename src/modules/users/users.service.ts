@@ -293,6 +293,8 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
+    // Every session opens again with the new password, this one included.
+    user.sessionVersion = (user.sessionVersion ?? 0) + 1;
 
     const first_name = user.first_name;
 
@@ -362,6 +364,8 @@ export class UsersService {
     }
 
     user.password = await bcrypt.hash(newPassword, 10);
+    // Whoever was signed in with the old password is signed out.
+    user.sessionVersion = (user.sessionVersion ?? 0) + 1;
     // The link works once.
     user.passwordResetTokenHash = null;
     user.passwordResetExpiresAt = null;

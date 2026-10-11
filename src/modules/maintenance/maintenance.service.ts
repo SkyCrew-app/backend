@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { User } from '../users/entity/users.entity';
+import { freeFileName } from '../../common/uploads/save-upload';
 
 @Injectable()
 export class MaintenanceService {
@@ -45,36 +46,17 @@ export class MaintenanceService {
 
     await this.maintenanceRepository.save(newMaintenance);
 
-    const maintenanceDir = path.join(
-      __dirname,
-      '../../uploads/maintenance',
-      String(newMaintenance.id),
-    );
-
-    if (!fs.existsSync(maintenanceDir)) {
-      fs.mkdirSync(maintenanceDir, { recursive: true });
+    if (filePaths?.length) {
+      newMaintenance.documents_url = this.storeAttachments(
+        newMaintenance.id,
+        filePaths,
+      );
     }
-
-    if (filePaths && filePaths.length > 0) {
-      newMaintenance.documents_url = filePaths.map((filePath) => {
-        const destinationPath = path.join(
-          maintenanceDir,
-          path.basename(filePath),
-        );
-        fs.renameSync(filePath, destinationPath);
-        return `/uploads/maintenance/${newMaintenance.id}/${path.basename(filePath)}`;
-      });
-    }
-
-    if (imagePaths && imagePaths.length > 0) {
-      newMaintenance.images_url = imagePaths.map((imagePath) => {
-        const destinationPath = path.join(
-          maintenanceDir,
-          path.basename(imagePath),
-        );
-        fs.renameSync(imagePath, destinationPath);
-        return `/uploads/maintenance/${newMaintenance.id}/${path.basename(imagePath)}`;
-      });
+    if (imagePaths?.length) {
+      newMaintenance.images_url = this.storeAttachments(
+        newMaintenance.id,
+        imagePaths,
+      );
     }
 
     return this.maintenanceRepository.save(newMaintenance);
@@ -94,37 +76,15 @@ export class MaintenanceService {
       throw new NotFoundException('Maintenance not found');
     }
 
-    const maintenanceDir = path.join(
-      __dirname,
-      '../../uploads/maintenance',
-      String(maintenance.id),
-    );
-
-    if (!fs.existsSync(maintenanceDir)) {
-      fs.mkdirSync(maintenanceDir, { recursive: true });
-    }
-
-    if (filePaths && filePaths.length > 0) {
-      maintenance.documents_url = filePaths.map((filePath) => {
-        const destinationPath = path.join(
-          maintenanceDir,
-          path.basename(filePath),
-        );
-        fs.renameSync(filePath, destinationPath);
-        return `/uploads/maintenance/${maintenance.id}/${path.basename(filePath)}`;
-      });
-    }
-
-    if (imagePaths && imagePaths.length > 0) {
-      maintenance.images_url = imagePaths.map((imagePath) => {
-        const destinationPath = path.join(
-          maintenanceDir,
-          path.basename(imagePath),
-        );
-        fs.renameSync(imagePath, destinationPath);
-        return `/uploads/maintenance/${maintenance.id}/${path.basename(imagePath)}`;
-      });
-    }
+    // New files are added to the ones already attached.
+    maintenance.documents_url = [
+      ...(maintenance.documents_url ?? []),
+      ...this.storeAttachments(maintenance.id, filePaths),
+    ];
+    maintenance.images_url = [
+      ...(maintenance.images_url ?? []),
+      ...this.storeAttachments(maintenance.id, imagePaths),
+    ];
 
     if (updateMaintenanceInput.aircraft_id) {
       const aircraft = await this.aircraftRepository.findOne({
@@ -178,6 +138,63 @@ export class MaintenanceService {
       throw new NotFoundException('Maintenance not found');
     }
     return maintenance;
+  }
+
+  async removeAttachment(id: number, url: string): Promise<Maintenance> {
+    const maintenance = await this.maintenanceRepository.findOne({
+      where: { id },
+      relations: ['aircraft', 'technician'],
+    });
+    if (!maintenance) {
+      throw new NotFoundException('Maintenance not found');
+    }
+
+    const documents = maintenance.documents_url ?? [];
+    const images = maintenance.images_url ?? [];
+    if (!documents.includes(url) && !images.includes(url)) {
+      throw new NotFoundException('Attachment not found');
+    }
+
+    maintenance.documents_url = documents.filter((item) => item !== url);
+    maintenance.images_url = images.filter((item) => item !== url);
+    const saved = await this.maintenanceRepository.save(maintenance);
+
+    // The address was one of this maintenance: only its file name is used.
+    fs.rmSync(path.join(this.attachmentsDirectory(id), path.basename(url)), {
+      force: true,
+    });
+
+    return saved;
+  }
+
+  private attachmentsDirectory(maintenanceId: number): string {
+    return path.join(
+      __dirname,
+      '../../uploads/maintenance',
+      String(maintenanceId),
+    );
+  }
+
+  // Moves uploaded files into the folder of the maintenance and returns
+  // their addresses. A file never replaces another one with the same name.
+  private storeAttachments(
+    maintenanceId: number,
+    temporaryPaths: string[] = [],
+  ): string[] {
+    if (!temporaryPaths?.length) {
+      return [];
+    }
+
+    const directory = this.attachmentsDirectory(maintenanceId);
+    fs.mkdirSync(directory, { recursive: true });
+
+    return temporaryPaths.map((temporaryPath) => {
+      const name = freeFileName(temporaryPath, (candidate) =>
+        fs.existsSync(path.join(directory, candidate)),
+      );
+      fs.renameSync(temporaryPath, path.join(directory, name));
+      return `/uploads/maintenance/${maintenanceId}/${name}`;
+    });
   }
 
   async remove(id: number): Promise<boolean> {

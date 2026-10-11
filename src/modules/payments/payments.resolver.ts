@@ -108,6 +108,17 @@ export class PaymentsResolver {
     };
   }
 
+  // Called when the member comes back from the payment form. The account is
+  // credited only if the provider confirms the payment, and only once.
+  @Mutation(() => Payment)
+  @UseGuards(JwtAuthGuard)
+  async confirmPayment(
+    @Args('paymentId', { type: () => String }) paymentId: string,
+    @CurrentUser() currentUser?: SessionUser,
+  ): Promise<Payment> {
+    return this.paymentsService.settlePayment(paymentId, currentUser);
+  }
+
   @Mutation(() => Payment)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')

@@ -22,7 +22,10 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Kept for the payment webhook, whose signature covers the raw body.
+    rawBody: true,
+  });
 
   // Behind a reverse proxy, the client address comes from X-Forwarded-For.
   // TRUST_PROXY is the number of proxies in front of the application; leave

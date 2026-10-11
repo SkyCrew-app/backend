@@ -116,6 +116,8 @@ describe('UsersService password reset', () => {
       expect(await bcrypt.compare('nouveau-secret', user.password)).toBe(true);
       expect(user.passwordResetTokenHash).toBeNull();
       expect(user.passwordResetExpiresAt).toBeNull();
+      // Sessions opened with the old password are closed.
+      expect(user.sessionVersion).toBe(1);
       expect(mailer.sendMail.mock.calls[0][3]).toBe('change-password');
     });
 
