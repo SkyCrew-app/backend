@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.9.0](https://github.com/SkyCrew-app/backend/compare/2.8.0...2.9.0) (2026-10-11)
+
+
+### Features
+
+* **auth:** :sparkles: reset a forgotten password by e-mail ([#129](https://github.com/SkyCrew-app/backend/issues/129)) ([8593b04](https://github.com/SkyCrew-app/backend/commit/8593b04ba1e800042e11d3198df4602097859f60))
+* **flights:** :sparkles: record when a flight is closed ([#128](https://github.com/SkyCrew-app/backend/issues/128)) ([10fba6f](https://github.com/SkyCrew-app/backend/commit/10fba6fc3e06c7df303e4347d274f53234c83af2))
+
+
+### Bug Fixes
+
+* **e-learning:** :bug: answer correctly about lessons never opened ([#130](https://github.com/SkyCrew-app/backend/issues/130)) ([2d25dc8](https://github.com/SkyCrew-app/backend/commit/2d25dc8c9927afd235473a5bb5e3bea8064a4a6e))
+
 ## [2.8.0](https://github.com/SkyCrew-app/backend/compare/2.7.0...2.8.0) (2026-10-11)
 
 
