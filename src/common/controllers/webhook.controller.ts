@@ -3,18 +3,13 @@ import { Controller, Post, Body, Headers, HttpException } from '@nestjs/common';
 import { PaymentsService } from '../../modules/payments/payments.service';
 import Stripe from 'stripe';
 import { Public } from '../decorators/public.decorator';
+import { stripeClient } from '../../modules/payments/libs/stripe.client';
 
 // Called by the payment provider; authenticated by its signature.
 @Public()
 @Controller('webhooks')
 export class WebhookController {
-  private stripe: Stripe;
-
-  constructor(private paymentsService: PaymentsService) {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-01-27.acacia',
-    });
-  }
+  constructor(private paymentsService: PaymentsService) {}
 
   @Post('stripe')
   async handleStripeWebhook(
@@ -22,7 +17,7 @@ export class WebhookController {
     @Headers('stripe-signature') signature: string,
   ) {
     try {
-      const event = this.stripe.webhooks.constructEvent(
+      const event = stripeClient().webhooks.constructEvent(
         payload,
         signature,
         process.env.STRIPE_WEBHOOK_SECRET,

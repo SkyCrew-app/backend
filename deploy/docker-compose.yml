@@ -1,0 +1,102 @@
+# SkyCrew on a single server: web application, API, database, cache and an
+# HTTPS reverse proxy. Everything is configured from the .env file next to
+# this one (see .env.example and README.md).
+name: skycrew
+
+services:
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/skycrew-app/frontend}:${FRONTEND_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      # The middleware checks the site status through the private network.
+      INTERNAL_GRAPHQL_URL: http://backend:3000/graphql
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/skycrew-app/backend}:${BACKEND_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      BASE_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
+      FRONTEND_URL: ${PUBLIC_URL}
+      ALLOWED_ORIGINS: ${PUBLIC_URL}
+      TRUST_PROXY: 1
+      DATABASE_URL: postgresql://skycrew:${DB_PASSWORD:?set DB_PASSWORD in .env}@db:5432/skycrew
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: skycrew
+      DB_USER: skycrew
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_SYNCHRONIZE: "false"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      ENABLE_SWAGGER: "false"
+      SEED_ON_START: "true"
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+      OPENWEATHERMAP_API_KEY: ${OPENWEATHERMAP_API_KEY:-}
+    volumes:
+      - uploads:/usr/src/app/dist/src/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: skycrew
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: skycrew
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skycrew -d skycrew"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+
+volumes:
+  db-data:
+  redis-data:
+  uploads:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,15 @@
+# One address for everything: the API paths go to the API, the rest to the
+# web application. With a domain name, Caddy obtains and renews the HTTPS
+# certificate on its own.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	@api path /graphql /uploads/* /socket.io/* /webhooks/* /files/* /health /health/*
+	handle @api {
+		reverse_proxy backend:3000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
