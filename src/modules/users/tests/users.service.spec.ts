@@ -806,6 +806,21 @@ describe('UsersService', () => {
       const updateArg = userProgressRepository.update.mock
         .calls[0][1] as Partial<UserProgress>;
       expect(updateArg.completed_at).toBeInstanceOf(Date);
+      expect(userProgressRepository.save).not.toHaveBeenCalled();
+    });
+
+    it("crée la progression quand la leçon n'avait pas été marquée comme commencée", async () => {
+      userProgressRepository.update.mockResolvedValue({ affected: 0 } as any);
+      userProgressRepository.create.mockImplementation((value) => value);
+
+      await service.markLessonCompleted(2, 3);
+
+      expect(userProgressRepository.save).toHaveBeenCalledWith({
+        user: { id: 2 },
+        lesson: { id: 3 },
+        completed: true,
+        completed_at: expect.any(Date),
+      });
     });
   });
 
@@ -875,9 +890,32 @@ describe('UsersService', () => {
       });
       expect(result).toBe(true);
 
-      userProgressRepository.findOne.mockResolvedValue(undefined);
+      userProgressRepository.findOne.mockResolvedValue({
+        completed: false,
+      } as UserProgress);
       result = await service.getUserProgress(userId, lessonId);
-      expect(result).toBeUndefined();
+      expect(result).toBe(false);
+    });
+
+    it('répond non pour une leçon jamais ouverte, sans ligne de progression', async () => {
+      userProgressRepository.findOne.mockResolvedValue(undefined);
+
+      await expect(service.getUserProgress(8, 15)).resolves.toBe(false);
+    });
+  });
+
+  describe('countCompletedLessons', () => {
+    it('compte les leçons terminées, pas les évaluations', async () => {
+      userProgressRepository.count = jest.fn().mockResolvedValue(4);
+
+      await expect(service.countCompletedLessons(8)).resolves.toBe(4);
+      expect(userProgressRepository.count).toHaveBeenCalledWith({
+        where: {
+          user: { id: 8 },
+          lesson: { id: expect.anything() },
+          completed: true,
+        },
+      });
     });
   });
 });
