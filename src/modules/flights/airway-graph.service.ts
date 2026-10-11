@@ -62,11 +62,6 @@ const EUR_LAT_MAX = 72;
 const EUR_LON_MIN = -15;
 const EUR_LON_MAX = 35;
 
-// France bounding box (tighter, for initial focus)
-const FR_LAT_MIN = 41;
-const FR_LAT_MAX = 52;
-const FR_LON_MIN = -6;
-const FR_LON_MAX = 10;
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;

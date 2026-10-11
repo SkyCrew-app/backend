@@ -120,7 +120,8 @@ export class ChecklistsService {
   }
 
   async reorderItems(templateId: number, itemIds: number[]): Promise<ChecklistItem[]> {
-    const template = await this.findOneTemplate(templateId);
+    // Fails when the template does not exist.
+    await this.findOneTemplate(templateId);
     const items = await this.itemRepository.find({
       where: { template: { id: templateId } },
     });
