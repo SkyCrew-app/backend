@@ -71,3 +71,13 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The image is what a release publishes: it has to keep building.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build the container image
+        run: docker build -t skycrew-backend:ci .

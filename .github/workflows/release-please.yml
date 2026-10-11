@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  # Publishes the image of an existing version again, without a new release.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to publish, as tagged (for example 2.9.0)
+        required: true
 
 permissions:
   contents: write
@@ -11,10 +17,54 @@ permissions:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - name: Open or update the release pull request
+        id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # The image is what a server runs: it is published with each version.
+  image:
+    name: Publish the container image
+    needs: release-please
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+      needs.release-please.outputs.release_created == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/skycrew-app/backend
+      VERSION: ${{ inputs.version || needs.release-please.outputs.tag_name }}
+    steps:
+      - name: Check out the released version
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION }}
+
+      - name: Sign in to the registry
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: echo "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+
+      - name: Build the image
+        env:
+          SOURCE: https://github.com/${{ github.repository }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=$SOURCE" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            -t "$IMAGE:$VERSION" -t "$IMAGE:latest" .
+
+      - name: Publish the image
+        run: docker push --all-tags "$IMAGE"
