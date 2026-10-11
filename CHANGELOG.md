@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.0](https://github.com/SkyCrew-app/backend/compare/2.7.0...2.8.0) (2026-10-11)
+
+
+### Features
+
+* **flights:** :sparkles: record the remarks written when closing a flight ([#123](https://github.com/SkyCrew-app/backend/issues/123)) ([f305ace](https://github.com/SkyCrew-app/backend/commit/f305acec706ebc7f7ee35683516639377d9cfcec))
+
 ## [2.7.0](https://github.com/SkyCrew-app/backend/compare/2.6.7...2.7.0) (2026-10-09)
 
 
