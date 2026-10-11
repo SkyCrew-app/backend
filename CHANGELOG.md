@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.10.0](https://github.com/SkyCrew-app/backend/compare/2.9.0...2.10.0) (2026-10-11)
+
+
+### Features
+
+* **deploy:** :rocket: add a single-server deployment and publish the image ([#136](https://github.com/SkyCrew-app/backend/issues/136)) ([f5db13b](https://github.com/SkyCrew-app/backend/commit/f5db13bb6005e7389b3d3e76f3386d372dea6bd6))
+
+
+### Bug Fixes
+
+* **deploy:** :bug: let the production image start on a new installation ([#134](https://github.com/SkyCrew-app/backend/issues/134)) ([d4925ff](https://github.com/SkyCrew-app/backend/commit/d4925ff994df1b987772134d3569d5734b2759d8))
+* **mail:** :bug: sign in and encrypt when sending through a real provider ([#135](https://github.com/SkyCrew-app/backend/issues/135)) ([38a8a17](https://github.com/SkyCrew-app/backend/commit/38a8a1700d3bcb0a5c98da5d8aeba867cbbcd99d))
+
 ## [2.9.0](https://github.com/SkyCrew-app/backend/compare/2.8.0...2.9.0) (2026-10-11)
 
 
