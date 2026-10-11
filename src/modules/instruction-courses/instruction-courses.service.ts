@@ -467,16 +467,8 @@ export class InstructionCoursesService {
       },
     });
 
-    const userProgressResults =
-      await this.userService.getEvaluationResults(userId);
-
-    const lessonProgresses = userProgressResults.filter(
-      (progress) => progress.lesson,
-    );
-
-    const completedLessonsCount = lessonProgresses.filter(
-      (progress) => progress.completed,
-    ).length;
+    const completedLessonsCount =
+      await this.userService.countCompletedLessons(userId);
 
     const totalLessonsCount = await this.lessonRepository.count();
 

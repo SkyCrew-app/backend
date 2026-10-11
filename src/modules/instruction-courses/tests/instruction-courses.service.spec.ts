@@ -42,7 +42,11 @@ describe('InstructionCoursesService', () => {
     commentRepo = { create: jest.fn(), save: jest.fn() };
     userProgressRepo = { count: jest.fn(), findOne: jest.fn() };
     lessonRepo = { count: jest.fn() };
-    userService = { findOneById: jest.fn(), getEvaluationResults: jest.fn() };
+    userService = {
+      findOneById: jest.fn(),
+      getEvaluationResults: jest.fn(),
+      countCompletedLessons: jest.fn().mockResolvedValue(0),
+    };
     notifications = { create: jest.fn() };
     eLearningService = { getCourses: jest.fn(), getCourseById: jest.fn() };
 

@@ -432,10 +432,22 @@ export class UsersService {
   }
 
   async markLessonCompleted(userId: number, lessonId: number): Promise<void> {
-    await this.userProgressRepository.update(
+    const completion = { completed: true, completed_at: new Date() };
+    const result = await this.userProgressRepository.update(
       { user: { id: userId }, lesson: { id: lessonId } },
-      { completed: true, completed_at: new Date() },
+      completion,
     );
+
+    // The lesson may be completed without having been marked as started.
+    if (!result?.affected) {
+      await this.userProgressRepository.save(
+        this.userProgressRepository.create({
+          user: { id: userId },
+          lesson: { id: lessonId },
+          ...completion,
+        }),
+      );
+    }
   }
 
   async saveEvaluationResult(
@@ -469,7 +481,18 @@ export class UsersService {
       where: { user: { id: userId }, lesson: { id: lessonId } },
     });
 
-    return progress?.completed;
+    // A lesson never opened has no progress row: it is simply not completed.
+    return progress?.completed ?? false;
+  }
+
+  countCompletedLessons(userId: number): Promise<number> {
+    return this.userProgressRepository.count({
+      where: {
+        user: { id: userId },
+        lesson: { id: Not(IsNull()) },
+        completed: true,
+      },
+    });
   }
 
   async updateDashboardWidgets(userId: number, widgets: any[]): Promise<User> {
