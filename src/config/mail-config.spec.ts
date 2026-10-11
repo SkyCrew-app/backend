@@ -1,82 +1,62 @@
 import { ConfigService } from '@nestjs/config';
 import { mailConfig } from './mail.config';
-import SMTPTransport from 'nodemailer/lib/smtp-transport';
+
+const configWith = (values: Record<string, unknown>) =>
+  ({ get: (key: string) => values[key] }) as unknown as ConfigService;
 
 describe('mailConfig', () => {
-  let configService: Partial<ConfigService>;
+  it('signs in to a real provider and lets the connection be encrypted', () => {
+    const options = mailConfig(
+      configWith({
+        MAIL_HOST: 'smtp.example.com',
+        // Environment values are text.
+        MAIL_PORT: '587',
+        MAIL_USER: 'user@example.com',
+        MAIL_PASSWORD: 'secret',
+      }),
+    );
 
-  beforeEach(() => {
-    configService = { get: jest.fn() };
+    expect(options).toEqual({
+      host: 'smtp.example.com',
+      port: 587,
+      secure: false,
+      auth: { user: 'user@example.com', pass: 'secret' },
+    });
+    // Nothing turns STARTTLS or the certificate check off.
+    expect(options).not.toHaveProperty('ignoreTLS');
+    expect(options).not.toHaveProperty('tls');
   });
 
-  it('devrait configurer auth quand MAIL_AUTH est true', () => {
-    (configService.get as jest.Mock).mockImplementation((key: string) => {
-      switch (key) {
-        case 'MAIL_HOST':
-          return 'smtp.example.com';
-        case 'MAIL_PORT':
-          return 587;
-        case 'MAIL_AUTH':
-          return true;
-        case 'MAIL_USER':
-          return 'user@example.com';
-        case 'MAIL_PASSWORD':
-          return 'password123';
-        default:
-          return undefined;
-      }
-    });
-
+  it('uses implicit TLS on port 465', () => {
     const options = mailConfig(
-      configService as ConfigService,
-    ) as SMTPTransport.Options;
+      configWith({ MAIL_HOST: 'smtp.example.com', MAIL_PORT: '465' }),
+    );
 
-    expect(configService.get).toHaveBeenCalledWith('MAIL_HOST');
-    expect(configService.get).toHaveBeenCalledWith('MAIL_PORT');
-    expect(configService.get).toHaveBeenCalledWith('MAIL_AUTH');
-    expect(configService.get).toHaveBeenCalledWith('MAIL_USER');
-    expect(configService.get).toHaveBeenCalledWith('MAIL_PASSWORD');
-
-    expect(options.host).toBe('smtp.example.com');
-    expect(options.port).toBe(587);
-    expect(options.secure).toBe(false);
-    expect(options.ignoreTLS).toBe(true);
-    expect(options.requireTLS).toBe(false);
-    expect(options.auth).toEqual({
-      user: 'user@example.com',
-      pass: 'password123',
-    });
-    expect(options.tls).toEqual({ rejectUnauthorized: false });
+    expect(options.secure).toBe(true);
   });
 
-  it('devrait définir auth à null quand MAIL_AUTH est false', () => {
-    (configService.get as jest.Mock).mockImplementation((key: string) => {
-      switch (key) {
-        case 'MAIL_HOST':
-          return 'smtp.example.org';
-        case 'MAIL_PORT':
-          return 2500;
-        case 'MAIL_AUTH':
-          return false;
-        default:
-          return undefined;
-      }
-    });
-
+  it('accepts the password under its shorter name', () => {
     const options = mailConfig(
-      configService as ConfigService,
-    ) as SMTPTransport.Options;
+      configWith({ MAIL_USER: 'user@example.com', MAIL_PASS: 'secret' }),
+    );
 
-    expect(configService.get).toHaveBeenCalledWith('MAIL_HOST');
-    expect(configService.get).toHaveBeenCalledWith('MAIL_PORT');
-    expect(configService.get).toHaveBeenCalledWith('MAIL_AUTH');
+    expect(options.auth).toEqual({ user: 'user@example.com', pass: 'secret' });
+  });
 
-    expect(options.host).toBe('smtp.example.org');
-    expect(options.port).toBe(2500);
-    expect(options.secure).toBe(false);
-    expect(options.ignoreTLS).toBe(true);
-    expect(options.requireTLS).toBe(false);
-    expect(options.auth).toBeNull();
-    expect(options.tls).toEqual({ rejectUnauthorized: false });
+  it('sends without an account to a local mail catcher', () => {
+    const options = mailConfig(
+      configWith({ MAIL_HOST: 'localhost', MAIL_PORT: 1025, MAIL_USER: '' }),
+    );
+
+    expect(options).toEqual({
+      host: 'localhost',
+      port: 1025,
+      secure: false,
+      auth: undefined,
+    });
+  });
+
+  it('defaults to the submission port', () => {
+    expect(mailConfig(configWith({})).port).toBe(587);
   });
 });
