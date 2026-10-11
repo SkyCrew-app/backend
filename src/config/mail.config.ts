@@ -1,22 +1,28 @@
 import { ConfigService } from '@nestjs/config';
 import * as SMTPTransport from 'nodemailer/lib/smtp-transport';
 
+// Implicit TLS is the rule on this port; elsewhere the connection starts in
+// clear and is upgraded with STARTTLS when the server offers it.
+const IMPLICIT_TLS_PORT = 465;
+
 export const mailConfig = (
   configService: ConfigService,
-): SMTPTransport.Options => ({
-  host: configService.get<string>('MAIL_HOST'),
-  port: configService.get<number>('MAIL_PORT'),
-  secure: false,
-  ignoreTLS: true,
-  requireTLS: false,
-  auth:
-    configService.get<boolean>('MAIL_AUTH') === true
+): SMTPTransport.Options => {
+  const port = Number(configService.get('MAIL_PORT')) || 587;
+  const user = configService.get<string>('MAIL_USER');
+
+  return {
+    host: configService.get<string>('MAIL_HOST'),
+    port,
+    secure: port === IMPLICIT_TLS_PORT,
+    // A local mail catcher needs no account; a real provider does.
+    auth: user
       ? {
-          user: configService.get<string>('MAIL_USER'),
-          pass: configService.get<string>('MAIL_PASSWORD'),
+          user,
+          pass:
+            configService.get<string>('MAIL_PASSWORD') ??
+            configService.get<string>('MAIL_PASS'),
         }
-      : null,
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
+      : undefined,
+  };
+};
