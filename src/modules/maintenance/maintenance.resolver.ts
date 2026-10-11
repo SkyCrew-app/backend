@@ -4,8 +4,7 @@ import { Maintenance } from './entity/maintenance.entity';
 import { CreateMaintenanceInput } from './dto/create-maintenance.input';
 import { UpdateMaintenanceInput } from './dto/update-maintenance.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
-import { createWriteStream, existsSync, mkdirSync } from 'fs';
-import * as path from 'path';
+import { saveUploadToTmp } from '../../common/uploads/save-upload';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -26,42 +25,8 @@ export class MaintenanceResolver {
     @Args({ name: 'images', type: () => [GraphQLUpload], nullable: true })
     images?: FileUpload[],
   ): Promise<Maintenance> {
-    const filePaths = [];
-    const imagePaths = [];
-
-    if (files) {
-      for (const file of files) {
-        const { createReadStream, filename } = await file;
-        const uploadDir = path.join(__dirname, '../../uploads/tmp');
-        if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-        const filePath = path.join(uploadDir, filename);
-        const stream = createReadStream();
-        await new Promise<void>((resolve, reject) => {
-          const writeStream = createWriteStream(filePath);
-          stream.pipe(writeStream);
-          writeStream.on('finish', resolve);
-          writeStream.on('error', reject);
-        });
-        filePaths.push(filePath);
-      }
-    }
-
-    if (images) {
-      for (const image of images) {
-        const { createReadStream, filename } = await image;
-        const uploadDir = path.join(__dirname, '../../uploads/tmp');
-        if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-        const imagePath = path.join(uploadDir, filename);
-        const stream = createReadStream();
-        await new Promise<void>((resolve, reject) => {
-          const writeStream = createWriteStream(imagePath);
-          stream.pipe(writeStream);
-          writeStream.on('finish', resolve);
-          writeStream.on('error', reject);
-        });
-        imagePaths.push(imagePath);
-      }
-    }
+    const filePaths = await this.saveUploads(files);
+    const imagePaths = await this.saveUploads(images);
 
     return this.maintenanceService.create(
       createMaintenanceInput,
@@ -81,48 +46,33 @@ export class MaintenanceResolver {
     @Args({ name: 'images', type: () => [GraphQLUpload], nullable: true })
     images?: FileUpload[],
   ): Promise<Maintenance> {
-    const filePaths = [];
-    const imagePaths = [];
-
-    if (files) {
-      for (const file of files) {
-        const { createReadStream, filename } = await file;
-        const uploadDir = path.join(__dirname, '../../uploads/tmp');
-        if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-        const filePath = path.join(uploadDir, filename);
-        const stream = createReadStream();
-        await new Promise<void>((resolve, reject) => {
-          const writeStream = createWriteStream(filePath);
-          stream.pipe(writeStream);
-          writeStream.on('finish', resolve);
-          writeStream.on('error', reject);
-        });
-        filePaths.push(filePath);
-      }
-    }
-
-    if (images) {
-      for (const image of images) {
-        const { createReadStream, filename } = await image;
-        const uploadDir = path.join(__dirname, '../../uploads/tmp');
-        if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-        const imagePath = path.join(uploadDir, filename);
-        const stream = createReadStream();
-        await new Promise<void>((resolve, reject) => {
-          const writeStream = createWriteStream(imagePath);
-          stream.pipe(writeStream);
-          writeStream.on('finish', resolve);
-          writeStream.on('error', reject);
-        });
-        imagePaths.push(imagePath);
-      }
-    }
+    const filePaths = await this.saveUploads(files);
+    const imagePaths = await this.saveUploads(images);
 
     return this.maintenanceService.update(
       updateMaintenanceInput,
       filePaths,
       imagePaths,
     );
+  }
+
+  // Removes one image or document; the others are kept.
+  @Mutation(() => Maintenance)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Technicien', 'Administrateur')
+  async removeMaintenanceAttachment(
+    @Args('maintenanceId', { type: () => Int }) maintenanceId: number,
+    @Args('url') url: string,
+  ): Promise<Maintenance> {
+    return this.maintenanceService.removeAttachment(maintenanceId, url);
+  }
+
+  private async saveUploads(uploads?: FileUpload[]): Promise<string[]> {
+    const paths: string[] = [];
+    for (const upload of uploads ?? []) {
+      paths.push(await saveUploadToTmp(upload));
+    }
+    return paths;
   }
 
   @Mutation(() => Boolean)

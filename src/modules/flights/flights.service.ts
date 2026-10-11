@@ -22,6 +22,7 @@ import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { WeatherResponse } from './interfaces/weather.interface';
 import { isAdmin, SessionUser } from '../../common/auth/access';
+import { buildFlightRecapPdf } from './flight-recap-pdf';
 
 export interface AIFlightOptions {
   preferred_runway_dep?: string;
@@ -250,6 +251,26 @@ export class FlightsService {
 
   async findAll(): Promise<Flight[]> {
     return this.flightsRepository.find();
+  }
+
+  // The summary of a flight as a PDF, for its pilot or an administrator.
+  async exportRecapPdf(id: number, requester?: SessionUser): Promise<string> {
+    const flight = await this.flightsRepository.findOne({
+      where: { id },
+      relations: ['user', 'reservation', 'reservation.aircraft'],
+    });
+    if (!flight) {
+      throw new NotFoundException(`Flight with ID ${id} not found`);
+    }
+    if (
+      !isAdmin(requester) &&
+      Number(flight.user?.id) !== Number(requester?.id)
+    ) {
+      throw new ForbiddenException(
+        'Vous ne pouvez exporter que vos propres vols',
+      );
+    }
+    return buildFlightRecapPdf(flight);
   }
 
   async findOne(id: number): Promise<Flight> {

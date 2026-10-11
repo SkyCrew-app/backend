@@ -84,9 +84,24 @@ describe('AuthService', () => {
       const token = await service.login(user);
       expect(token).toBe('jwt-token');
       expect(jwtService.sign).toHaveBeenCalledWith(
-        { email: 'a@example.com', sub: 1, role: 'admin' },
+        { email: 'a@example.com', sub: 1, role: 'admin', sv: 0 },
         { expiresIn: '2h' },
       );
+    });
+
+    it('stamps the session with the current session version of the user', async () => {
+      const user = {
+        email: 'a@example.com',
+        id: 1,
+        role: { role_name: 'admin' },
+        sessionVersion: 3,
+      } as User;
+
+      await service.login(user);
+
+      expect((jwtService.sign as jest.Mock).mock.calls[0][0]).toMatchObject({
+        sv: 3,
+      });
     });
   });
 

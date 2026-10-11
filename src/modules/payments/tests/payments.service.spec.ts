@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Test, TestingModule } from '@nestjs/testing';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PaymentsService } from '../payments.service';
@@ -24,6 +29,7 @@ describe('PaymentsService', () => {
     save: jest.fn(),
     find: jest.fn(),
     findOne: jest.fn(),
+    update: jest.fn(),
   };
 
   const mockUserRepository = {
@@ -402,73 +408,182 @@ describe('PaymentsService', () => {
     });
   });
 
-  describe('updatePaymentStatus', () => {
-    it('should update payment status to completed and process balance update', async () => {
-      const paymentId = 'pi_test123';
-      const status = 'completed';
-      const mockPayment = {
-        id: 1,
-        external_payment_id: paymentId,
-        payment_method: 'stripe',
-        payment_status: 'pending',
-        amount: 100.0,
-        user: { id: 1 },
-      };
-
-      const mockInvoice = { id: 1 };
-
-      mockPaymentsRepository.findOne.mockResolvedValue(mockPayment);
-      mockInvoiceRepository.findOne.mockResolvedValue(mockInvoice);
-      mockPaymentsRepository.save.mockResolvedValue({
-        ...mockPayment,
-        payment_status: 'completed',
-        invoice: mockInvoice,
-      });
-
-      jest.spyOn(service, 'updateUserBalance').mockResolvedValue({} as any);
-      jest.spyOn(service, 'createInvoice').mockResolvedValue(1);
-
-      const result = await service.updatePaymentStatus(paymentId, status);
-
-      expect(mockStripeService.confirmPayment).toHaveBeenCalledWith(paymentId);
-      expect(service.updateUserBalance).toHaveBeenCalledWith(1, 100.0);
-      expect(service.createInvoice).toHaveBeenCalledWith(mockPayment);
-      expect(mockNotificationsService.create).toHaveBeenCalled();
-      expect(result.payment_status).toBe('completed');
+  describe('settlePayment', () => {
+    const owner = { id: 1, email: 'p@example.com', role: 'Pilote' };
+    const other = { id: 2, email: 'o@example.com', role: 'Pilote' };
+    const pending = (overrides: Record<string, unknown> = {}) => ({
+      id: 7,
+      external_payment_id: 'pi_test123',
+      payment_method: 'stripe',
+      payment_status: 'pending',
+      amount: 100.0,
+      user: { id: 1 },
+      ...overrides,
     });
 
-    it('should handle PayPal payment completion', async () => {
-      const paymentId = 'paypal_order123';
-      const status = 'completed';
-      const mockPayment = {
-        id: 1,
-        external_payment_id: paymentId,
-        payment_method: 'paypal',
-        payment_status: 'pending',
-        amount: 100.0,
-        user: { id: 1 },
-      };
+    beforeEach(() => {
+      mockPaymentsRepository.update = jest
+        .fn()
+        .mockResolvedValue({ affected: 1 });
+      mockPaymentsRepository.save.mockImplementation(async (p) => p);
+      mockInvoiceRepository.findOne.mockResolvedValue({ id: 5 });
+      mockStripeService.confirmPayment.mockResolvedValue({
+        status: 'succeeded',
+        amount_received: 10000,
+      });
+      jest.spyOn(service, 'updateUserBalance').mockResolvedValue({} as any);
+      jest.spyOn(service, 'createInvoice').mockResolvedValue(5);
+    });
 
-      mockPaymentsRepository.findOne.mockResolvedValue(mockPayment);
-      mockPaymentsRepository.save.mockResolvedValue({
-        ...mockPayment,
+    it('credits the account once the card payment is confirmed', async () => {
+      mockPaymentsRepository.findOne.mockResolvedValue(pending());
+
+      const result = await service.settlePayment('pi_test123', owner);
+
+      expect(mockStripeService.confirmPayment).toHaveBeenCalledWith(
+        'pi_test123',
+      );
+      expect(service.updateUserBalance).toHaveBeenCalledWith(1, 100.0);
+      expect(mockNotificationsService.create).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
         payment_status: 'completed',
+        invoice: { id: 5 },
+      });
+    });
+
+    it.each([
+      ['the bank has not confirmed it', { status: 'requires_payment_method' }],
+      [
+        'less than the amount was received',
+        { status: 'succeeded', amount_received: 500 },
+      ],
+    ])('does not credit when %s', async (_label, intent) => {
+      mockPaymentsRepository.findOne.mockResolvedValue(pending());
+      mockStripeService.confirmPayment.mockResolvedValue(intent);
+
+      await expect(service.settlePayment('pi_test123', owner)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockPaymentsRepository.update).not.toHaveBeenCalled();
+      expect(service.updateUserBalance).not.toHaveBeenCalled();
+    });
+
+    it('captures a PayPal order and credits when it is completed', async () => {
+      mockPaymentsRepository.findOne.mockResolvedValue(
+        pending({ payment_method: 'paypal', external_payment_id: 'order1' }),
+      );
+      mockPaypalService.capturePayment.mockResolvedValue({
+        result: { status: 'COMPLETED' },
       });
 
-      jest.spyOn(service, 'updateUserBalance').mockResolvedValue({} as any);
-      jest.spyOn(service, 'createInvoice').mockResolvedValue(1);
+      await service.settlePayment('order1', owner);
 
-      await service.updatePaymentStatus(paymentId, status);
+      expect(mockPaypalService.capturePayment).toHaveBeenCalledWith('order1');
+      expect(service.updateUserBalance).toHaveBeenCalledTimes(1);
+    });
 
-      expect(mockPaypalService.capturePayment).toHaveBeenCalledWith(paymentId);
+    it('does not credit twice a payment already completed', async () => {
+      mockPaymentsRepository.findOne.mockResolvedValue(
+        pending({ payment_status: 'completed' }),
+      );
+
+      const result = await service.settlePayment('pi_test123', owner);
+
+      expect(result.payment_status).toBe('completed');
+      expect(mockStripeService.confirmPayment).not.toHaveBeenCalled();
+      expect(service.updateUserBalance).not.toHaveBeenCalled();
+    });
+
+    it('does not credit when the webhook settled it in the meantime', async () => {
+      mockPaymentsRepository.findOne
+        .mockResolvedValueOnce(pending())
+        .mockResolvedValueOnce(pending({ payment_status: 'completed' }));
+      mockPaymentsRepository.update.mockResolvedValue({ affected: 0 });
+
+      const result = await service.settlePayment('pi_test123', owner);
+
+      expect(result.payment_status).toBe('completed');
+      expect(service.updateUserBalance).not.toHaveBeenCalled();
+      expect(mockNotificationsService.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a member confirming the payment of someone else', async () => {
+      mockPaymentsRepository.findOne.mockResolvedValue(pending());
+
+      await expect(service.settlePayment('pi_test123', other)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockStripeService.confirmPayment).not.toHaveBeenCalled();
+    });
+
+    it('refuses a refunded payment', async () => {
+      mockPaymentsRepository.findOne.mockResolvedValue(
+        pending({ payment_status: 'refunded' }),
+      );
+
+      await expect(service.settlePayment('pi_test123', owner)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('throws when the payment is unknown', async () => {
+      mockPaymentsRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.settlePayment('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('updatePaymentStatus', () => {
+    it('settles through the provider when asked to complete', async () => {
+      const settled = { id: 7, payment_status: 'completed' } as any;
+      jest.spyOn(service, 'settlePayment').mockResolvedValue(settled);
+
+      await expect(
+        service.updatePaymentStatus('pi_test123', 'completed'),
+      ).resolves.toBe(settled);
+      expect(service.settlePayment).toHaveBeenCalledWith('pi_test123');
+    });
+
+    it('records another status without touching the balance', async () => {
+      const payment = {
+        id: 7,
+        payment_status: 'pending',
+        user: { id: 1 },
+      } as any;
+      mockPaymentsRepository.findOne.mockResolvedValue(payment);
+      mockPaymentsRepository.save.mockImplementation(async (p) => p);
+      jest.spyOn(service, 'updateUserBalance');
+
+      const result = await service.updatePaymentStatus('pi_test123', 'failed');
+
+      expect(result.payment_status).toBe('failed');
+      expect(service.updateUserBalance).not.toHaveBeenCalled();
+      expect(mockNotificationsService.create).not.toHaveBeenCalled();
     });
 
     it('should throw error if payment not found', async () => {
       mockPaymentsRepository.findOne.mockResolvedValue(null);
 
       await expect(
-        service.updatePaymentStatus('nonexistent', 'completed'),
+        service.updatePaymentStatus('nonexistent', 'failed'),
       ).rejects.toThrow('Payment not found');
+    });
+  });
+
+  describe('markPaymentFailed', () => {
+    it('only touches a payment still waiting', async () => {
+      mockPaymentsRepository.update = jest
+        .fn()
+        .mockResolvedValue({ affected: 1 });
+
+      await service.markPaymentFailed('pi_test123');
+
+      expect(mockPaymentsRepository.update).toHaveBeenCalledWith(
+        { external_payment_id: 'pi_test123', payment_status: 'pending' },
+        { payment_status: 'failed' },
+      );
     });
   });
 

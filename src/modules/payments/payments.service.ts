@@ -1,6 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Payment } from './entity/payments.entity';
 import { CreatePaymentInput } from './dto/create-payment.input';
 import { StripeService } from './libs/stripe.service';
@@ -8,6 +13,15 @@ import { PaypalService } from './libs/paypal.service';
 import { User } from '../users/entity/users.entity';
 import { Invoice } from '../invoices/entity/invoices.entity';
 import { NotificationsService } from '../notifications/notifications.service';
+import { isAdmin, SessionUser } from '../../common/auth/access';
+
+// Bounds of an account top-up, in euros.
+export const TOP_UP_MIN = 1;
+export const TOP_UP_MAX = 5000;
+
+// A payment can be settled while it waits for the provider, or after a first
+// attempt that failed.
+const SETTLEABLE_STATUSES = ['pending', 'failed'];
 
 @Injectable()
 export class PaymentsService {
@@ -113,6 +127,13 @@ export class PaymentsService {
       throw new Error(`User with ID ${createPaymentInput.user_id} not found`);
     }
 
+    const amount = Number(createPaymentInput.amount);
+    if (!(amount >= TOP_UP_MIN && amount <= TOP_UP_MAX)) {
+      throw new BadRequestException(
+        `Le montant doit être compris entre ${TOP_UP_MIN} et ${TOP_UP_MAX} euros`,
+      );
+    }
+
     let paymentDetails: { id: string; client_secret?: string };
     switch (createPaymentInput.payment_method) {
       case 'stripe':
@@ -191,37 +212,56 @@ export class PaymentsService {
     return invoiceResult.id;
   }
 
-  async updatePaymentStatus(
-    paymentId: string,
-    status: string,
+  // Credits the account once the provider confirms that the money was
+  // received. Called by the member coming back from the payment form and by
+  // the provider's webhook: whichever comes first credits, the other one finds
+  // the payment already completed.
+  async settlePayment(
+    externalPaymentId: string,
+    requester?: SessionUser,
   ): Promise<Payment> {
     const payment = await this.paymentsRepository.findOne({
-      where: { external_payment_id: paymentId },
+      where: { external_payment_id: externalPaymentId },
       relations: ['user'],
     });
 
     if (!payment) {
-      throw new Error('Payment not found');
+      throw new NotFoundException('Payment not found');
+    }
+    if (
+      requester &&
+      !isAdmin(requester) &&
+      Number(payment.user?.id) !== Number(requester.id)
+    ) {
+      throw new ForbiddenException(
+        'Vous ne pouvez confirmer que vos propres paiements',
+      );
+    }
+    if (payment.payment_status === 'completed') {
+      return payment;
+    }
+    if (!SETTLEABLE_STATUSES.includes(payment.payment_status)) {
+      throw new BadRequestException('Ce paiement ne peut plus être confirmé');
     }
 
-    if (payment.payment_method === 'paypal' && status === 'completed') {
-      await this.paypalService.capturePayment(paymentId);
+    await this.assertPaidAtProvider(payment);
+
+    // Only one caller moves the payment to completed, and only that one
+    // credits the account.
+    const claimed = await this.paymentsRepository.update(
+      { id: payment.id, payment_status: In(SETTLEABLE_STATUSES) },
+      { payment_status: 'completed' },
+    );
+    if (!claimed.affected) {
+      return this.findOne(payment.id);
     }
+    payment.payment_status = 'completed';
 
-    if (payment.payment_method === 'stripe' && status === 'completed') {
-      await this.stripeService.confirmPayment(paymentId);
-    }
-
-    payment.payment_status = status;
-
-    if (status === 'completed') {
-      await this.updateUserBalance(payment.user.id, payment.amount);
-      const invoiceId = await this.createInvoice(payment);
-
-      payment.invoice = await this.invoiceRepository.findOne({
-        where: { id: invoiceId },
-      });
-    }
+    await this.updateUserBalance(payment.user.id, payment.amount);
+    const invoiceId = await this.createInvoice(payment);
+    payment.invoice = await this.invoiceRepository.findOne({
+      where: { id: invoiceId },
+    });
 
     await this.NotificationsService.create({
       user_id: payment.user.id,
@@ -231,6 +271,61 @@ export class PaymentsService {
       is_read: false,
     });
 
+    return this.paymentsRepository.save(payment);
+  }
+
+  // The amount is checked at the provider, never taken from the caller.
+  private async assertPaidAtProvider(payment: Payment): Promise<void> {
+    const expectedCents = Math.round(Number(payment.amount) * 100);
+    let paid = false;
+
+    if (payment.payment_method === 'stripe') {
+      const intent = await this.stripeService.confirmPayment(
+        payment.external_payment_id,
+      );
+      paid =
+        intent?.status === 'succeeded' &&
+        Number(intent.amount_received) >= expectedCents;
+    } else if (payment.payment_method === 'paypal') {
+      const capture = await this.paypalService.capturePayment(
+        payment.external_payment_id,
+      );
+      paid = capture?.result?.status === 'COMPLETED';
+    }
+
+    if (!paid) {
+      throw new BadRequestException(
+        "Le paiement n'a pas été confirmé par le prestataire",
+      );
+    }
+  }
+
+  // Records that an attempt failed. A payment already completed stays so.
+  async markPaymentFailed(externalPaymentId: string): Promise<void> {
+    await this.paymentsRepository.update(
+      { external_payment_id: externalPaymentId, payment_status: 'pending' },
+      { payment_status: 'failed' },
+    );
+  }
+
+  async updatePaymentStatus(
+    paymentId: string,
+    status: string,
+  ): Promise<Payment> {
+    if (status === 'completed') {
+      return this.settlePayment(paymentId);
+    }
+
+    const payment = await this.paymentsRepository.findOne({
+      where: { external_payment_id: paymentId },
+      relations: ['user'],
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    payment.payment_status = status;
     return this.paymentsRepository.save(payment);
   }
 
@@ -244,6 +339,10 @@ export class PaymentsService {
     });
 
     if (payment) {
+      // The provider may announce the same refund more than once.
+      if (payment.payment_status === 'refunded') {
+        return payment;
+      }
       payment.payment_status = 'refunded';
       await this.paymentsRepository.save(payment);
 

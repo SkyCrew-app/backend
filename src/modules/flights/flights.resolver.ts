@@ -124,6 +124,16 @@ export class FlightsResolver {
     return this.flightsService.findOne(id);
   }
 
+  // Base64 of a PDF summarising the flight.
+  @Mutation(() => String, { name: 'exportFlightRecapPDF' })
+  @UseGuards(JwtAuthGuard)
+  exportFlightRecapPDF(
+    @Args('flightId', { type: () => Int }) flightId: number,
+    @CurrentUser() currentUser?: SessionUser,
+  ): Promise<string> {
+    return this.flightsService.exportRecapPdf(flightId, currentUser);
+  }
+
   @Query(() => [Flight], { name: 'getFlightsByUser' })
   @UseGuards(JwtAuthGuard)
   getFlightsByUser(

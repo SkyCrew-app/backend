@@ -423,6 +423,53 @@ describe('FlightsService', () => {
     });
   });
 
+  describe('exportRecapPdf', () => {
+    const stored = {
+      id: 7,
+      origin_icao: 'LFPO',
+      destination_icao: 'LFPN',
+      flight_type: 'local',
+      flight_hours: 1,
+      user: { id: 3, first_name: 'Jean', last_name: 'Dupont' },
+    } as any;
+
+    it.each([
+      ['its pilot', { id: 3, email: 'p@example.com', role: 'Pilote' }],
+      [
+        'an administrator',
+        { id: 1, email: 'a@example.com', role: 'Administrateur' },
+      ],
+    ])('gives the PDF to %s', async (_label, caller) => {
+      repo.findOne.mockResolvedValue(stored);
+
+      const base64 = await service.exportRecapPdf(7, caller);
+
+      expect(Buffer.from(base64, 'base64').subarray(0, 5).toString()).toBe(
+        '%PDF-',
+      );
+    });
+
+    it('refuses another member', async () => {
+      repo.findOne.mockResolvedValue(stored);
+
+      await expect(
+        service.exportRecapPdf(7, {
+          id: 4,
+          email: 'o@example.com',
+          role: 'Pilote',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws if not found', async () => {
+      repo.findOne.mockResolvedValue(null);
+
+      await expect(service.exportRecapPdf(8)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('removeFlight', () => {
     it('deletes own flight', async () => {
       repo.findOne.mockResolvedValue({ id: 9, user: { id: 1 } } as any);
