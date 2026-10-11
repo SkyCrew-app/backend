@@ -191,6 +191,28 @@ export class UsersResolver {
     return this.usersService.confirmEmailAndSetPassword(token, password);
   }
 
+  // Always answers true: whether the address belongs to a member is not
+  // disclosed.
+  @Public()
+  @UseGuards(GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
+  @Mutation(() => Boolean)
+  async requestPasswordReset(@Args('email') email: string): Promise<boolean> {
+    await this.usersService.requestPasswordReset(email);
+    return true;
+  }
+
+  @Public()
+  @UseGuards(GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
+  @Mutation(() => Boolean)
+  async resetPassword(
+    @Args('token') token: string,
+    @Args('newPassword') newPassword: string,
+  ): Promise<boolean> {
+    return this.usersService.resetPassword(token, newPassword);
+  }
+
   @Query(() => User)
   @UseGuards(JwtAuthGuard)
   async getUserPreferences(

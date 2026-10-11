@@ -106,6 +106,14 @@ export class User {
   @Column({ nullable: true })
   validation_token: string;
 
+  // Password reset: never part of the API. Only the hash of the token sent
+  // by e-mail is kept, with its expiry.
+  @Column({ nullable: true })
+  passwordResetTokenHash: string;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  passwordResetExpiresAt: Date;
+
   @Field({ nullable: true })
   @Column({ nullable: true })
   language: string;
