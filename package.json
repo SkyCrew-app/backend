@@ -26,6 +26,7 @@
     "migration:run": "npm run build && npm run typeorm -- migration:run",
     "migration:revert": "npm run typeorm -- migration:revert",
     "seed": "ts-node -r tsconfig-paths/register src/db/run-seeders.ts",
+    "seed:prod": "node dist/src/db/run-seeders.js",
     "seed:demo": "ts-node -r tsconfig-paths/register src/db/run-seeders.ts --demo",
     "seed:dist": "node dist/src/db/run-seeders.js",
     "seed:demo:dist": "node dist/src/db/run-seeders.js --demo",

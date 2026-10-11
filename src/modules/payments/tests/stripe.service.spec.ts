@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StripeService } from '../libs/stripe.service';
 import Stripe from 'stripe';
+import { ServiceUnavailableException } from '@nestjs/common';
+import { resetStripeClient, stripeClient } from '../libs/stripe.client';
 
 // Mock Stripe
 jest.mock('stripe');
@@ -10,8 +12,10 @@ describe('StripeService', () => {
   let mockStripe: jest.Mocked<Stripe>;
 
   beforeEach(async () => {
-    // Reset the mock
+    // Reset the mock and the client built by a previous test
     (Stripe as jest.MockedClass<typeof Stripe>).mockClear();
+    resetStripeClient();
+    process.env.STRIPE_SECRET_KEY = 'sk_test';
 
     mockStripe = {
       paymentIntents: {
@@ -39,10 +43,25 @@ describe('StripeService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should initialize Stripe with correct configuration', () => {
-    expect(Stripe).toHaveBeenCalledWith(process.env.STRIPE_SECRET_KEY, {
+  it('builds the Stripe client on first use, once', () => {
+    expect(Stripe).not.toHaveBeenCalled();
+
+    stripeClient();
+    stripeClient();
+
+    expect(Stripe).toHaveBeenCalledTimes(1);
+    expect(Stripe).toHaveBeenCalledWith('sk_test', {
       apiVersion: '2025-01-27.acacia',
     });
+  });
+
+  it('starts without a key and says so when a payment is attempted', async () => {
+    delete process.env.STRIPE_SECRET_KEY;
+
+    await expect(service.createPaymentIntent(10)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(Stripe).not.toHaveBeenCalled();
   });
 
   describe('createPaymentIntent', () => {

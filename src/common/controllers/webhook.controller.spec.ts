@@ -10,6 +10,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WebhookController } from './webhook.controller';
 import { PaymentsService } from '../../modules/payments/payments.service';
 import Stripe from 'stripe';
+import {
+  resetStripeClient,
+  stripeClient,
+} from '../../modules/payments/libs/stripe.client';
 import { HttpException } from '@nestjs/common';
 
 describe('WebhookController', () => {
@@ -39,8 +43,10 @@ describe('WebhookController', () => {
     }).compile();
 
     controller = module.get<WebhookController>(WebhookController);
-    const stripeInstance = (Stripe as unknown as jest.Mock).mock.results[0]
-      .value;
+    // The client is built on first use.
+    (Stripe as unknown as jest.Mock).mockClear();
+    resetStripeClient();
+    const stripeInstance = stripeClient();
     stripeConstructEvent = stripeInstance.webhooks.constructEvent as jest.Mock;
   });
 
