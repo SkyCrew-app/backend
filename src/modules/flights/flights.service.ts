@@ -21,7 +21,6 @@ import { FlightPlanGeneratorService } from './flight-plan-generator.service';
 import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { WeatherResponse } from './interfaces/weather.interface';
-import { computeBearing } from './utils/geo.utils';
 import { isAdmin, SessionUser } from '../../common/auth/access';
 
 export interface AIFlightOptions {

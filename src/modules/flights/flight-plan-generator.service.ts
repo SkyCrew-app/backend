@@ -134,9 +134,9 @@ export class FlightPlanGeneratorService implements OnModuleInit {
       isVfr,
     );
 
-    // Use performance profile climb/descent rates if available
+    // Use the climb rate of the performance profile if available. The
+    // descent follows the 3:1 rule, whatever the aircraft.
     const climbRateFpm = perf?.climb?.rate_fpm ?? 800;
-    const descentRateFpm = perf?.descent?.rate_fpm ?? 600;
 
     const { tocFraction, todFraction } = this.computeTocTodProgression(
       departureAltitude,
@@ -145,7 +145,6 @@ export class FlightPlanGeneratorService implements OnModuleInit {
       distance_km,
       cruiseSpeedKmh,
       climbRateFpm,
-      descentRateFpm,
     );
 
     // Use performance TAS or entity cruise speed
@@ -1144,7 +1143,6 @@ export class FlightPlanGeneratorService implements OnModuleInit {
     distanceKm: number,
     cruiseSpeedKmh: number,
     climbRateFpm = 800,
-    descentRateFpm = 600,
   ): { tocFraction: number; todFraction: number } {
 
     const climbFt = Math.max(0, cruiseAltFt - departureAltFt);
@@ -1407,7 +1405,6 @@ export class FlightPlanGeneratorService implements OnModuleInit {
 
     for (let i = 0; i < waypoints.length - 1; i++) {
       const wp = waypoints[i];
-      const next = waypoints[i + 1];
       const legDistNm = wp.leg_distance_nm ?? 0;
       const gs = wp.ground_speed_kts ?? wp.speed_kts ?? 100;
 
