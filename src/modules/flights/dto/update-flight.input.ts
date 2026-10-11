@@ -1,5 +1,10 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 @InputType()
 export class UpdateFlightInput {
@@ -32,6 +37,12 @@ export class UpdateFlightInput {
   @IsString()
   @MaxLength(2000)
   remarks?: string;
+
+  // Closes the flight: what was flown is final for its pilot afterwards.
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsBoolean()
+  closed?: boolean;
 
   @Field(() => Int, { nullable: true })
   number_of_passengers?: number;

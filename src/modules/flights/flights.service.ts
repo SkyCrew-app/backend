@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   HttpException,
   Injectable,
@@ -276,13 +277,18 @@ export class FlightsService {
       throw new NotFoundException(`Flight with ID ${id} not found`);
     }
 
-    const changes: Partial<UpdateFlightInput> = { ...updateFlightInput };
+    const { closed, ...changes }: Partial<UpdateFlightInput> =
+      updateFlightInput;
 
     if (!isAdmin(requester)) {
       if (Number(flight.user?.id) !== Number(requester?.id)) {
         throw new ForbiddenException(
           'Vous ne pouvez modifier que vos propres vols',
         );
+      }
+      // A closed flight is final for its pilot; an administrator can amend it.
+      if (flight.closed_at) {
+        throw new ConflictException('Ce vol est déjà clôturé');
       }
       // Only an administrator moves a flight to another member or reservation.
       delete changes.user_id;
@@ -294,6 +300,9 @@ export class FlightsService {
     }
 
     Object.assign(flight, changes);
+    if (closed && !flight.closed_at) {
+      flight.closed_at = new Date();
+    }
     return this.flightsRepository.save(flight);
   }
 

@@ -6,7 +6,11 @@ import { Flight } from '../entity/flights.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AirportsService } from '../airports.service';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { FlightPlanGeneratorService } from '../flight-plan-generator.service';
 import { AircraftPerformanceService } from '../aircraft-performance.service';
 import { MetarService } from '../metar.service';
@@ -365,6 +369,50 @@ describe('FlightsService', () => {
       );
 
       expect(res).toMatchObject({ user_id: 4, waypoints: '["A","B"]' });
+    });
+
+    it('closes the flight when asked to', async () => {
+      repo.findOne.mockResolvedValue(stored());
+
+      const res = await service.updateFlight(
+        7,
+        { id: 7, flight_hours: 1.2, closed: true } as any,
+        owner,
+      );
+
+      expect(res.closed_at).toBeInstanceOf(Date);
+      expect(res).not.toHaveProperty('closed');
+    });
+
+    it('leaves the flight open otherwise', async () => {
+      repo.findOne.mockResolvedValue(stored());
+
+      const res = await service.updateFlight(7, { id: 7 } as any, owner);
+
+      expect(res.closed_at).toBeUndefined();
+    });
+
+    it('refuses a pilot who changes a flight already closed', async () => {
+      const closedAt = new Date('2026-10-01T10:00:00Z');
+      repo.findOne.mockResolvedValue({ ...stored(), closed_at: closedAt });
+
+      await expect(
+        service.updateFlight(7, { id: 7, flight_hours: 9 } as any, owner),
+      ).rejects.toThrow(ConflictException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('lets an administrator amend a closed flight without reopening it', async () => {
+      const closedAt = new Date('2026-10-01T10:00:00Z');
+      repo.findOne.mockResolvedValue({ ...stored(), closed_at: closedAt });
+
+      const res = await service.updateFlight(
+        7,
+        { id: 7, flight_hours: 2, closed: true } as any,
+        admin,
+      );
+
+      expect(res).toMatchObject({ flight_hours: 2, closed_at: closedAt });
     });
 
     it('throws if not found', async () => {
