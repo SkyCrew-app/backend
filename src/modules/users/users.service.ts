@@ -1,5 +1,6 @@
 import * as bcrypt from 'bcrypt';
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { createHash, randomBytes } from 'crypto';
 import { IsNull, Not, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
@@ -30,6 +31,12 @@ const ADMIN_EDITABLE_FIELDS = [
   'membership_end_date',
   'is_instructor',
 ] as const;
+
+export const PASSWORD_RESET_VALIDITY_MINUTES = 60;
+export const PASSWORD_MIN_LENGTH = 8;
+
+const hashResetToken = (token: string): string =>
+  createHash('sha256').update(token).digest('hex');
 
 @Injectable()
 export class UsersService {
@@ -297,6 +304,83 @@ export class UsersService {
       { first_name },
     );
     return this.usersRepository.save(user);
+  }
+
+  // The answer is the same whether or not the address belongs to a member,
+  // so that nobody can learn who has an account.
+  async requestPasswordReset(email: string): Promise<void> {
+    const user = await this.usersRepository.findOne({
+      where: { email: email.trim() },
+    });
+    if (!user?.isEmailConfirmed) {
+      return;
+    }
+
+    const token = randomBytes(32).toString('hex');
+    user.passwordResetTokenHash = hashResetToken(token);
+    user.passwordResetExpiresAt = new Date(
+      Date.now() + PASSWORD_RESET_VALIDITY_MINUTES * 60_000,
+    );
+    await this.usersRepository.save(user);
+
+    try {
+      await this.emailService.sendMail(
+        user.email,
+        'Réinitialisation de votre mot de passe',
+        'Une réinitialisation de votre mot de passe a été demandée.',
+        'reset-password',
+        {
+          first_name: user.first_name,
+          resetUrl: `${process.env.FRONTEND_URL}/auth/reset-password?token=${token}`,
+          validityMinutes: PASSWORD_RESET_VALIDITY_MINUTES,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Password reset e-mail could not be sent: ${error.message}`,
+      );
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<boolean> {
+    if (!newPassword || newPassword.length < PASSWORD_MIN_LENGTH) {
+      throw new BadRequestException(
+        `Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères`,
+      );
+    }
+
+    const user = token
+      ? await this.usersRepository.findOne({
+          where: { passwordResetTokenHash: hashResetToken(token) },
+        })
+      : null;
+    const expiresAt = user?.passwordResetExpiresAt;
+    if (!user || !expiresAt || expiresAt.getTime() < Date.now()) {
+      throw new BadRequestException(
+        'Ce lien de réinitialisation est invalide ou a expiré',
+      );
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    // The link works once.
+    user.passwordResetTokenHash = null;
+    user.passwordResetExpiresAt = null;
+    await this.usersRepository.save(user);
+
+    try {
+      await this.emailService.sendMail(
+        user.email,
+        'Votre mot de passe a été modifié',
+        'Votre mot de passe a été modifié avec succès',
+        'change-password',
+        { first_name: user.first_name },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Password change e-mail could not be sent: ${error.message}`,
+      );
+    }
+    return true;
   }
 
   async confirmEmailAndSetPassword(

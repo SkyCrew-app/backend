@@ -17,6 +17,8 @@ const EXPECTED_PUBLIC_OPERATIONS = [
   'modules/health/health.controller.ts: HealthController (class)',
   'modules/metrics/metrics.controller.ts: index',
   'modules/users/users.resolver.ts: confirmEmailAndSetPassword',
+  'modules/users/users.resolver.ts: requestPasswordReset',
+  'modules/users/users.resolver.ts: resetPassword',
 ];
 
 const sourceRoot = join(__dirname, '..', '..');
