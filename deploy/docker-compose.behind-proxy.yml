@@ -1,0 +1,36 @@
+# Variant for a server that already runs a web server on ports 80 and 443
+# (and possibly other applications). Use it together with the main file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.behind-proxy.yml up -d
+#
+# SkyCrew then listens on the loopback interface only; the existing web server
+# terminates HTTPS and forwards to it (see nginx-site.conf.example). Each
+# service is capped so that it cannot starve the other applications.
+services:
+  proxy:
+    # Reachable from the server itself only, over plain HTTP.
+    ports: !override
+      - "127.0.0.1:${LOCAL_PORT:-8100}:80"
+    environment:
+      SITE_ADDRESS: ":80"
+    mem_limit: 128m
+    cpus: 0.5
+
+  frontend:
+    mem_limit: 768m
+    cpus: 1.0
+
+  backend:
+    environment:
+      # The web server of the host, then the proxy above.
+      TRUST_PROXY: 2
+    mem_limit: 1g
+    cpus: 1.5
+
+  db:
+    mem_limit: 1g
+    cpus: 1.0
+
+  redis:
+    mem_limit: 256m
+    cpus: 0.5
