@@ -262,7 +262,7 @@ describe('ReservationsService', () => {
 
       await expect(service.create(createReservationInput)).rejects.toThrow(
         new BadRequestException(
-          "L'utilisateur n'as pas de licences pour réserver cet avion",
+          "Vous n'avez pas de licence valide pour réserver cet avion",
         ),
       );
     });

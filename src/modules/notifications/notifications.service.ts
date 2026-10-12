@@ -35,6 +35,22 @@ export class NotificationsService {
     return savedNotification;
   }
 
+  // True when this user already received this exact notification.
+  async alreadySent(
+    userId: number,
+    notificationType: string,
+    message: string,
+  ): Promise<boolean> {
+    const count = await this.notificationRepository.count({
+      where: {
+        user: { id: userId },
+        notification_type: notificationType,
+        message,
+      },
+    });
+    return count > 0;
+  }
+
   async findAllByUser(userId: number): Promise<Notification[]> {
     return await this.notificationRepository.find({
       where: { user: { id: userId } },
