@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.1](https://github.com/SkyCrew-app/backend/compare/2.12.0...2.12.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **notifications:** :bug: send the finished-reservation reminder only once ([#152](https://github.com/SkyCrew-app/backend/issues/152)) ([711b8fd](https://github.com/SkyCrew-app/backend/commit/711b8fdc9f306c421a82471c2fa962d191da3c57))
+
 ## [2.12.0](https://github.com/SkyCrew-app/backend/compare/2.11.0...2.12.0) (2026-10-12)
 
 
