@@ -236,10 +236,27 @@ export class CronService {
       await this.reservationsService.findFinishedReservations();
 
     for (const reservation of reservations) {
+      if (!reservation.user) continue;
+      if (String(reservation.status).toUpperCase() === 'CANCELLED') continue;
+      // Nothing left to close once every flight of the reservation is closed.
+      const flights = reservation.flights ?? [];
+      if (flights.length > 0 && flights.every((flight) => flight.closed_at)) {
+        continue;
+      }
+
+      const message = `Votre réservation N°${reservation.id} est terminée. Veuillez clôturer votre vol.`;
+      // This job runs every hour: remind once, not at every run.
+      const alreadySent = await this.notificationsService.alreadySent(
+        reservation.user.id,
+        'RESERVATION_FINISHED',
+        message,
+      );
+      if (alreadySent) continue;
+
       await this.notificationsService.create({
         user_id: reservation.user.id,
         notification_type: 'RESERVATION_FINISHED',
-        message: `Votre réservation N°${reservation.id} est terminée. Veuillez cloturer votre vol.`,
+        message,
         notification_date: new Date(),
         is_read: false,
       });

@@ -98,13 +98,13 @@ export class ReservationsService {
 
     if (!hasLicense) {
       throw new BadRequestException(
-        `L'utilisateur n'as pas de licences pour réserver cet avion`,
+        `Vous n'avez pas de licence valide pour réserver cet avion`,
       );
     }
 
     if (user.licenses.length == 0) {
       throw new BadRequestException(
-        `L'utilisateur n'as pas de licences pour réserver cet avion`,
+        `Vous n'avez pas de licence valide pour réserver cet avion`,
       );
     }
 
