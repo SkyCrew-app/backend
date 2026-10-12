@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.12.0](https://github.com/SkyCrew-app/backend/compare/2.11.0...2.12.0) (2026-10-12)
+
+
+### Features
+
+* **deploy:** :rocket: run behind an existing web server on a shared machine ([#147](https://github.com/SkyCrew-app/backend/issues/147)) ([aa27cf1](https://github.com/SkyCrew-app/backend/commit/aa27cf170d039d7f4e7c296a99cae7fd53ee9f07))
+
+
+### Bug Fixes
+
+* **mail:** :bug: never let an unsent e-mail fail the action it reports ([#148](https://github.com/SkyCrew-app/backend/issues/148)) ([fd1655b](https://github.com/SkyCrew-app/backend/commit/fd1655ba869481e0344a9c1182ffc2520e658eb7))
+
 ## [2.11.0](https://github.com/SkyCrew-app/backend/compare/2.10.0...2.11.0) (2026-10-12)
 
 
