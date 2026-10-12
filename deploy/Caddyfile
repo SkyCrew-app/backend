@@ -1,6 +1,14 @@
 # One address for everything: the API paths go to the API, the rest to the
 # web application. With a domain name, Caddy obtains and renews the HTTPS
 # certificate on its own.
+{
+	# Behind another web server on the same machine or private network, its
+	# X-Forwarded-* headers are kept: the API sees the address of the visitor.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
 {$SITE_ADDRESS} {
 	encode zstd gzip
 
