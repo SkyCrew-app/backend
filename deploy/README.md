@@ -35,6 +35,22 @@ The images are published at `ghcr.io/skycrew-app/backend` and
 `ghcr.io/skycrew-app/frontend`. If they are private, sign in on the server
 first with `docker login ghcr.io`.
 
+## On a server that already runs a web server
+
+When ports 80 and 443 are taken by another web server, or the server hosts
+other applications, add the second Compose file to every command:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.behind-proxy.yml up -d
+```
+
+SkyCrew then only listens on `127.0.0.1:8100` (change it with `LOCAL_PORT`),
+with a memory and processor cap on each service. In `.env`, set
+`SITE_ADDRESS=:80` and keep `PUBLIC_URL` to the public address. The existing
+web server terminates HTTPS and forwards to that port:
+`nginx-site.conf.example` is a ready-made nginx site, to complete with
+`certbot --nginx`.
+
 ## Updating
 
 Set `BACKEND_VERSION` and `FRONTEND_VERSION` in `.env` to the versions wanted
