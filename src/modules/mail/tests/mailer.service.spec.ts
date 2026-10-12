@@ -27,6 +27,7 @@ describe('MailerService', () => {
     });
 
     process.env.MAIL_FROM = 'no-reply@test.com';
+    process.env.MAIL_HOST = 'smtp.test';
     process.env.NODE_ENV = 'test';
 
     const module: TestingModule = await Test.createTestingModule({
@@ -93,7 +94,7 @@ describe('MailerService', () => {
         service.sendMail('user@example.com', 'Subject', 'Text', '2fa-enabled', {
           first_name: 'Jean',
         }),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
 
       cwd.mockRestore();
       process.env.NODE_ENV = 'test';
@@ -124,14 +125,40 @@ describe('MailerService', () => {
       });
     });
 
-    it('should throw if template loading fails', async () => {
+    it('says the e-mail did not leave when its template is missing, without throwing', async () => {
       (fs.readFileSync as jest.Mock).mockImplementationOnce(() => {
         throw new Error('File not found');
       });
 
       await expect(
         service.sendMail('a@b.com', 'Subj', 'Text', 'missing', {}),
-      ).rejects.toThrow('File not found');
+      ).resolves.toBe(false);
+      expect(transporter.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('says the e-mail left when the mail server accepted it', async () => {
+      await expect(
+        service.sendMail('a@b.com', 'Subj', 'Text', 'change-password', {}),
+      ).resolves.toBe(true);
+    });
+
+    it('does not throw when the mail server refuses or cannot be reached', async () => {
+      (transporter.sendMail as jest.Mock).mockRejectedValueOnce(
+        new Error('connect ECONNREFUSED 127.0.0.1:587'),
+      );
+
+      await expect(
+        service.sendMail('a@b.com', 'Subj', 'Text', 'change-password', {}),
+      ).resolves.toBe(false);
+    });
+
+    it('does not even try when no mail server is configured', async () => {
+      delete process.env.MAIL_HOST;
+
+      await expect(
+        service.sendMail('a@b.com', 'Subj', 'Text', 'change-password', {}),
+      ).resolves.toBe(false);
+      expect(transporter.sendMail).not.toHaveBeenCalled();
     });
   });
 });
