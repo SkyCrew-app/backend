@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.0](https://github.com/SkyCrew-app/backend/compare/2.10.0...2.11.0) (2026-10-12)
+
+
+### Features
+
+* **api:** :sparkles: settle payments safely, end sessions on password change and manage attachments ([#141](https://github.com/SkyCrew-app/backend/issues/141)) ([4d588ce](https://github.com/SkyCrew-app/backend/commit/4d588cec4a97ff7be5b4ff6e563958f67e9778c9))
+
 ## [2.10.0](https://github.com/SkyCrew-app/backend/compare/2.9.0...2.10.0) (2026-10-11)
 
 
