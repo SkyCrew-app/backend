@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { PaypalService } from '../libs/paypal.service';
 import * as paypal from '@paypal/checkout-server-sdk';
 
@@ -36,6 +37,11 @@ describe('PaypalService', () => {
       typeof paypal.orders.OrdersCreateRequest
     >) = mockOrdersCreateRequest;
 
+    jest.clearAllMocks();
+    process.env.PAYPAL_CLIENT_ID = 'client-id';
+    process.env.PAYPAL_CLIENT_SECRET = 'client-secret';
+    delete process.env.PAYPAL_MODE;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [PaypalService],
     }).compile();
@@ -47,12 +53,34 @@ describe('PaypalService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should initialize PayPal client with sandbox environment', () => {
+  it('uses the sandbox unless the live mode is asked for', async () => {
+    await service.capturePayment('order1');
+
     expect(paypal.core.SandboxEnvironment).toHaveBeenCalledWith(
-      process.env.PAYPAL_CLIENT_ID,
-      process.env.PAYPAL_CLIENT_SECRET,
+      'client-id',
+      'client-secret',
     );
-    expect(paypal.core.PayPalHttpClient).toHaveBeenCalled();
+    expect(paypal.core.LiveEnvironment).not.toHaveBeenCalled();
+  });
+
+  it('uses the live environment when PAYPAL_MODE is live', async () => {
+    process.env.PAYPAL_MODE = 'live';
+
+    await service.capturePayment('order1');
+
+    expect(paypal.core.LiveEnvironment).toHaveBeenCalledWith(
+      'client-id',
+      'client-secret',
+    );
+  });
+
+  it('says so when PayPal is not configured', async () => {
+    delete process.env.PAYPAL_CLIENT_ID;
+
+    await expect(service.createOrder(10)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+    expect(paypal.core.PayPalHttpClient).not.toHaveBeenCalled();
   });
 
   describe('createOrder', () => {

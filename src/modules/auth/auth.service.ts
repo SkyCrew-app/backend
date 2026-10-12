@@ -28,6 +28,9 @@ export class AuthService {
       email: user.email,
       sub: user.id,
       role: user.role.role_name,
+      // Checked on every request: a session opened before the last password
+      // change is no longer accepted.
+      sv: user.sessionVersion ?? 0,
     };
     return this.jwtService.sign(payload, { expiresIn: '2h' });
   }

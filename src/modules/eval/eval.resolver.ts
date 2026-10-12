@@ -18,7 +18,6 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
   assertSelfOrRole,
-  ROLE_INSTRUCTOR,
   SessionUser,
 } from '../../common/auth/access';
 

@@ -114,6 +114,11 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   passwordResetExpiresAt: Date;
 
+  // Raised when the password changes: sessions opened before are refused.
+  // Never part of the API.
+  @Column({ type: 'int', default: 0 })
+  sessionVersion: number;
+
   @Field({ nullable: true })
   @Column({ nullable: true })
   language: string;

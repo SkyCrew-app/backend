@@ -66,6 +66,8 @@ export class ELearningService {
     const course = await this.courseRepository.findOne({
       where: { id: courseId },
       relations: ['modules', 'modules.lessons', 'modules.evaluations'],
+      // The reading order of a course: modules and lessons as they were added.
+      order: { modules: { id: 'ASC', lessons: { id: 'ASC' } } },
     });
 
     if (userId) {

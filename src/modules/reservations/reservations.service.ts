@@ -4,7 +4,6 @@ import { Repository, LessThan, MoreThan, Between } from 'typeorm';
 import {
   Reservation,
   ReservationStatus,
-  FlightCategory,
 } from './entity/reservations.entity';
 import { ReservationTemplate } from './entity/reservation-template.entity';
 import { CreateReservationInput } from './dto/create-reservation.input';
@@ -413,6 +412,8 @@ export class ReservationsService {
         : null;
     }
 
+    // The identifier and the aircraft are handled apart from the other fields.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, aircraft_id, ...rest } = input;
     Object.assign(template, rest);
 
