@@ -207,11 +207,20 @@ describe('CronService', () => {
   });
 
   describe('notificationFinishReservation', () => {
+    const finished = (overrides: object = {}) =>
+      ({ id: 7, user: { id: 70 }, flights: [], ...overrides }) as any;
+
+    beforeEach(() => {
+      (notificationsService.create as jest.Mock).mockClear();
+      (notificationsService as any).alreadySent = jest
+        .fn()
+        .mockResolvedValue(false);
+    });
+
     it('should notify finished reservations', async () => {
-      const reservations = [{ id: 7, user: { id: 70 } } as any];
       (
         reservationsService.findFinishedReservations as jest.Mock
-      ).mockResolvedValue(reservations);
+      ).mockResolvedValue([finished()]);
 
       await service.notificationFinishReservation();
 
@@ -221,6 +230,30 @@ describe('CronService', () => {
           message: expect.stringContaining('réservation N°7'),
         }),
       );
+    });
+
+    it('should not notify twice for the same reservation', async () => {
+      (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mockResolvedValue([finished()]);
+      (notificationsService as any).alreadySent.mockResolvedValue(true);
+
+      await service.notificationFinishReservation();
+
+      expect(notificationsService.create as jest.Mock).not.toHaveBeenCalled();
+    });
+
+    it('should skip cancelled reservations and those whose flights are closed', async () => {
+      (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mockResolvedValue([
+        finished({ id: 8, status: 'CANCELLED' }),
+        finished({ id: 9, flights: [{ closed_at: new Date() }] }),
+      ]);
+
+      await service.notificationFinishReservation();
+
+      expect(notificationsService.create as jest.Mock).not.toHaveBeenCalled();
     });
   });
 });
