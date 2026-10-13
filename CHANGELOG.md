@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.13.0](https://github.com/SkyCrew-app/backend/compare/2.12.2...2.13.0) (2026-10-13)
+
+
+### Features
+
+* **incidents:** :sparkles: incident follow-up, 2FA state, bulk notification actions ([#160](https://github.com/SkyCrew-app/backend/issues/160)) ([b8446e8](https://github.com/SkyCrew-app/backend/commit/b8446e8d792bd91900fa8dc43a69a3e0e75bc13d))
+
 ## [2.12.2](https://github.com/SkyCrew-app/backend/compare/2.12.1...2.12.2) (2026-10-13)
 
 
