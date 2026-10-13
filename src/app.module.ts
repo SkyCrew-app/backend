@@ -27,6 +27,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AdministrationModule } from './modules/administration/administration.module';
 import { GraphQLUpload } from 'graphql-upload-ts';
+import { queryLimitsRule } from './common/graphql/query-limits.rule';
 import { ArticleModule } from './modules/article/article.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { EvalModule } from './modules/eval/eval.module';
@@ -118,6 +119,12 @@ import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-de
         path: process.env.GRAPHQL_ENDPOINT || '/graphql',
         resolvers: { JSON: GraphQLJSON },
         plugins: [metricsPlugin],
+        validationRules: [
+          queryLimitsRule({
+            // Only the development explorer reads the schema.
+            ignoreIntrospection: process.env.NODE_ENV !== 'production',
+          }),
+        ],
         context: ({ req, res }: { req: Request; res: Response }) => ({
           req,
           res,

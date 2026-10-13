@@ -4,7 +4,11 @@ import { Repository } from 'typeorm';
 import { Flight } from './entity/flights.entity';
 import { User } from '../users/entity/users.entity';
 import { LogbookFilterInput } from './dto/logbook-filter.input';
-import { LogbookStats, HoursEntry, MonthlyHoursEntry } from './dto/logbook-stats.type';
+import {
+  LogbookStats,
+  HoursEntry,
+  MonthlyHoursEntry,
+} from './dto/logbook-stats.type';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 @Injectable()
@@ -28,6 +32,8 @@ export class LogbookService {
       .leftJoinAndSelect('reservation.aircraft', 'aircraft')
       .leftJoinAndSelect('flight.user', 'user')
       .where('user.id = :userId', { userId })
+      // The logbook holds flights that took place: closed ones only.
+      .andWhere('flight.closed_at IS NOT NULL')
       .orderBy('flight.departure_time', 'DESC');
 
     if (filter?.startDate) {
@@ -63,14 +69,20 @@ export class LogbookService {
   ): Promise<LogbookStats> {
     const flights = await this.getLogbookEntries(userId, filter);
 
-    const totalHours = flights.reduce((sum, f) => sum + (f.flight_hours || 0), 0);
+    const totalHours = flights.reduce(
+      (sum, f) => sum + (f.flight_hours || 0),
+      0,
+    );
     const totalFlights = flights.length;
 
     // Hours grouped by aircraft model
     const modelMap = new Map<string, number>();
     for (const flight of flights) {
       const model = flight.reservation?.aircraft?.model ?? 'Inconnu';
-      modelMap.set(model, (modelMap.get(model) || 0) + (flight.flight_hours || 0));
+      modelMap.set(
+        model,
+        (modelMap.get(model) || 0) + (flight.flight_hours || 0),
+      );
     }
     const hoursByModel: HoursEntry[] = Array.from(modelMap.entries()).map(
       ([label, hours]) => ({ label, hours: Math.round(hours * 100) / 100 }),
@@ -85,12 +97,12 @@ export class LogbookService {
         (categoryMap.get(category) || 0) + (flight.flight_hours || 0),
       );
     }
-    const hoursByCategory: HoursEntry[] = Array.from(
-      categoryMap.entries(),
-    ).map(([label, hours]) => ({
-      label,
-      hours: Math.round(hours * 100) / 100,
-    }));
+    const hoursByCategory: HoursEntry[] = Array.from(categoryMap.entries()).map(
+      ([label, hours]) => ({
+        label,
+        hours: Math.round(hours * 100) / 100,
+      }),
+    );
 
     // Monthly hours grouping
     const monthlyMap = new Map<string, number>();
@@ -98,17 +110,24 @@ export class LogbookService {
       if (flight.departure_time) {
         const d = new Date(flight.departure_time);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        monthlyMap.set(key, (monthlyMap.get(key) || 0) + (flight.flight_hours || 0));
+        monthlyMap.set(
+          key,
+          (monthlyMap.get(key) || 0) + (flight.flight_hours || 0),
+        );
       }
     }
     const monthlyHours: MonthlyHoursEntry[] = Array.from(monthlyMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, hours]) => ({ month, hours: Math.round(hours * 100) / 100 }));
+      .map(([month, hours]) => ({
+        month,
+        hours: Math.round(hours * 100) / 100,
+      }));
 
     // Average flight duration
-    const averageFlightDuration = totalFlights > 0
-      ? Math.round((totalHours / totalFlights) * 100) / 100
-      : 0;
+    const averageFlightDuration =
+      totalFlights > 0
+        ? Math.round((totalHours / totalFlights) * 100) / 100
+        : 0;
 
     // Longest flight
     const longestFlight = flights.reduce(
@@ -117,25 +136,34 @@ export class LogbookService {
     );
 
     // Last 30 and 90 days hours (computed from all user flights, ignoring date filter)
-    const allFlights = filter?.startDate || filter?.endDate
-      ? await this.getLogbookEntries(userId)
-      : flights;
+    const allFlights =
+      filter?.startDate || filter?.endDate
+        ? await this.getLogbookEntries(userId)
+        : flights;
 
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-    const last30DaysHours = Math.round(
-      allFlights
-        .filter((f) => f.departure_time && new Date(f.departure_time) >= thirtyDaysAgo)
-        .reduce((sum, f) => sum + (f.flight_hours || 0), 0) * 100,
-    ) / 100;
+    const last30DaysHours =
+      Math.round(
+        allFlights
+          .filter(
+            (f) =>
+              f.departure_time && new Date(f.departure_time) >= thirtyDaysAgo,
+          )
+          .reduce((sum, f) => sum + (f.flight_hours || 0), 0) * 100,
+      ) / 100;
 
-    const last90DaysHours = Math.round(
-      allFlights
-        .filter((f) => f.departure_time && new Date(f.departure_time) >= ninetyDaysAgo)
-        .reduce((sum, f) => sum + (f.flight_hours || 0), 0) * 100,
-    ) / 100;
+    const last90DaysHours =
+      Math.round(
+        allFlights
+          .filter(
+            (f) =>
+              f.departure_time && new Date(f.departure_time) >= ninetyDaysAgo,
+          )
+          .reduce((sum, f) => sum + (f.flight_hours || 0), 0) * 100,
+      ) / 100;
 
     return {
       totalHours: Math.round(totalHours * 100) / 100,
@@ -180,7 +208,10 @@ export class LogbookService {
       { header: 'Observations', width: 140 },
     ];
 
-    const totalPages = Math.max(1, Math.ceil(flights.length / ENTRIES_PER_PAGE));
+    const totalPages = Math.max(
+      1,
+      Math.ceil(flights.length / ENTRIES_PER_PAGE),
+    );
 
     for (let pageIdx = 0; pageIdx < totalPages; pageIdx++) {
       const page = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
@@ -249,8 +280,7 @@ export class LogbookService {
       for (const flight of pageFlights) {
         const registration =
           flight.reservation?.aircraft?.registration_number ?? '-';
-        const aircraftModel =
-          flight.reservation?.aircraft?.model ?? '-';
+        const aircraftModel = flight.reservation?.aircraft?.model ?? '-';
         const date = flight.departure_time
           ? new Date(flight.departure_time).toLocaleDateString('fr-FR')
           : '-';
@@ -295,16 +325,13 @@ export class LogbookService {
         color: rgb(0, 0, 0),
       });
 
-      page.drawText(
-        `Cumul page : ${pageTotalHours.toFixed(1)}h`,
-        {
-          x: MARGIN,
-          y,
-          size: 9,
-          font: fontBold,
-          color: rgb(0, 0, 0),
-        },
-      );
+      page.drawText(`Cumul page : ${pageTotalHours.toFixed(1)}h`, {
+        x: MARGIN,
+        y,
+        size: 9,
+        font: fontBold,
+        color: rgb(0, 0, 0),
+      });
 
       const grandTotal = flights.reduce(
         (sum, f) => sum + (f.flight_hours || 0),

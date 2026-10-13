@@ -64,6 +64,7 @@ describe('AviationDataService', () => {
         country: 'FR',
         latitude: 49.0127983093,
         longitude: 2.5499999523,
+        timezone: 'Europe/Paris',
       });
 
       expect(get).toHaveBeenCalledWith(
@@ -121,6 +122,12 @@ describe('AviationDataService', () => {
 
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).not.toContain('test-key');
+    });
+
+    it('only keeps a time zone the browser can use', async () => {
+      get.mockResolvedValue({ data: [{ ...LFPG, timezone: 'Mars/Olympus' }] });
+      const aerodrome = await service.aerodromeByIcao('LFPG');
+      expect(aerodrome.timezone).toBeUndefined();
     });
 
     it('ignores an answer that is not a list of aerodromes', async () => {
@@ -234,6 +241,7 @@ describe('AviationDataService', () => {
         humidity: 71,
         cloudCover: 40,
         windSpeed: 5.4,
+        windSpeedKmh: 19.4,
         windDegrees: 250,
         sunrise: 1791871200,
         sunset: 1791910800,
@@ -242,6 +250,19 @@ describe('AviationDataService', () => {
         'https://api.api-ninjas.com/v1/weather',
         expect.objectContaining({ params: { lat: '49.01', lon: '2.55' } }),
       );
+    });
+
+    it('converts the wind from metres per second to kilometres per hour', async () => {
+      get.mockResolvedValue({ data: { ...WEATHER, wind_speed: 10 } });
+      await expect(service.weatherAt(49.01, 2.55)).resolves.toMatchObject({
+        windSpeedKmh: 36,
+      });
+    });
+
+    it('leaves the wind empty when the provider does not give it', async () => {
+      get.mockResolvedValue({ data: { ...WEATHER, wind_speed: null } });
+      const weather = await service.weatherAt(49.01, 2.55);
+      expect(weather.windSpeedKmh).toBeUndefined();
     });
 
     it('shares one answer between close positions for ten minutes', async () => {

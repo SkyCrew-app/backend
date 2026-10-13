@@ -22,6 +22,7 @@ import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { WeatherResponse } from './interfaces/weather.interface';
 import { isAdmin, SessionUser } from '../../common/auth/access';
+import { User } from '../users/entity/users.entity';
 import { buildFlightRecapPdf } from './flight-recap-pdf';
 
 export interface AIFlightOptions {
@@ -319,11 +320,32 @@ export class FlightsService {
       (changes as any).waypoints = JSON.stringify(changes.waypoints);
     }
 
+    const wasClosed = !!flight.closed_at;
+    const hoursBefore = Number(flight.flight_hours) || 0;
+
     Object.assign(flight, changes);
     if (closed && !flight.closed_at) {
       flight.closed_at = new Date();
     }
-    return this.flightsRepository.save(flight);
+    const saved = await this.flightsRepository.save(flight);
+
+    // The member's total follows their closed flights: the whole flight when
+    // it is closed, the difference when a closed flight is amended.
+    const hoursAfter = Number(saved.flight_hours) || 0;
+    const delta = wasClosed
+      ? hoursAfter - hoursBefore
+      : saved.closed_at
+        ? hoursAfter
+        : 0;
+    if (delta !== 0 && flight.user?.id) {
+      await this.flightsRepository.manager.increment(
+        User,
+        { id: flight.user.id },
+        'total_flight_hours',
+        delta,
+      );
+    }
+    return saved;
   }
 
   async removeFlight(id: number, requestingUserId: number): Promise<boolean> {
@@ -412,8 +434,12 @@ export class FlightsService {
         ];
         if (wp.speed_kts) parts.push(`IAS: ${wp.speed_kts}kt`);
         if (wp.ground_speed_kts) parts.push(`GS: ${wp.ground_speed_kts}kt`);
-        if (wp.wind_correction_deg) parts.push(`WCA: ${wp.wind_correction_deg > 0 ? '+' : ''}${wp.wind_correction_deg}°`);
-        if (wp.time_from_dep_min != null) parts.push(`T+${wp.time_from_dep_min}min`);
+        if (wp.wind_correction_deg)
+          parts.push(
+            `WCA: ${wp.wind_correction_deg > 0 ? '+' : ''}${wp.wind_correction_deg}°`,
+          );
+        if (wp.time_from_dep_min != null)
+          parts.push(`T+${wp.time_from_dep_min}min`);
         if (wp.leg_distance_nm) parts.push(`LEG: ${wp.leg_distance_nm}NM`);
         return parts.join(', ');
       },

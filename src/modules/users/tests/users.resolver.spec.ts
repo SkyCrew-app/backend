@@ -3,9 +3,12 @@ import { UsersService } from '../users.service';
 import { UpdateUserInput } from '../dto/update-user.input';
 import { UpdateUserPreferencesInput } from '../dto/update-user-preferences.input';
 import { FileUpload } from 'graphql-upload-ts';
-import * as fs from 'fs';
-import * as path from 'path';
-import { EventEmitter } from 'events';
+import { BadRequestException } from '@nestjs/common';
+import { saveUploadToTmp } from '../../../common/uploads/save-upload';
+
+jest.mock('../../../common/uploads/save-upload', () => ({
+  saveUploadToTmp: jest.fn(),
+}));
 
 const adminUser = {
   id: 1,
@@ -59,12 +62,15 @@ describe('UsersResolver', () => {
 
     const result = await resolver.createUser(firstName, lastName, email, dob);
 
-    expect(usersService.create).toHaveBeenCalledWith({
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      date_of_birth: dob,
-    });
+    expect(usersService.create).toHaveBeenCalledWith(
+      {
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        date_of_birth: dob,
+      },
+      undefined,
+    );
     expect(result).toEqual(createdUser);
   });
 
@@ -135,57 +141,42 @@ describe('UsersResolver', () => {
       expect(result).toBe(updatedUser);
     });
 
-    it("devrait sauvegarder l'image sur le disque et appeler UsersService.updateUser avec le bon chemin si une image est fournie", async () => {
+    it("devrait enregistrer l'image comme une photo et appeler UsersService.updateUser avec son chemin", async () => {
       const updatedUser = {
         id: 2,
-        profile_picture: '/uploads/users/2/myfile.txt',
+        profile_picture: '/uploads/users/2/photo-0a1b2c3d4e5f.png',
       };
       (usersService.updateUser as jest.Mock).mockResolvedValue(updatedUser);
-
-      const fileStream = {
-        pipe: jest.fn((dest) => {
-          dest.end();
-          return dest;
-        }),
-      };
-      const file: Partial<FileUpload> = {
-        createReadStream: jest.fn(() => fileStream as any),
-        filename: 'myfile.txt',
-      };
-      const fileUploadPromise = Promise.resolve(file as FileUpload);
-
-      jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-      jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
-
-      const dummyWriteStream: any = new EventEmitter();
-      dummyWriteStream.write = jest.fn();
-      dummyWriteStream.end = jest.fn(function () {
-        process.nextTick(() => dummyWriteStream.emit('finish'));
-      });
-      jest
-        .spyOn(fs, 'createWriteStream')
-        .mockReturnValue(dummyWriteStream as any);
-
-      const result = await resolver.updateUser(
-        updateInput,
-        await fileUploadPromise,
-        adminUser,
+      (saveUploadToTmp as jest.Mock).mockResolvedValue(
+        '/app/uploads/tmp/photo-0a1b2c3d4e5f.png',
       );
+      const file = { filename: 'photo.png' } as FileUpload;
 
-      expect(fs.existsSync).toHaveBeenCalledWith(
-        path.join(__dirname, '../../../uploads/tmp'),
-      );
-      expect(fs.mkdirSync).toHaveBeenCalledWith(
-        path.join(__dirname, '../../../uploads/tmp'),
-        { recursive: true },
-      );
+      const result = await resolver.updateUser(updateInput, file, adminUser);
+
+      expect(saveUploadToTmp).toHaveBeenCalledWith(file, 'picture');
       expect(usersService.updateUser).toHaveBeenCalledWith(
         'foo@bar.com',
         updateInput,
-        expect.stringContaining('myfile.txt'),
+        '/app/uploads/tmp/photo-0a1b2c3d4e5f.png',
         { asAdmin: true },
       );
       expect(result).toBe(updatedUser);
+    });
+
+    it('ne modifie rien quand le fichier est refusé', async () => {
+      (saveUploadToTmp as jest.Mock).mockRejectedValue(
+        new BadRequestException('Type de fichier non autorisé'),
+      );
+
+      await expect(
+        resolver.updateUser(
+          updateInput,
+          { filename: 'page.html' } as FileUpload,
+          adminUser,
+        ),
+      ).rejects.toThrow('Type de fichier non autorisé');
+      expect(usersService.updateUser).not.toHaveBeenCalled();
     });
   });
 

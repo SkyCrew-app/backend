@@ -5,16 +5,18 @@ import { ArticlesService } from '../article.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Article } from '../entity/article.entity';
 import { Repository } from 'typeorm';
-import * as fs from 'fs';
-import * as path from 'path';
-import { Readable, PassThrough } from 'stream';
+import { Readable } from 'stream';
+import { saveUploadTo } from '../../../common/uploads/save-upload';
+
+jest.mock('../../../common/uploads/save-upload', () => ({
+  saveUploadTo: jest.fn(),
+}));
 
 describe('ArticlesService', () => {
   let service: ArticlesService;
   let repo: Partial<Repository<Article>>;
-  const tmpDir = path.join(__dirname, '../../uploads/tmp');
   const mockFile = {
-    filename: 'f.txt',
+    filename: 'f.pdf',
     createReadStream: () => Readable.from(['data']),
   } as any;
 
@@ -27,13 +29,10 @@ describe('ArticlesService', () => {
       preload: jest.fn(),
       remove: jest.fn().mockResolvedValue({ id: 1 } as Article),
     };
-    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    jest.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined as any);
-    jest.spyOn(fs, 'createWriteStream').mockImplementation(() => {
-      const ws = new PassThrough();
-      process.nextTick(() => ws.emit('finish'));
-      return ws as any;
-    });
+    (saveUploadTo as jest.Mock).mockReset();
+    (saveUploadTo as jest.Mock).mockResolvedValue(
+      '/uploads/tmp/f-0a1b2c3d4e5f.pdf',
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -51,17 +50,20 @@ describe('ArticlesService', () => {
 
   it('uploadFile saves and returns path', async () => {
     const filePath = await service.uploadFile(mockFile);
-    expect(fs.mkdirSync).toHaveBeenCalledWith(
-      expect.stringContaining(`${path.sep}uploads${path.sep}tmp`),
-      { recursive: true },
-    );
-    expect(filePath).toBe('/uploads/tmp/f.txt');
+    expect(saveUploadTo).toHaveBeenCalledWith(mockFile, 'document', 'tmp');
+    expect(filePath).toBe('/uploads/tmp/f-0a1b2c3d4e5f.pdf');
+  });
+
+  it('uploadFile stores the photo of an article as a picture', async () => {
+    await service.uploadFile(mockFile, 'picture');
+    expect(saveUploadTo).toHaveBeenCalledWith(mockFile, 'picture', 'tmp');
   });
 
   it('uploadFiles returns null or array of paths', async () => {
     await expect(service.uploadFiles()).resolves.toBeNull();
     const paths = await service.uploadFiles([mockFile]);
-    expect(paths).toEqual(['/uploads/tmp/f.txt']);
+    expect(saveUploadTo).toHaveBeenCalledWith(mockFile, 'document', 'tmp');
+    expect(paths).toEqual(['/uploads/tmp/f-0a1b2c3d4e5f.pdf']);
   });
 
   it('create sets calendarLink when eventDate provided', async () => {

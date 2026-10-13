@@ -1,4 +1,5 @@
 import { InputType, Field } from '@nestjs/graphql';
+import { IsPhoneNumberField } from '../../../common/validation/phone-number';
 
 @InputType()
 export class UpdateUserInput {
@@ -23,6 +24,7 @@ export class UpdateUserInput {
   profile_picture?: string;
 
   @Field({ nullable: true })
+  @IsPhoneNumberField({ optional: true })
   phone_number?: string;
 
   @Field({ nullable: true })

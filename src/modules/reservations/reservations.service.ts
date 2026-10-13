@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan, MoreThan, Between } from 'typeorm';
-import {
-  Reservation,
-  ReservationStatus,
-} from './entity/reservations.entity';
+import { Reservation, ReservationStatus } from './entity/reservations.entity';
 import { ReservationTemplate } from './entity/reservation-template.entity';
 import { CreateReservationInput } from './dto/create-reservation.input';
 import { UpdateReservationInput } from './dto/update-reservation.input';
@@ -159,14 +156,12 @@ export class ReservationsService {
 
     const savedReservation = await this.reservationRepository.save(reservation);
 
-    this.paymentService.createWithdrawal({
+    // Flight hours are counted when the flight is closed, not when it is booked.
+    await this.paymentService.createWithdrawal({
       user_id: user.id,
       amount: totalCost,
       payment_method: 'account_balance',
     });
-
-    user.total_flight_hours = (user.total_flight_hours || 0) + hoursReserved;
-    await this.userRepository.save(user);
 
     return savedReservation;
   }
@@ -226,9 +221,16 @@ export class ReservationsService {
   async delete(id: number): Promise<void> {
     const reservation = await this.reservationRepository.findOne({
       where: { id },
+      relations: ['flights'],
     });
     if (!reservation) {
       throw new Error('Réservation introuvable');
+    }
+    // A closed flight is in the logbook and has been charged: its booking stays.
+    if ((reservation.flights ?? []).some((flight) => flight.closed_at)) {
+      throw new ConflictException(
+        'Le vol de cette réservation est clôturé : elle ne peut plus être annulée.',
+      );
     }
 
     const aircraft = await this.aircraftRepository.findOne({
