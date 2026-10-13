@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IncidentsResolver } from '../incidents.resolver';
 import { IncidentsService } from '../incidents.service';
 import { Incident } from '../entity/incidents.entity';
+import { ROLES_KEY } from '../../../common/decorators/roles.decorator';
 
 const admin = { id: 1, email: 'admin@example.com', role: 'Administrateur' };
 const technician = {
@@ -35,6 +36,7 @@ describe('IncidentsResolver', () => {
       getIncidentsByFlight: jest.fn(),
       createIncident: jest.fn(),
       updateIncident: jest.fn(),
+      updateIncidentStatus: jest.fn(),
       deleteIncident: jest.fn(),
       getRecentIncidents: jest.fn(),
     };
@@ -140,6 +142,35 @@ describe('IncidentsResolver', () => {
       await expect(
         resolver.update(99, { status: 'closed' } as any, author),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('follow-up', () => {
+    it('changes the status in the name of the caller', async () => {
+      const updated = { id: 4, status: 'Résolu' };
+      service.updateIncidentStatus.mockResolvedValue(updated);
+
+      await expect(
+        resolver.updateStatus(4, 'Résolu', 'Pièce changée', technician),
+      ).resolves.toBe(updated);
+      expect(service.updateIncidentStatus).toHaveBeenCalledWith(
+        4,
+        'Résolu',
+        'Pièce changée',
+        6,
+      );
+    });
+
+    it('reserves the follow-up and the full list to the staff', () => {
+      expect(
+        Reflect.getMetadata(
+          ROLES_KEY,
+          IncidentsResolver.prototype.updateStatus,
+        ),
+      ).toEqual(['Technicien', 'Administrateur']);
+      expect(
+        Reflect.getMetadata(ROLES_KEY, IncidentsResolver.prototype.findAll),
+      ).toEqual(['Administrateur', 'Technicien']);
     });
   });
 });

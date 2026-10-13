@@ -176,6 +176,36 @@ describe('MaintenanceService', () => {
       expect(res.status).toBe('DONE');
       expect(repo.save).toHaveBeenCalledWith(existing);
     });
+
+    it('removes the technician when the id is null', async () => {
+      const existing = { id: 5, technician: { id: 2 } } as any;
+      jest.spyOn(repo, 'findOne').mockResolvedValue(existing);
+      jest.spyOn(repo, 'save').mockImplementation(async (m) => m as any);
+      mockUserRepo.findOne.mockClear();
+
+      const res = await service.update(
+        { id: 5, technician_id: null } as any,
+        [],
+        [],
+      );
+
+      expect(res.technician).toBeNull();
+      expect(mockUserRepo.findOne).not.toHaveBeenCalled();
+    });
+
+    it('keeps the technician when no id is sent', async () => {
+      const existing = { id: 5, technician: { id: 2 } } as any;
+      jest.spyOn(repo, 'findOne').mockResolvedValue(existing);
+      jest.spyOn(repo, 'save').mockImplementation(async (m) => m as any);
+
+      const res = await service.update(
+        { id: 5, status: 'DONE' } as any,
+        [],
+        [],
+      );
+
+      expect(res.technician).toEqual({ id: 2 });
+    });
   });
 
   describe('findOne', () => {

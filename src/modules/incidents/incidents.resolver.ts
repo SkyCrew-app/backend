@@ -23,7 +23,7 @@ export class IncidentsResolver {
 
   @Query(() => [Incident], { name: 'getAllIncidents' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Administrateur')
+  @Roles('Administrateur', 'Technicien')
   findAll() {
     return this.incidentService.getAllIncidents();
   }
@@ -90,6 +90,26 @@ export class IncidentsResolver {
     assertSelfOrRole(currentUser, existing.user?.id, ROLE_TECHNICIAN);
 
     return this.incidentService.updateIncident(id, incident);
+  }
+
+  // Following an incident up (status and resolution note) is the job of
+  // the staff: technicians and administrators.
+  @Mutation(() => Incident, { name: 'updateIncidentStatus' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Technicien', 'Administrateur')
+  updateStatus(
+    @Args('id', { type: () => Int }) id: number,
+    @Args('status') status: string,
+    @Args('resolution_note', { type: () => String, nullable: true })
+    resolutionNote: string | null,
+    @CurrentUser() currentUser?: SessionUser,
+  ) {
+    return this.incidentService.updateIncidentStatus(
+      id,
+      status,
+      resolutionNote,
+      currentUser.id,
+    );
   }
 
   @Mutation(() => Boolean, { name: 'deleteIncident' })
