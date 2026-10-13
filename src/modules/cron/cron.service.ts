@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InstructionCoursesService } from '../instruction-courses/instruction-courses.service';
 import { LicensesService } from '../licenses/licenses.service';
+import { LicenceRemindersService } from '../licenses/licence-reminders.service';
 import { InstructionCourse } from '../instruction-courses/entity/instruction-courses.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ReservationsService } from '../reservations/reservations.service';
@@ -10,7 +11,7 @@ import {
   Reservation,
   ReservationStatus,
 } from '../reservations/entity/reservations.entity';
-import { formatDate, languageOf, LANGUAGES } from '../../common/i18n/languages';
+import { languageOf } from '../../common/i18n/languages';
 import {
   translate,
   translateInEveryLanguage,
@@ -34,6 +35,7 @@ export class CronService {
     private readonly notificationsService: NotificationsService,
     private readonly reservationsService: ReservationsService,
     private readonly financialService: FinancialService,
+    private readonly licenceReminders: LicenceRemindersService,
   ) {}
 
   // Vérification quotidienne des statuts des cours
@@ -86,72 +88,76 @@ export class CronService {
     }
   }
 
-  // Vérification quotidienne des licences (expiration ou bientôt expirées)
+  // Vérification quotidienne des licences : celles dont la date est passée
+  // sont marquées expirées, puis les rappels avant expiration sont envoyés.
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async handleLicenseExpiration() {
+  async handleLicenseExpiration(now: Date = new Date()) {
     try {
-      const thresholdDays = 7;
-      const expiringLicenses =
-        await this.licensesService.findExpiringLicenses(thresholdDays);
-      for (const license of expiringLicenses) {
-        const userId = license.user.id;
-        const language = languageOf(license.user);
+      // Only the licences whose date has passed: 0 days ahead.
+      const overdue = await this.licensesService.findExpiringLicenses(0, now);
+      for (const license of overdue) {
         if (
-          license.expiration_date &&
-          new Date(license.expiration_date) < new Date()
+          !license.expiration_date ||
+          new Date(license.expiration_date) >= now ||
+          license.status === 'expired'
         ) {
-          if (license.status !== 'expired') {
-            await this.licensesService.update({
-              id: license.id,
-              status: 'expired',
-              is_valid: false,
-            } as any);
-            this.logger.log(`Licence ${license.id} marquée comme expirée.`);
-            // The licence is marked for everyone; only active members are told.
-            if (isDeactivated(license.user)) continue;
-            await this.notificationsService.create({
-              user_id: userId,
-              notification_type: 'LICENSE_EXPIRED',
-              message: translate(language, 'notification.licenceExpired', {
-                licenceType: license.license_type,
-              }),
-              notification_date: new Date(),
-              expiration_date: license.expiration_date,
-              is_read: false,
-            });
-          }
-        } else {
-          if (isDeactivated(license.user)) continue;
-          // This job runs every night: one reminder per expiry date, not one
-          // each night until the licence expires.
-          const alreadySent = await this.notificationsService.alreadySent(
-            userId,
-            'LICENSE_EXPIRING_SOON',
-            LANGUAGES.map((written) =>
-              translate(written, 'notification.licenceExpiringSoon', {
-                licenceType: license.license_type,
-                date: formatDate(written, license.expiration_date),
-              }),
-            ),
-          );
-          if (alreadySent) continue;
-
-          await this.notificationsService.create({
-            user_id: userId,
-            notification_type: 'LICENSE_EXPIRING_SOON',
-            message: translate(language, 'notification.licenceExpiringSoon', {
-              licenceType: license.license_type,
-              date: formatDate(language, license.expiration_date),
-            }),
-            notification_date: new Date(),
-            expiration_date: license.expiration_date,
-            is_read: false,
-          });
+          continue;
         }
+        await this.licensesService.update({
+          id: license.id,
+          status: 'expired',
+          is_valid: false,
+        } as any);
+        this.logger.log(`Licence ${license.id} marquée comme expirée.`);
+        // The licence is marked for everyone; only active members are told.
+        if (!license.user?.id || isDeactivated(license.user)) continue;
+        await this.notificationsService.create({
+          user_id: license.user.id,
+          notification_type: 'LICENSE_EXPIRED',
+          message: translate(
+            languageOf(license.user),
+            'notification.licenceExpired',
+            { licenceType: license.license_type },
+          ),
+          notification_date: new Date(),
+          expiration_date: license.expiration_date,
+          is_read: false,
+        });
       }
     } catch (error) {
       this.logger.error(
         'Erreur lors de la vérification des licences expirées',
+        error,
+      );
+    }
+
+    // 60, 30 and 7 days before expiry, once each, by e-mail and in the
+    // application (see licence-rules).
+    try {
+      const sent = await this.licenceReminders.sendExpiryReminders(now);
+      if (sent > 0) {
+        this.logger.log(`${sent} rappel(s) d'expiration de licence envoyé(s).`);
+      }
+    } catch (error) {
+      this.logger.error(
+        'Erreur lors des rappels d’expiration de licence',
+        error,
+      );
+    }
+  }
+
+  // Le 1er du mois à 8 h : la liste des licences qui expirent bientôt,
+  // envoyée aux administrateurs.
+  @Cron('0 8 1 * *')
+  async sendLicenceDigest(now: Date = new Date()) {
+    try {
+      const sent = await this.licenceReminders.sendAdminDigest(now);
+      this.logger.log(
+        `Récapitulatif des licences envoyé à ${sent} administrateur(s).`,
+      );
+    } catch (error) {
+      this.logger.error(
+        'Erreur lors de l’envoi du récapitulatif des licences',
         error,
       );
     }

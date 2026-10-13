@@ -16,10 +16,16 @@ import {
   SessionUser,
 } from '../../common/auth/access';
 
+import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
+
 @Resolver(() => Payment)
 @UseFilters(LocalizedExceptionFilter)
 export class PaymentsResolver {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly adminActions: AdminActionsService,
+  ) {}
 
   // Credits or debits a member's account by hand (cash, cheque, correction),
   // with a reason: administrators only. The administrator is taken from the
@@ -27,11 +33,34 @@ export class PaymentsResolver {
   @Mutation(() => Payment)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  adjustMemberBalance(
+  async adjustMemberBalance(
     @Args('input') input: AdjustBalanceInput,
     @CurrentUser() currentUser?: SessionUser,
   ) {
-    return this.paymentsService.adjustBalance(input, currentUser);
+    const payment = await this.paymentsService.adjustBalance(
+      input,
+      currentUser,
+    );
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.BALANCE_ADJUSTED,
+      {
+        type: 'member',
+        id: input.user_id,
+        label:
+          [payment?.user?.first_name, payment?.user?.last_name]
+            .filter(Boolean)
+            .join(' ') || null,
+      },
+      {
+        paymentId: payment?.id ?? null,
+        direction: input.credit ? 'credit' : 'debit',
+        amount: input.amount,
+        method: input.payment_method,
+        reason: input.reason,
+      },
+    );
+    return payment;
   }
 
   // Records a payment that is expected: administrators only. It credits
@@ -142,8 +171,24 @@ export class PaymentsResolver {
   async updatePaymentStatus(
     @Args('paymentId', { type: () => String }) paymentId: string,
     @Args('status', { type: () => String }) status: string,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Payment> {
-    return this.paymentsService.updatePaymentStatus(paymentId, status);
+    const payment = await this.paymentsService.updatePaymentStatus(
+      paymentId,
+      status,
+    );
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.PAYMENT_STATUS_CHANGED,
+      { type: 'payment', id: payment?.id ?? paymentId },
+      {
+        requested: status,
+        status: payment?.payment_status ?? null,
+        memberId: payment?.user?.id ?? null,
+        amount: payment?.amount ?? null,
+      },
+    );
+    return payment;
   }
 
   @Mutation(() => Payment)
@@ -152,7 +197,22 @@ export class PaymentsResolver {
   async processRefund(
     @Args('paymentIntentId', { type: () => String }) paymentIntentId: string,
     @Args('amount', { type: () => Number }) amount: number,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Payment> {
-    return this.paymentsService.processRefund(paymentIntentId, amount);
+    const payment = await this.paymentsService.processRefund(
+      paymentIntentId,
+      amount,
+    );
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.PAYMENT_REFUND_RECORDED,
+      { type: 'payment', id: payment?.id ?? paymentIntentId },
+      {
+        amount,
+        refundedInTotal: payment?.refunded_amount ?? null,
+        memberId: payment?.user?.id ?? null,
+      },
+    );
+    return payment;
   }
 }

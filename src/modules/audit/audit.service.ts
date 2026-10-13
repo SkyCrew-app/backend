@@ -27,6 +27,9 @@ import { AircraftService } from '../aircraft/aircraft.service';
 import { UsersService } from '../users/users.service';
 import { AuditResultType } from './enums/audit-result.enum';
 import { calculateNextAuditDate } from './enums/audit-frequency.enum';
+import { AvailabilityStatus } from '../aircraft/entity/aircraft.entity';
+import { IncidentsService } from '../incidents/incidents.service';
+import { auditGroundsAircraft } from './audit-rules';
 
 @Injectable()
 export class AuditService {
@@ -41,7 +44,29 @@ export class AuditService {
     private auditTemplateItemRepository: Repository<AuditTemplateItem>,
     private aircraftService: AircraftService,
     private usersService: UsersService,
+    private incidentsService: IncidentsService,
   ) {}
+
+  // A non-conforming audit takes its aircraft out of service, like a severe
+  // incident: it stays grounded until an administrator or a technician puts
+  // it back. The people concerned are told.
+  private async groundAircraftOf(audit: Audit, auditId: number): Promise<void> {
+    const aircraft = audit.aircraft;
+    if (!aircraft?.id) {
+      return;
+    }
+    if (aircraft.availability_status !== AvailabilityStatus.UNAVAILABLE) {
+      await this.aircraftService.updateStatus(
+        aircraft.id,
+        AvailabilityStatus.UNAVAILABLE,
+      );
+      aircraft.availability_status = AvailabilityStatus.UNAVAILABLE;
+    }
+    await this.incidentsService.announceGrounding(aircraft, {
+      kind: 'audit',
+      id: auditId,
+    });
+  }
 
   // ==================== AUDIT METHODS ====================
 
@@ -130,7 +155,11 @@ export class AuditService {
       );
     }
 
-    return this.auditRepository.save(audit);
+    const saved = await this.auditRepository.save(audit);
+    if (auditGroundsAircraft(audit.audit_result)) {
+      await this.groundAircraftOf(audit, saved?.id ?? audit.id);
+    }
+    return saved;
   }
 
   async updateAudit(
@@ -142,6 +171,9 @@ export class AuditService {
     if (audit.is_closed && !updateAuditInput.is_closed) {
       throw new BadRequestException('Cannot modify a closed audit');
     }
+
+    const wasGrounding = auditGroundsAircraft(audit.audit_result);
+    const previousAircraftId = audit.aircraft?.id;
 
     if (updateAuditInput.aircraftId) {
       audit.aircraft = await this.aircraftService.findOne(
@@ -189,7 +221,16 @@ export class AuditService {
       audit.next_audit_date = updateAuditInput.next_audit_date;
     }
 
-    return this.auditRepository.save(audit);
+    const saved = await this.auditRepository.save(audit);
+    // An audit that becomes non-conforming, or moves to another aircraft
+    // while non-conforming, grounds the aircraft it is now about.
+    if (
+      auditGroundsAircraft(audit.audit_result) &&
+      (!wasGrounding || audit.aircraft?.id !== previousAircraftId)
+    ) {
+      await this.groundAircraftOf(audit, id);
+    }
+    return saved;
   }
 
   async deleteAudit(id: number): Promise<boolean> {

@@ -1,6 +1,7 @@
 import { InputType, Field, Int } from '@nestjs/graphql';
 import { IsDate, IsInt, IsString, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
+import { LogbookRole } from '../logbook-role';
 
 @InputType()
 export class LogbookFilterInput {
@@ -25,4 +26,9 @@ export class LogbookFilterInput {
   @IsString()
   @IsOptional()
   flightType?: string;
+
+  // Only the flights where the member took this part.
+  @Field(() => LogbookRole, { nullable: true })
+  @IsOptional()
+  role?: LogbookRole;
 }

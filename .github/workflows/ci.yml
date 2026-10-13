@@ -47,8 +47,12 @@ jobs:
           flags: backend
           fail_ci_if_error: false
 
+  # Compiles the application, then builds the container image a release
+  # publishes and starts it: a commit whose image does not build or does not
+  # start cannot pass this check, which the branches require.
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,12 +76,25 @@ jobs:
       - name: Build
         run: npm run build
 
-  # The image is what a release publishes: it has to keep building.
-  image:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      # Built as a release builds it, kept on the runner and never published.
+      # The layers are cached between the runs of a pull request.
       - name: Build the container image
-        run: docker build -t skycrew-backend:ci .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        env:
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          context: .
+          push: false
+          load: true
+          provenance: false
+          tags: skycrew-backend:ci
+          cache-from: type=gha,scope=image
+          cache-to: type=gha,scope=image,mode=max
+
+      # Entry point, migrations and e-mail templates are in the image, and it
+      # starts against an empty database.
+      - name: Check and start the image
+        run: sh .github/scripts/image-smoke.sh skycrew-backend:ci

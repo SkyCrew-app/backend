@@ -24,6 +24,14 @@ export class BudgetForecast {
 
   @Field(() => Float)
   netForecast: number;
+
+  // Money received from members over the period (top-ups, cash, cheques,
+  // transfers), and what the payment provider gave back to them.
+  @Field(() => Float)
+  cashReceived: number;
+
+  @Field(() => Float)
+  cashRefunded: number;
 }
 
 @Resolver()
@@ -186,10 +194,11 @@ export class FinancialResolver {
     @Args('endDate', { type: () => Date }) endDate: Date,
     @Context() context?: { req?: Request },
   ): Promise<string> {
-    const publicPath = await this.financialService.generateFinancialReportByPeriodPDF(
-      startDate,
-      endDate,
-    );
+    const publicPath =
+      await this.financialService.generateFinancialReportByPeriodPDF(
+        startDate,
+        endDate,
+      );
 
     return this.buildDownloadUrl(context?.req, publicPath);
   }
@@ -202,10 +211,11 @@ export class FinancialResolver {
     @Args('endDate', { type: () => Date }) endDate: Date,
     @Context() context?: { req?: Request },
   ): Promise<string> {
-    const publicPath = await this.financialService.generateFinancialReportByPeriodCSV(
-      startDate,
-      endDate,
-    );
+    const publicPath =
+      await this.financialService.generateFinancialReportByPeriodCSV(
+        startDate,
+        endDate,
+      );
 
     return this.buildDownloadUrl(context?.req, publicPath);
   }

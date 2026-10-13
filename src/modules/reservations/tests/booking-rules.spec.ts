@@ -2,8 +2,12 @@ import { validate } from 'class-validator';
 import { translationOf } from '../../../common/i18n/localized-exception';
 import { CreateExpenseInput } from '../../financial/dto/create-expense.dto';
 import {
+  assertAllowedToFly,
+  assertCanInstruct,
   assertCancellable,
   assertClubOpen,
+  instructorFeeCents,
+  INSTRUCTOR_FEE_PER_HOUR,
   CLUB_TIME_ZONE,
   clubMoment,
   hasValidLicence,
@@ -98,6 +102,80 @@ describe('booking rules', () => {
     // A club that lists no type accepts every type, not nobody.
     expect(hasValidLicence([licence], [], flightEnd)).toBe(true);
     expect(hasValidLicence([], [], flightEnd)).toBe(false);
+  });
+
+  it('asks the pilot for a licence alone, the instructor for it with one', () => {
+    const flightEnd = new Date('2027-01-12T10:00:00Z');
+    const licence = { license_type: 'PPL', is_valid: true, status: 'active' };
+    const crew = { acceptedTypes: ['PPL'], flightEnd };
+
+    // Alone.
+    expect(
+      keyOf(() =>
+        assertAllowedToFly({
+          ...crew,
+          pilotLicences: [licence],
+          withInstructor: false,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      keyOf(() =>
+        assertAllowedToFly({
+          ...crew,
+          pilotLicences: [],
+          withInstructor: false,
+        }),
+      ),
+    ).toBe('error.reservation.instructorRequired');
+    // With an instructor, the pilot's licence no longer matters.
+    expect(
+      keyOf(() =>
+        assertAllowedToFly({
+          ...crew,
+          pilotLicences: [],
+          instructorLicences: [licence],
+          withInstructor: true,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      keyOf(() =>
+        assertAllowedToFly({
+          ...crew,
+          pilotLicences: [licence],
+          instructorLicences: [{ ...licence, status: 'expired' }],
+          withInstructor: true,
+        }),
+      ),
+    ).toBe('error.reservation.instructorNoValidLicence');
+  });
+
+  it('accepts as instructor an active member with the instructor role, other than the pilot', () => {
+    const instructor = { id: 8, role: { role_name: 'Instructeur' } };
+
+    expect(keyOf(() => assertCanInstruct(instructor, 3))).toBeNull();
+    expect(keyOf(() => assertCanInstruct(instructor, 8))).toBe(
+      'error.reservation.instructorIsPilot',
+    );
+    expect(
+      keyOf(() => assertCanInstruct({ ...instructor, is_active: false }, 3)),
+    ).toBe('error.reservation.notAnInstructor');
+    expect(
+      keyOf(() => assertCanInstruct({ id: 8, role: 'Administrateur' }, 3)),
+    ).toBe('error.reservation.notAnInstructor');
+    expect(keyOf(() => assertCanInstruct({ id: 8, role: null }, 3))).toBe(
+      'error.reservation.notAnInstructor',
+    );
+  });
+
+  it('adds no instructor fee: the one place where it would be set', () => {
+    const start = new Date('2027-01-12T09:00:00Z');
+    const end = new Date('2027-01-12T10:30:00Z');
+
+    expect(INSTRUCTOR_FEE_PER_HOUR).toBe(0);
+    expect(instructorFeeCents(true, start, end)).toBe(0);
+    expect(instructorFeeCents(false, start, end)).toBe(0);
   });
 
   it('prices in cents and refuses a negative rate', () => {

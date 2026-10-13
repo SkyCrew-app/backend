@@ -4,12 +4,24 @@ on:
   push:
     branches:
       - main
-  # Publishes the image of an existing version again, without a new release.
+  # By hand, from the Actions tab ("Run workflow", on the branch main):
+  # - image: publishes the image of an existing version again, without a new
+  #   release;
+  # - release-pr: runs the release step itself, for the day a merge into main
+  #   did not start this workflow and the release pull request never appeared
+  #   (or was merged without its version being published).
   workflow_dispatch:
     inputs:
+      mode:
+        description: "image: publish the image of a version again - release-pr: open or update the release pull request"
+        type: choice
+        options:
+          - image
+          - release-pr
+        default: image
       version:
-        description: Version to publish, as tagged (for example 2.9.0)
-        required: true
+        description: For "image" only - version to publish, as tagged (for example 2.9.0)
+        required: false
 
 permissions:
   contents: write
@@ -17,12 +29,19 @@ permissions:
 
 jobs:
   release-please:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.mode == 'release-pr'
     runs-on: ubuntu-latest
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      # The release is computed from main, whatever branch was picked by hand.
+      - name: Check the branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this workflow on the branch main (it was run on $GITHUB_REF_NAME)."
+          exit 1
+
       - name: Open or update the release pull request
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
@@ -36,7 +55,7 @@ jobs:
     needs: release-please
     if: >-
       always() &&
-      (github.event_name == 'workflow_dispatch' ||
+      ((github.event_name == 'workflow_dispatch' && inputs.mode != 'release-pr') ||
       needs.release-please.outputs.release_created == 'true')
     runs-on: ubuntu-latest
     permissions:
@@ -44,8 +63,15 @@ jobs:
       packages: write
     env:
       IMAGE: ghcr.io/skycrew-app/backend
-      VERSION: ${{ inputs.version || needs.release-please.outputs.tag_name }}
+      VERSION: ${{ (inputs.mode != 'release-pr' && inputs.version) || needs.release-please.outputs.tag_name }}
     steps:
+      - name: Check that a version was given
+        run: |
+          if [ -z "$VERSION" ]; then
+            echo "::error::No version to publish: fill in \"version\" (for example 2.9.0) when running the mode \"image\"."
+            exit 1
+          fi
+
       - name: Check out the released version
         uses: actions/checkout@v4
         with:
@@ -65,6 +91,16 @@ jobs:
             --label "org.opencontainers.image.source=$SOURCE" \
             --label "org.opencontainers.image.version=$VERSION" \
             -t "$IMAGE:$VERSION" -t "$IMAGE:latest" .
+
+      # Not published if it does not hold what it must (content only: the start-up test belongs to the pull requests).
+      # Versions older than this check are published as before.
+      - name: Check the image
+        run: |
+          if [ -f .github/scripts/image-smoke.sh ]; then
+            sh .github/scripts/image-smoke.sh "$IMAGE:$VERSION" --no-start
+          else
+            echo "::notice::This version has no image check: published without it."
+          fi
 
       - name: Publish the image
         run: docker push --all-tags "$IMAGE"

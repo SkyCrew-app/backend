@@ -64,6 +64,14 @@ export class WebhookController {
             event.data.object.amount / 100,
           );
           break;
+
+        case 'charge.dispute.closed':
+          // Won: the bank gave the money back to the club, and the member
+          // gets back what the dispute had taken. Lost: it stays taken.
+          if (event.data.object.status === 'won') {
+            await this.paymentsService.applyDisputeWon(event.data.object.id);
+          }
+          break;
       }
     } catch (error) {
       // An event this application can do nothing about (a payment it does not

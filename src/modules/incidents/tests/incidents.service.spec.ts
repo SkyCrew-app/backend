@@ -32,6 +32,8 @@ const admin = { id: 1, email: 'a@example.com', role: 'Administrateur' };
 const relations = [
   'aircraft',
   'flight',
+  'flight.user',
+  'flight.instructor',
   'flight.reservation',
   'user',
   'resolved_by',
@@ -417,14 +419,117 @@ describe('IncidentsService', () => {
     });
   });
 
-  it('should delete incident', async () => {
-    incidentRepo.delete.mockResolvedValue({ affected: 1 } as any);
-    expect(await service.deleteIncident('8')).toBe(true);
+  // Deleting used to be open to every technician and administrator, with
+  // no look at the incident (rewritten with the rule).
+  describe('deleteIncident', () => {
+    const open = (changes: Partial<Incident> = {}) =>
+      ({
+        id: 8,
+        status: 'Ouvert',
+        user: { id: pilot.id },
+        resolved_by: null,
+        resolved_at: null,
+        resolution_note: null,
+        ...changes,
+      }) as Incident;
+
+    beforeEach(() => {
+      incidentRepo.delete.mockResolvedValue({ affected: 1 } as any);
+    });
+
+    it('lets an administrator delete any incident', async () => {
+      incidentRepo.findOne.mockResolvedValue(
+        open({ status: 'Résolu', resolved_by: { id: 6 } as any }),
+      );
+
+      expect(await service.deleteIncident('8', admin)).toBe(true);
+      expect(incidentRepo.delete).toHaveBeenCalledWith(8);
+    });
+
+    it('lets the author withdraw a report nobody has taken up', async () => {
+      incidentRepo.findOne.mockResolvedValue(open());
+
+      expect(await service.deleteIncident('8', pilot)).toBe(true);
+    });
+
+    it.each([
+      ['in progress', { status: 'En cours' }],
+      ['resolved', { status: 'Résolu', resolved_by: { id: 6 } }],
+      ['annotated by the staff', { resolution_note: 'Pièce commandée' }],
+    ])(
+      'refuses the author once the incident is %s',
+      async (_label, changes) => {
+        incidentRepo.findOne.mockResolvedValue(open(changes as any));
+
+        await expect(service.deleteIncident('8', pilot)).rejects.toThrow(
+          ForbiddenException,
+        );
+        expect(incidentRepo.delete).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      ['another member', stranger],
+      ['a technician', technician],
+      ['nobody', undefined],
+    ])('refuses %s, even on an open incident', async (_label, caller) => {
+      incidentRepo.findOne.mockResolvedValue(open());
+
+      await expect(service.deleteIncident('8', caller)).rejects.toThrow(
+        'Seul un administrateur peut supprimer un incident',
+      );
+      expect(incidentRepo.delete).not.toHaveBeenCalled();
+    });
+
+    it('says so when there was nothing to delete', async () => {
+      incidentRepo.findOne.mockResolvedValue(null);
+
+      expect(await service.deleteIncident('8', admin)).toBe(false);
+      expect(incidentRepo.delete).not.toHaveBeenCalled();
+    });
   });
 
-  it('says so when there was nothing to delete', async () => {
-    incidentRepo.delete.mockResolvedValue({ affected: 0 } as any);
-    expect(await service.deleteIncident('8')).toBe(false);
+  describe('announceGrounding', () => {
+    it('words the notifications for a non-conforming audit', async () => {
+      reservationRepo.find.mockResolvedValue([
+        {
+          id: 77,
+          start_time: new Date('2026-11-02T09:00:00Z'),
+          user: { id: 30, language: 'fr' },
+        },
+      ]);
+      userRepo.find.mockResolvedValue([{ id: 1, language: 'en' }]);
+
+      await service.announceGrounding(
+        { id: 2, registration_number: 'F-GABC' },
+        { kind: 'audit', id: 14 },
+      );
+
+      const messages = notifications.create.mock.calls.map(([notification]) => [
+        notification.user_id,
+        notification.message,
+      ]);
+      expect(messages[0][0]).toBe(30);
+      expect(messages[0][1]).toContain(
+        "immobilisé à la suite d'un audit de sécurité non conforme",
+      );
+      expect(messages[0][1]).toContain('N°77');
+      expect(messages[1]).toEqual([
+        1,
+        'Aircraft F-GABC has been grounded after safety audit No. 14, found non-conforming. Upcoming bookings affected: 1.',
+      ]);
+    });
+
+    it('never throws: a failed notification does not undo the grounding', async () => {
+      reservationRepo.find.mockRejectedValue(new Error('down'));
+
+      await expect(
+        service.announceGrounding(
+          { id: 2, registration_number: 'F-GABC' },
+          { kind: 'incident', id: 3 },
+        ),
+      ).resolves.toBeUndefined();
+    });
   });
 
   it('should get recent incidents', async () => {

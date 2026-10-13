@@ -179,6 +179,24 @@ export class AircraftService {
     return rest;
   }
 
+  // The registration and the availability as stored (not as a maintenance
+  // makes them look), or null for an unknown aircraft.
+  async storedStatus(aircraftId: number): Promise<{
+    registration_number: string;
+    availability_status: AvailabilityStatus;
+  } | null> {
+    const aircraft = await this.aircraftRepository.findOne({
+      where: { id: aircraftId },
+      select: ['id', 'registration_number', 'availability_status'],
+    });
+    return aircraft
+      ? {
+          registration_number: aircraft.registration_number,
+          availability_status: aircraft.availability_status,
+        }
+      : null;
+  }
+
   async updateStatus(
     aircraftId: number,
     availabilityStatus: AvailabilityStatus,

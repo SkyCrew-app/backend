@@ -6,6 +6,7 @@ import {
   MoreThan,
   Between,
   EntityManager,
+  In,
   Not,
 } from 'typeorm';
 import { Reservation, ReservationStatus } from './entity/reservations.entity';
@@ -27,6 +28,12 @@ import {
 } from '../maintenance/maintenance-rules';
 import { InstructionCourse } from '../instruction-courses/entity/instruction-courses.entity';
 import { CourseStatus } from '../instruction-courses/enum/course-status.enum';
+import { courseEnd } from '../instruction-courses/course-rules';
+import {
+  isAdmin,
+  ROLE_INSTRUCTOR,
+  SessionUser,
+} from '../../common/auth/access';
 import { AdministrationService } from '../administration/administration.service';
 import {
   BadRequestException,
@@ -34,7 +41,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { languageOf } from '../../common/i18n/languages';
+import { Language, languageOf } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
 import { PaymentsService } from '../payments/payments.service';
@@ -43,12 +50,14 @@ import { fromCents, lockRow, toCents } from '../payments/money';
 import {
   assertAllowedToFly,
   assertCancellable,
+  assertCanInstruct,
   assertChangeable,
   assertClubOpen,
   assertValidSlot,
   BookingActor,
-  clubMoment,
   hasValidLicence,
+  INSTRUCTION_FLIGHT_CATEGORY,
+  instructorFeeCents,
   mailDate,
   priceCents,
 } from './booking-rules';
@@ -63,12 +72,22 @@ const databaseErrorCode = (error: any): string | undefined =>
 
 const MEMBER: BookingActor = { isAdmin: false };
 
+const sameMember = (a: unknown, b: unknown): boolean =>
+  a != null && b != null && Number(a) === Number(b);
+
+const fullName = (member: { first_name?: string; last_name?: string }) =>
+  [member?.first_name, member?.last_name].filter(Boolean).join(' ');
+
+// What an instructor is told about a booking they instruct.
+type InstructorNotice = 'Booked' | 'Changed' | 'Cancelled';
+
 interface Slot {
   aircraftId: number;
   userId: number;
+  // The instructor on board, or null for a flight without one.
+  instructorId: number | null;
   start: Date;
   end: Date;
-  flightCategory: string;
   // The booking being changed, which does not conflict with itself.
   excludeReservationId?: number;
 }
@@ -118,14 +137,14 @@ export class ReservationsService {
   }
 
   // Every rule a booking must satisfy, for a new booking and for a changed
-  // one alike. The rows of the aircraft and of the pilot are locked first, so
-  // two bookings of the same aircraft, or by the same pilot, are checked one
+  // one alike. The rows of the aircraft, of the pilot and of the instructor
+  // are locked first, so two bookings sharing one of them are checked one
   // after the other.
   private async assertBookable(
     manager: EntityManager,
     slot: Slot,
     now: Date,
-  ): Promise<{ aircraft: Aircraft; user: User }> {
+  ): Promise<{ aircraft: Aircraft; user: User; instructor: User | null }> {
     assertValidSlot(slot.start, slot.end, now);
 
     const aircraft = (await lockRow(manager, 'aircraft', slot.aircraftId))
@@ -137,7 +156,17 @@ export class ReservationsService {
       });
     }
 
-    const user = (await lockRow(manager, 'users', slot.userId))
+    // Members are locked in the order of their ids: two bookings that share
+    // a pilot and an instructor the other way round cannot block each other.
+    const found = new Map<number, boolean>();
+    const memberIds = [slot.userId, slot.instructorId]
+      .filter((id): id is number => id != null)
+      .map(Number);
+    for (const id of [...new Set(memberIds)].sort((a, b) => a - b)) {
+      found.set(id, await lockRow(manager, 'users', id));
+    }
+
+    const user = found.get(Number(slot.userId))
       ? await manager.findOne(User, {
           where: { id: slot.userId },
           relations: ['licenses'],
@@ -151,6 +180,23 @@ export class ReservationsService {
     // A deactivated account is not booked for, by anyone.
     if (user.is_active === false) {
       throw localized(ForbiddenException, 'error.reservation.memberInactive');
+    }
+
+    let instructor: User | null = null;
+    if (slot.instructorId != null) {
+      instructor = found.get(Number(slot.instructorId))
+        ? await manager.findOne(User, {
+            where: { id: slot.instructorId },
+            relations: ['licenses', 'role'],
+          })
+        : null;
+      if (!instructor) {
+        throw localized(
+          NotFoundException,
+          'error.reservation.instructorNotFound',
+        );
+      }
+      assertCanInstruct(instructor, user.id);
     }
 
     if (aircraft.availability_status === AvailabilityStatus.UNAVAILABLE) {
@@ -202,14 +248,39 @@ export class ReservationsService {
       );
     }
 
-    const byPilot = await manager.find(Reservation, {
-      where: { user: { id: user.id }, ...overlapping },
-    });
-    if (byPilot.some(isAnotherBooking)) {
+    // Nobody is on two aircraft at once, whichever seat they take: a member
+    // is busy on the bookings they hold and on those they instruct.
+    const isBusy = async (memberId: number): Promise<boolean> => {
+      const asPilot = await manager.find(Reservation, {
+        where: { user: { id: memberId }, ...overlapping },
+      });
+      const asInstructor = await manager.find(Reservation, {
+        where: { instructor: { id: memberId }, ...overlapping },
+      });
+      return [...asPilot, ...asInstructor].some(isAnotherBooking);
+    };
+
+    if (await isBusy(user.id)) {
       throw localized(
         ConflictException,
         'error.reservation.pilotAlreadyBooked',
       );
+    }
+    if (instructor) {
+      if (await isBusy(instructor.id)) {
+        throw localized(
+          ConflictException,
+          'error.reservation.instructorAlreadyBooked',
+        );
+      }
+      if (
+        await this.teachesSomeoneElse(manager, instructor.id, user.id, slot)
+      ) {
+        throw localized(
+          ConflictException,
+          'error.reservation.instructorHasCourse',
+        );
+      }
     }
 
     const settings = (await this.administrationService.findAll())?.[0];
@@ -218,46 +289,90 @@ export class ReservationsService {
     }
     assertClubOpen(settings, slot.start, slot.end);
 
-    const licensed = hasValidLicence(
-      user.licenses,
-      settings.pilotLicenses,
-      slot.end,
-    );
     assertAllowedToFly({
-      licences: user.licenses,
+      pilotLicences: user.licenses,
+      instructorLicences: instructor?.licenses,
+      withInstructor: instructor !== null,
       acceptedTypes: settings.pilotLicenses,
-      flightCategory: slot.flightCategory,
       flightEnd: slot.end,
-      hasLessonThatDay:
-        !licensed &&
-        (await this.hasLessonThatDay(manager, user.id, slot.start)),
     });
 
-    return { aircraft, user };
+    return { aircraft, user, instructor };
   }
 
-  // An instructor has scheduled a lesson with this student on the club day
-  // of the flight.
-  private async hasLessonThatDay(
+  // The instructor has a course planned with another student over the slot.
+  // A course with the pilot of the booking is the flight itself.
+  private async teachesSomeoneElse(
     manager: EntityManager,
-    studentId: number,
-    start: Date,
+    instructorId: number,
+    pilotId: number,
+    slot: Slot,
   ): Promise<boolean> {
     const courses = await manager.find(InstructionCourse, {
       where: {
-        student: { id: studentId },
-        status: Not(CourseStatus.CANCELED),
-        startTime: Between(
-          new Date(start.getTime() - DAY),
-          new Date(start.getTime() + DAY),
-        ),
+        instructor: { id: instructorId },
+        status: In([CourseStatus.SCHEDULED, CourseStatus.IN_PROGRESS]),
+        startTime: Between(new Date(slot.start.getTime() - DAY), slot.end),
       },
+      relations: ['student'],
       loadEagerRelations: false,
     });
-    const day = clubMoment(start).day;
     return courses.some(
-      (course) => clubMoment(new Date(course.startTime)).day === day,
+      (course) =>
+        !sameMember(course.student?.id, pilotId) &&
+        new Date(course.startTime).getTime() < slot.end.getTime() &&
+        courseEnd(course).getTime() > slot.start.getTime(),
     );
+  }
+
+  // The course a booking is made for: a scheduled course of the caller,
+  // without a booking yet, over the same time.
+  private async courseToBook(
+    manager: EntityManager,
+    courseId: number,
+    start: Date,
+    end: Date,
+    requester?: SessionUser | null,
+  ): Promise<InstructionCourse> {
+    const course = await manager.findOne(InstructionCourse, {
+      where: { id: courseId },
+      relations: ['instructor', 'student', 'reservation'],
+      loadEagerRelations: false,
+    });
+    if (!course) {
+      throw localized(NotFoundException, 'error.reservation.courseNotFound');
+    }
+    // Internal callers (demo data) give no requester.
+    if (
+      requester &&
+      !isAdmin(requester) &&
+      !sameMember(course.student?.id, requester.id) &&
+      !sameMember(course.instructor?.id, requester.id)
+    ) {
+      throw localized(ForbiddenException, 'error.reservation.courseNotYours');
+    }
+    if (course.status !== CourseStatus.SCHEDULED) {
+      throw localized(
+        ConflictException,
+        'error.reservation.courseNotScheduled',
+      );
+    }
+    if (course.reservation) {
+      throw localized(
+        ConflictException,
+        'error.reservation.courseAlreadyBooked',
+      );
+    }
+    if (
+      new Date(course.startTime).getTime() >= end.getTime() ||
+      courseEnd(course).getTime() <= start.getTime()
+    ) {
+      throw localized(
+        BadRequestException,
+        'error.reservation.courseSlotMismatch',
+      );
+    }
+    return course;
   }
 
   // E-mails and notifications leave once the transaction is committed: they
@@ -273,39 +388,67 @@ export class ReservationsService {
     }
   }
 
+  // `requester` is the member asking, when the request comes from the API:
+  // a booking made for a course must be for one of their courses.
   async create(
     createReservationInput: CreateReservationInput,
     now: Date = new Date(),
+    requester?: SessionUser | null,
   ): Promise<Reservation> {
-    const { aircraft_id, user_id } = createReservationInput;
+    const { aircraft_id } = createReservationInput;
     const start = new Date(createReservationInput.start_time);
     const end = new Date(createReservationInput.end_time);
 
-    const { reservation, aircraft, user, cents } = await this.inTransaction(
-      async (manager) => {
-        const { aircraft, user } = await this.assertBookable(
+    const { reservation, aircraft, user, instructor, cents } =
+      await this.inTransaction(async (manager) => {
+        let userId = createReservationInput.user_id;
+        let instructorId = createReservationInput.instructor_id ?? null;
+
+        // A booking made for a course is flown by its student with its
+        // instructor, whoever of the two asks for it.
+        const course =
+          createReservationInput.course_id != null
+            ? await this.courseToBook(
+                manager,
+                createReservationInput.course_id,
+                start,
+                end,
+                requester,
+              )
+            : null;
+        if (course) {
+          userId = course.student.id;
+          instructorId = course.instructor.id;
+        }
+
+        const { aircraft, user, instructor } = await this.assertBookable(
           manager,
           {
             aircraftId: aircraft_id,
-            userId: user_id,
+            userId,
+            instructorId,
             start,
             end,
-            flightCategory: createReservationInput.flight_category,
           },
           now,
         );
-        const cents = priceCents(aircraft.hourly_cost, start, end);
+        const cents =
+          priceCents(aircraft.hourly_cost, start, end) +
+          instructorFeeCents(instructor !== null, start, end);
 
         const reservation = await manager.save(
           Reservation,
           manager.create(Reservation, {
             aircraft,
             user,
+            instructor,
             reservation_date: createReservationInput.reservation_date,
             start_time: start,
             end_time: end,
             purpose: createReservationInput.purpose,
-            flight_category: createReservationInput.flight_category,
+            flight_category: instructor
+              ? INSTRUCTION_FLIGHT_CATEGORY
+              : createReservationInput.flight_category,
             estimated_flight_hours:
               createReservationInput.estimated_flight_hours,
             notes: createReservationInput.notes,
@@ -324,9 +467,15 @@ export class ReservationsService {
             reservationId: reservation.id,
           });
         }
-        return { reservation, aircraft, user, cents };
-      },
-    );
+        if (course) {
+          await manager.update(
+            InstructionCourse,
+            { id: course.id },
+            { reservation: { id: reservation.id } },
+          );
+        }
+        return { reservation, aircraft, user, instructor, cents };
+      });
 
     // The confirmation is written to the member the reservation is for.
     const language = languageOf(user);
@@ -365,8 +514,67 @@ export class ReservationsService {
         fromCents(cents),
       );
     }
+    if (instructor) {
+      await this.tellInstructor('Booked', instructor, reservation);
+    }
 
     return reservation;
+  }
+
+  // The instructor of a booking is told what the pilot is told: when it is
+  // made, changed and cancelled, by a notification and an e-mail in their
+  // own language.
+  private async tellInstructor(
+    notice: InstructorNotice,
+    instructor: User,
+    booking: {
+      user: User;
+      aircraft: Aircraft;
+      start_time: Date | string;
+      end_time: Date | string;
+    },
+  ): Promise<void> {
+    const language: Language = languageOf(instructor);
+    const details = {
+      student: fullName(booking.user),
+      registration: booking.aircraft.registration_number,
+      date: mailDate(booking.start_time, language),
+    };
+    const message = translate(
+      language,
+      `notification.instruction${notice}ForInstructor`,
+      details,
+    );
+    const subject = translate(language, `mail.instruction${notice}.subject`);
+    await this.announce(`Instruction ${notice} e-mail`, () =>
+      this.mailerService.sendMail(
+        instructor.email,
+        subject,
+        message,
+        'instruction-booking',
+        {
+          title: subject,
+          greeting: translate(language, 'mail.instruction.greeting', {
+            name: instructor.first_name,
+          }),
+          message,
+          start_label: translate(language, 'mail.instruction.start'),
+          end_label: translate(language, 'mail.instruction.end'),
+          start_time: mailDate(booking.start_time, language),
+          end_time: mailDate(booking.end_time, language),
+        },
+        language,
+      ),
+    );
+    await this.announce(`Instruction ${notice} notification`, () =>
+      this.notificationService.create({
+        user_id: instructor.id,
+        notification_type: `INSTRUCTION_${notice.toUpperCase()}`,
+        notification_date: new Date(),
+        message,
+        is_read: false,
+      }),
+    );
   }
 
   // A booking is changed by its holder or an administrator (checked by the
@@ -410,8 +618,19 @@ export class ReservationsService {
       const aircraftId = Number(
         updateReservationInput.aircraft_id ?? reservation.aircraft.id,
       );
+      // Left out, the instructor stays; null, the flight is made without one.
+      const previousInstructor = reservation.instructor ?? null;
+      const instructorId =
+        updateReservationInput.instructor_id === undefined
+          ? (previousInstructor?.id ?? null)
+          : updateReservationInput.instructor_id;
+      const instructorChanged =
+        Number(instructorId ?? 0) !== Number(previousInstructor?.id ?? 0);
       const flightCategory =
-        updateReservationInput.flight_category ?? reservation.flight_category;
+        instructorId != null
+          ? INSTRUCTION_FLIGHT_CATEGORY
+          : (updateReservationInput.flight_category ??
+            reservation.flight_category);
 
       const slotChanged =
         start.getTime() !== previous.start.getTime() ||
@@ -419,30 +638,42 @@ export class ReservationsService {
         aircraftId !== Number(reservation.aircraft.id);
 
       let aircraft = reservation.aircraft;
+      let instructor = previousInstructor;
       let movedCents = 0;
-      if (slotChanged || flightCategory !== reservation.flight_category) {
-        ({ aircraft } = await this.assertBookable(
+      if (slotChanged || instructorChanged) {
+        ({ aircraft, instructor } = await this.assertBookable(
           manager,
           {
             aircraftId,
             userId: reservation.user.id,
+            instructorId,
             start,
             end,
-            flightCategory,
             excludeReservationId: reservation.id,
           },
           now,
         ));
       }
 
-      if (slotChanged) {
+      const feeBefore = instructorFeeCents(
+        previousInstructor !== null,
+        previous.start,
+        previous.end,
+      );
+      const feeAfter = instructorFeeCents(instructor !== null, start, end);
+
+      if (slotChanged || feeAfter !== feeBefore) {
         if (reservation.charged_amount == null) {
           throw localized(
             BadRequestException,
             'error.reservation.priceUnknown',
           );
         }
-        const newCents = priceCents(aircraft.hourly_cost, start, end);
+        // A new slot is priced again; otherwise only the instructor's part
+        // of the price moves, whatever the rate of the aircraft has become.
+        const newCents = slotChanged
+          ? priceCents(aircraft.hourly_cost, start, end) + feeAfter
+          : toCents(reservation.charged_amount) - feeBefore + feeAfter;
         movedCents = newCents - toCents(reservation.charged_amount);
         if (movedCents > 0) {
           await this.paymentService.chargeBooking(manager, {
@@ -476,11 +707,22 @@ export class ReservationsService {
         }
       }
 
+      if (instructorChanged) {
+        reservation.instructor = instructor;
+        // The course this booking was made for was the previous
+        // instructor's: it no longer has an aircraft.
+        await manager.update(
+          InstructionCourse,
+          { reservation: { id: reservation.id } },
+          { reservation: null },
+        );
+      }
+
       const saved = await manager.save(Reservation, reservation);
-      return { saved, previous, movedCents };
+      return { saved, previous, movedCents, previousInstructor };
     });
 
-    const { saved, previous, movedCents } = changed;
+    const { saved, previous, movedCents, previousInstructor } = changed;
     const user = saved.user;
     // The aircraft named is the one of the booking as it now stands.
     const registration = saved.aircraft.registration_number;
@@ -522,6 +764,25 @@ export class ReservationsService {
       );
     }
 
+    // An instructor who leaves the booking is told it is off for them, one
+    // who joins it that it is on, one who stays that it changed.
+    const stays = sameMember(previousInstructor?.id, saved.instructor?.id);
+    if (previousInstructor && !stays) {
+      await this.tellInstructor('Cancelled', previousInstructor, {
+        user,
+        aircraft: saved.aircraft,
+        start_time: previous.start,
+        end_time: previous.end,
+      });
+    }
+    if (saved.instructor) {
+      await this.tellInstructor(
+        stays ? 'Changed' : 'Booked',
+        saved.instructor,
+        saved,
+      );
+    }
+
     return saved;
   }
 
@@ -553,6 +814,13 @@ export class ReservationsService {
           reservationId: reservation.id,
         });
       }
+
+      // The course this booking was made for stays, without an aircraft.
+      await manager.update(
+        InstructionCourse,
+        { reservation: { id } },
+        { reservation: null },
+      );
 
       // A checklist filled for this booking is kept, without its booking:
       // its foreign key would otherwise refuse the deletion.
@@ -593,17 +861,30 @@ export class ReservationsService {
         fromCents(cents),
       );
     }
+    // When the instructor declines, the pilot is told who cancelled.
+    const instructor = reservation.instructor ?? null;
+    const declined =
+      instructor !== null && sameMember(actor.userId, instructor.id);
     await this.announce('Booking cancellation notification', () =>
       this.notificationService.create({
         user_id: user.id,
         notification_type: 'RESERVATION_CANCELLED',
         notification_date: new Date(),
-        message: translate(language, 'notification.reservationCancelled', {
-          registration,
-        }),
+        message: declined
+          ? translate(language, 'notification.instructionDeclined', {
+              instructor: fullName(instructor),
+              registration,
+              date: mailDate(reservation.start_time, language),
+            })
+          : translate(language, 'notification.reservationCancelled', {
+              registration,
+            }),
         is_read: false,
       }),
     );
+    if (instructor) {
+      await this.tellInstructor('Cancelled', instructor, reservation);
+    }
   }
 
   async findAll(): Promise<Reservation[]> {
@@ -617,6 +898,57 @@ export class ReservationsService {
       relations: ['user'],
     });
     return reservation?.user?.id ?? null;
+  }
+
+  // Who flies a reservation: its holder and its instructor, or null if it
+  // does not exist.
+  async findCrewIds(
+    id: number,
+  ): Promise<{ ownerId: number | null; instructorId: number | null } | null> {
+    const reservation = await this.reservationRepository.findOne({
+      where: { id },
+      relations: ['user', 'instructor'],
+    });
+    return reservation
+      ? {
+          ownerId: reservation.user?.id ?? null,
+          instructorId: reservation.instructor?.id ?? null,
+        }
+      : null;
+  }
+
+  // The bookings a member instructs.
+  async findInstructorReservations(
+    instructorId: number,
+  ): Promise<Reservation[]> {
+    return this.reservationRepository.find({
+      where: { instructor: { id: instructorId } },
+      relations: ['aircraft', 'user', 'instructor', 'flights'],
+      order: { start_time: 'ASC' },
+    });
+  }
+
+  // Who can be chosen as the instructor of a booking.
+  async findBookableInstructors(): Promise<User[]> {
+    return this.userRepository.find({
+      where: { role: { role_name: ROLE_INSTRUCTOR }, is_active: true },
+      relations: ['role'],
+      order: { last_name: 'ASC', first_name: 'ASC' },
+    });
+  }
+
+  // Whether a member may book without an instructor: they hold a licence
+  // the club accepts, valid until `until`.
+  async mayBookAlone(
+    userId: number,
+    until: Date = new Date(),
+  ): Promise<boolean> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['licenses'],
+    });
+    const settings = (await this.administrationService.findAll())?.[0];
+    return hasValidLicence(user?.licenses, settings?.pilotLicenses, until);
   }
 
   async findOne(id: number): Promise<Reservation> {
@@ -646,6 +978,7 @@ export class ReservationsService {
 
     queryBuilder.leftJoinAndSelect('reservation.aircraft', 'aircraft');
     queryBuilder.leftJoinAndSelect('reservation.user', 'user');
+    queryBuilder.leftJoinAndSelect('reservation.instructor', 'instructor');
     // Flights come along so the calendar knows which bookings are closed.
     queryBuilder.leftJoinAndSelect('reservation.flights', 'flights');
 

@@ -6,6 +6,7 @@ import { EvalService } from '../../eval/eval.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { GqlThrottlerGuard } from '../../../common/guards/gql-throttler.guard';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
 
 const pilot = {
   id: 3,
@@ -65,6 +66,10 @@ describe('Users authorization', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        {
+          provide: AdminActionsService,
+          useValue: { record: jest.fn() },
+        },
         UsersResolver,
         UserProgressResolver,
         { provide: UsersService, useValue: usersService },

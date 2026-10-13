@@ -194,7 +194,8 @@ describe('ReservationsService', () => {
         ['reservation.end_time > :startDate', { startDate: '2023-06-01' }],
         ['reservation.start_time < :endDate', { endDate: '2023-06-30' }],
       ]);
-      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledTimes(3);
+      // Aircraft, pilot, instructor and flights.
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledTimes(4);
       expect(result).toEqual([{ id: 1 }]);
     });
 

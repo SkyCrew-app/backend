@@ -23,6 +23,7 @@ describe('LicensesService', () => {
       save: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      query: jest.fn(),
     };
     usersService = {
       findOneById: jest.fn(),
@@ -190,18 +191,182 @@ describe('LicensesService', () => {
   });
 
   describe('findExpiringLicenses', () => {
-    it('should call repository with correct filter', async () => {
-      const thresholdDays = 7;
+    it('reads the licences not yet marked expired whose date falls within the period', async () => {
+      const now = new Date('2026-10-13T00:00:00Z');
       const list = [];
       (licenseRepo.find as jest.Mock).mockResolvedValue(list);
-      expect(await service.findExpiringLicenses(thresholdDays)).toBe(list);
+
+      expect(await service.findExpiringLicenses(60, now)).toBe(list);
+
+      const { where, relations } = (licenseRepo.find as jest.Mock).mock
+        .calls[0][0];
+      expect(relations).toEqual(['user']);
+      expect(where.expiration_date.type).toBe('lessThanOrEqual');
+      expect(where.expiration_date.value).toEqual(
+        new Date('2026-12-12T00:00:00Z'),
+      );
+      // Pending licences are included: they used never to be marked expired.
+      expect(where.status.type).toBe('not');
+      expect(where.status.value).toBe('expired');
+    });
+  });
+
+  describe('licence number', () => {
+    const user = { id: 5 } as any;
+    const dto = (number: string, type = 'PPL') =>
+      ({
+        user_id: 5,
+        license_type: type,
+        license_number: number,
+        issue_date: new Date('2024-01-01'),
+        status: 'active',
+      }) as any;
+
+    beforeEach(() => {
+      (usersService.findOneById as jest.Mock).mockResolvedValue(user);
+      (licenseRepo.create as jest.Mock).mockImplementation((row) => ({
+        ...row,
+      }));
+      (licenseRepo.save as jest.Mock).mockImplementation(async (row) => row);
+    });
+
+    it('refuses a number another licence of the same type already carries, whatever the case and spaces', async () => {
+      (licenseRepo.find as jest.Mock).mockResolvedValue([
+        { id: 1, license_type: 'PPL', license_number: 'ppl-fr-001' },
+      ]);
+
+      await expect(service.create(dto('  PPL-FR-001 '))).rejects.toThrow(
+        'Ce numéro est déjà celui d’une autre licence du même type',
+      );
+      expect(licenseRepo.save).not.toHaveBeenCalled();
+      // Only licences of that type are compared.
       expect(licenseRepo.find).toHaveBeenCalledWith({
-        where: expect.objectContaining({
-          status: 'active',
-          expiration_date: expect.any(Object),
-        }),
-        relations: ['user'],
+        where: { license_type: 'PPL' },
       });
+    });
+
+    it('accepts the same number on another type, and a new number', async () => {
+      (licenseRepo.find as jest.Mock).mockResolvedValue([]);
+
+      await expect(service.create(dto('PPL-FR-001', 'SEP'))).resolves.toEqual(
+        expect.objectContaining({ license_number: 'PPL-FR-001' }),
+      );
+    });
+
+    it('does not compare a licence with itself when it is edited', async () => {
+      const existing = { id: 1, license_type: 'PPL', license_number: 'A1' };
+      (licenseRepo.findOne as jest.Mock).mockResolvedValue(existing);
+      (licenseRepo.find as jest.Mock).mockResolvedValue([existing]);
+
+      await expect(
+        service.update({ id: 1, license_number: 'A1' } as any),
+      ).resolves.toBeDefined();
+    });
+
+    it('refuses on edit a number taken by another licence', async () => {
+      const existing = { id: 2, license_type: 'PPL', license_number: 'B2' };
+      (licenseRepo.findOne as jest.Mock).mockResolvedValue(existing);
+      (licenseRepo.find as jest.Mock).mockResolvedValue([
+        { id: 1, license_type: 'PPL', license_number: 'A1' },
+        existing,
+      ]);
+
+      await expect(
+        service.update({ id: 2, license_number: 'a1' } as any),
+      ).rejects.toThrow('Ce numéro est déjà celui');
+    });
+
+    it('answers the same refusal when the database index catches two requests at once', async () => {
+      (licenseRepo.find as jest.Mock).mockResolvedValue([]);
+      (licenseRepo.save as jest.Mock).mockRejectedValue(
+        Object.assign(new Error('duplicate key'), {
+          code: '23505',
+          constraint: 'UQ_licenses_type_number',
+        }),
+      );
+
+      await expect(service.create(dto('PPL-FR-009'))).rejects.toThrow(
+        'Ce numéro est déjà celui',
+      );
+    });
+  });
+
+  describe('status and validity', () => {
+    beforeEach(() => {
+      (licenseRepo.find as jest.Mock).mockResolvedValue([]);
+      (licenseRepo.save as jest.Mock).mockImplementation(async (row) => row);
+    });
+
+    it('never stores a licence both expired and valid', async () => {
+      const existing = {
+        id: 4,
+        license_type: 'PPL',
+        status: 'active',
+        is_valid: true,
+        expiration_date: new Date('2030-01-01'),
+      } as any;
+      (licenseRepo.findOne as jest.Mock).mockResolvedValue(existing);
+
+      // What the nightly job used to send as status only.
+      const saved = await service.update({ id: 4, status: 'expired' } as any);
+      // The date is still to come: the licence is not expired.
+      expect(saved).toMatchObject({ status: 'active', is_valid: true });
+
+      const pending = await service.update({ id: 4, status: 'pending' } as any);
+      expect(pending).toMatchObject({ status: 'pending', is_valid: false });
+    });
+
+    it('marks a licence expired as soon as its date has passed, whatever is sent', async () => {
+      const existing = {
+        id: 4,
+        license_type: 'PPL',
+        status: 'active',
+        is_valid: true,
+        expiration_date: new Date('2020-01-01'),
+      } as any;
+      (licenseRepo.findOne as jest.Mock).mockResolvedValue(existing);
+
+      const saved = await service.update({ id: 4, is_valid: true } as any);
+
+      expect(saved).toMatchObject({ status: 'expired', is_valid: false });
+    });
+
+    it('makes a renewed licence usable again when its new date is entered', async () => {
+      const existing = {
+        id: 4,
+        license_type: 'PPL',
+        status: 'expired',
+        is_valid: false,
+        expiration_date: new Date('2020-01-01'),
+      } as any;
+      (licenseRepo.findOne as jest.Mock).mockResolvedValue(existing);
+
+      const saved = await service.update({
+        id: 4,
+        expiration_date: new Date(Date.now() + 365 * 86400_000),
+      } as any);
+
+      expect(saved).toMatchObject({ status: 'active', is_valid: true });
+    });
+  });
+
+  describe('claimExpiryReminder', () => {
+    it('claims a step once: the database says whether this caller got it', async () => {
+      (licenseRepo.query as jest.Mock)
+        .mockResolvedValueOnce([[{ id: 4 }], 1])
+        .mockResolvedValueOnce([[], 0]);
+      const licence = { id: 4 } as License;
+
+      expect(await service.claimExpiryReminder(licence, 30)).toBe(true);
+      expect(await service.claimExpiryReminder(licence, 30)).toBe(false);
+
+      const [sql, parameters] = (licenseRepo.query as jest.Mock).mock.calls[0];
+      expect(parameters).toEqual([30, 4]);
+      // The condition and the write are one statement.
+      expect(sql).toContain('"expiry_reminder_days" > $1');
+      expect(sql).toContain(
+        '"expiry_reminder_for" IS DISTINCT FROM "expiration_date"',
+      );
     });
   });
 

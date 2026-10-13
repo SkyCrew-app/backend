@@ -77,6 +77,18 @@ It runs the backup first, waits for the API and the web application to report
 healthy, and puts the previous versions back by itself when they do not. Give
 only `--backend` or only `--frontend` to update one of them.
 
+To check beforehand that the versions build, without touching the server:
+
+```bash
+deploy/release-to-server.sh --dry-run --backend 2.13.0 --frontend 2.10.0
+```
+
+The script stops at the first step that fails, with a status other than 0. A
+failed build shows the end of what it printed (`LOG_LINES`, 40 by default) and
+the file holding the rest; the server is then left as it was. When its output
+is piped into another command (`| tee`, `| tail`), the status seen is the one
+of that command: read the last lines, which say `FAILED` or `Done`.
+
 ## Knowing when the site is down
 
 `skycrew-watch.sh` checks the health address and posts a message to a chat

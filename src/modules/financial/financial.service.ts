@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, Repository } from 'typeorm';
+import { Between, In, Repository } from 'typeorm';
+import { Payment, PAYMENT_KIND } from '../payments/entity/payments.entity';
 import { FinancialReport } from './entity/financial-report.entity';
 import { Expense } from './entity/expense.entity';
 import { CreateFinancialReportInput } from './dto/create-financial-report.dto';
@@ -29,6 +30,49 @@ export const chargedRevenue = (
     0,
   ) / 100;
 
+// Manual entries that are money handed to the club. A "correction" moves a
+// balance without any money coming in.
+export const CASH_METHODS = ['cash', 'cheque', 'transfer'];
+
+export interface CashFlow {
+  // Money members paid in: card and PayPal top-ups, and the cash, cheques
+  // and transfers an administrator recorded.
+  cashReceived: number;
+  // What went back to members through the payment provider (refunds and
+  // chargebacks, less the chargebacks the club won).
+  cashRefunded: number;
+}
+
+type PaymentLine = Pick<
+  Payment,
+  'kind' | 'amount' | 'payment_status' | 'payment_method'
+>;
+
+// Cash in and out, from the lines of the members' accounts.
+export const cashFlowOf = (lines: PaymentLine[]): CashFlow => {
+  let received = 0;
+  let refunded = 0;
+  for (const line of lines) {
+    const cents = Math.round(Number(line.amount ?? 0) * 100);
+    if (
+      line.kind === PAYMENT_KIND.TOP_UP &&
+      ['completed', 'refunded'].includes(line.payment_status)
+    ) {
+      received += cents;
+    } else if (
+      line.kind === PAYMENT_KIND.MANUAL_CREDIT &&
+      CASH_METHODS.includes(line.payment_method)
+    ) {
+      received += cents;
+    } else if (line.kind === PAYMENT_KIND.PROVIDER_REFUND) {
+      refunded += cents;
+    } else if (line.kind === PAYMENT_KIND.DISPUTE_WON) {
+      refunded -= cents;
+    }
+  }
+  return { cashReceived: received / 100, cashRefunded: refunded / 100 };
+};
+
 @Injectable()
 export class FinancialService {
   private readonly exportsDir = join(__dirname, '../../uploads', 'exports');
@@ -44,7 +88,26 @@ export class FinancialService {
     private readonly reservationRepository: Repository<Reservation>,
     @InjectRepository(Administration)
     private readonly adminRepository: Repository<Administration>,
+    @InjectRepository(Payment)
+    private readonly paymentRepository: Repository<Payment>,
   ) {}
+
+  // Money actually received from members over the period, as opposed to
+  // revenue (flights charged to their accounts).
+  async cashFlowForPeriod(start: Date, end: Date): Promise<CashFlow> {
+    const lines = await this.paymentRepository.find({
+      where: {
+        payment_date: Between(start, end),
+        kind: In([
+          PAYMENT_KIND.TOP_UP,
+          PAYMENT_KIND.MANUAL_CREDIT,
+          PAYMENT_KIND.PROVIDER_REFUND,
+          PAYMENT_KIND.DISPUTE_WON,
+        ]),
+      },
+    });
+    return cashFlowOf(lines ?? []);
+  }
 
   async createFinancialReport(
     input: CreateFinancialReportInput,
@@ -181,27 +244,9 @@ export class FinancialService {
         end: end.toISOString(),
       })
       .getRawOne();
-    const recordedExpenses = parseFloat(expenseRaw.sum) || 0;
-
-    const reservations = await this.reservationRepository.find({
-      where: {
-        status: ReservationStatus.CONFIRMED,
-        start_time: Between(start, end),
-      },
-    });
-
-    const FUEL_CONSUMPTION_FACTOR = 50;
-    let fuelExpenses = 0;
-    for (const reservation of reservations) {
-      if (reservation.estimated_flight_hours) {
-        fuelExpenses +=
-          reservation.estimated_flight_hours *
-          FUEL_CONSUMPTION_FACTOR *
-          admin.fuelPrice;
-      }
-    }
-
-    return recordedExpenses + fuelExpenses;
+    // Only what was recorded as an expense (fuel included, when the club
+    // enters its fuel bills): nothing is estimated.
+    return parseFloat(expenseRaw.sum) || 0;
   }
 
   async findExpenseByPeriod(
@@ -222,6 +267,8 @@ export class FinancialService {
     revenueForecast: number;
     expenseForecast: number;
     netForecast: number;
+    cashReceived: number;
+    cashRefunded: number;
   }> {
     const admin = await this.adminRepository.findOne({
       where: { id: 1 },
@@ -249,22 +296,23 @@ export class FinancialService {
       .getRawOne();
     const recordedExpenses = parseFloat(expenseRaw.sum) || 0;
 
-    const FUEL_CONSUMPTION_FACTOR = 50;
-    let fuelExpenses = 0;
-    for (const reservation of reservations) {
-      if (reservation.estimated_flight_hours) {
-        fuelExpenses +=
-          reservation.estimated_flight_hours *
-          FUEL_CONSUMPTION_FACTOR *
-          admin.fuelPrice;
-      }
-    }
-
-    const expenseForecast = recordedExpenses + fuelExpenses;
+    // Expenses are the recorded ones only: no estimated fuel cost.
+    const expenseForecast = recordedExpenses;
 
     const netForecast = revenueForecast - expenseForecast;
 
-    return { revenueForecast, expenseForecast, netForecast };
+    const { cashReceived, cashRefunded } = await this.cashFlowForPeriod(
+      startDate,
+      endDate,
+    );
+
+    return {
+      revenueForecast,
+      expenseForecast,
+      netForecast,
+      cashReceived,
+      cashRefunded,
+    };
   }
 
   private writeExport(fileName: string, content: string | Uint8Array): void {
@@ -357,7 +405,16 @@ export class FinancialService {
       font,
     });
 
-    let currentY = height - 250;
+    page.drawText(
+      `Encaissements (rechargements, espèces, chèques, virements): ${forecast.cashReceived.toFixed(2)} €`,
+      { x: 50, y: height - 230, size: 12, font },
+    );
+    page.drawText(
+      `Remboursés par le prestataire de paiement: ${forecast.cashRefunded.toFixed(2)} €`,
+      { x: 50, y: height - 246, size: 12, font },
+    );
+
+    let currentY = height - 280;
 
     page.drawText('Recettes (Réservations Confirmées)', {
       x: 50,
@@ -435,6 +492,8 @@ export class FinancialService {
         revenueForecast: forecast.revenueForecast,
         expenseForecast: forecast.expenseForecast,
         netForecast: forecast.netForecast,
+        cashReceived: forecast.cashReceived,
+        cashRefunded: forecast.cashRefunded,
       },
     ];
 
@@ -444,6 +503,8 @@ export class FinancialService {
       'revenueForecast',
       'expenseForecast',
       'netForecast',
+      'cashReceived',
+      'cashRefunded',
     ];
     const parser = new Parser({ fields });
     const csv = parser.parse(data);

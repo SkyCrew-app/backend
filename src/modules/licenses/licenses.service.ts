@@ -1,7 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Like, Repository } from 'typeorm';
-import { License } from './entity/licenses.entity';
+import { LessThanOrEqual, Like, Not, Repository } from 'typeorm';
+import { License, LICENCE_NUMBER_UNIQUE_INDEX } from './entity/licenses.entity';
+import { localized } from '../../common/i18n/localized-exception';
+import { normaliseLicenceNumber, settleLicenceState } from './licence-rules';
 import { CreateLicenseInput } from './dto/create-license.input';
 import { UpdateLicenseInput } from './dto/update-license.input';
 import { FileUpload } from 'graphql-upload-ts';
@@ -49,6 +55,42 @@ export class LicensesService {
     return license;
   }
 
+  // One number per licence type: checked here for a clear answer, and held
+  // by a unique index for two requests at the same moment.
+  private async assertNumberFree(licence: License): Promise<void> {
+    const number = normaliseLicenceNumber(licence.license_number);
+    if (!number) {
+      return;
+    }
+    const sameType = await this.licenseRepository.find({
+      where: { license_type: licence.license_type },
+    });
+    const taken = (sameType ?? []).some(
+      (other) =>
+        other.id !== licence.id &&
+        normaliseLicenceNumber(other.license_number) === number,
+    );
+    if (taken) {
+      throw localized(ConflictException, 'error.licence.numberAlreadyUsed');
+    }
+  }
+
+  private async save(licence: License): Promise<License> {
+    try {
+      return await this.licenseRepository.save(licence);
+    } catch (error) {
+      const violated =
+        (error?.driverError?.code ?? error?.code) === '23505' &&
+        String(
+          error?.driverError?.constraint ?? error?.constraint ?? '',
+        ).includes(LICENCE_NUMBER_UNIQUE_INDEX);
+      if (violated) {
+        throw localized(ConflictException, 'error.licence.numberAlreadyUsed');
+      }
+      throw error;
+    }
+  }
+
   async create(createLicenseInput: CreateLicenseInput): Promise<License> {
     const { user_id, ...licenseData } = createLicenseInput;
 
@@ -59,10 +101,16 @@ export class LicensesService {
 
     const license = this.licenseRepository.create({
       ...licenseData,
+      license_number: licenseData.license_number?.trim(),
       user,
     });
+    Object.assign(
+      license,
+      settleLicenceState(license, { status: licenseData.status }),
+    );
+    await this.assertNumberFree(license);
 
-    return this.licenseRepository.save(license);
+    return this.save(license);
   }
 
   async update(updateLicenseInput: UpdateLicenseInput): Promise<License> {
@@ -73,10 +121,28 @@ export class LicensesService {
       const notSent =
         value === undefined || (field === 'documents_url' && value === null);
       if (field !== 'id' && !notSent) {
-        license[field] = value;
+        license[field] =
+          field === 'license_number' && typeof value === 'string'
+            ? value.trim()
+            : value;
       }
     }
-    return this.licenseRepository.save(license);
+    // Status and validity are settled together, from what was asked and
+    // from the expiry date (see licence-rules).
+    Object.assign(
+      license,
+      settleLicenceState(license, {
+        status: updateLicenseInput.status,
+        is_valid: updateLicenseInput.is_valid,
+      }),
+    );
+    if (
+      updateLicenseInput.license_number !== undefined ||
+      updateLicenseInput.license_type !== undefined
+    ) {
+      await this.assertNumberFree(license);
+    }
+    return this.save(license);
   }
 
   async remove(id: number): Promise<boolean> {
@@ -106,17 +172,41 @@ export class LicensesService {
     return saveUploadTo(file, 'document', 'licences');
   }
 
-  async findExpiringLicenses(thresholdDays: number = 7): Promise<License[]> {
-    const now = new Date();
+  // Licences not yet marked expired whose expiry date falls within the
+  // given number of days, or has passed.
+  async findExpiringLicenses(
+    thresholdDays: number = 7,
+    now: Date = new Date(),
+  ): Promise<License[]> {
     const thresholdDate = new Date(
       now.getTime() + thresholdDays * 24 * 60 * 60 * 1000,
     );
     return this.licenseRepository.find({
       where: {
         expiration_date: LessThanOrEqual(thresholdDate),
-        status: 'active',
+        status: Not('expired') as never,
       },
       relations: ['user'],
+      order: { expiration_date: 'ASC' },
     });
+  }
+
+  // Records that the reminder of a step was sent for the current expiry
+  // date. False when it already was (another instance of the job, a
+  // restart): the caller then sends nothing.
+  async claimExpiryReminder(licence: License, step: number): Promise<boolean> {
+    const rows = await this.licenseRepository.query(
+      `UPDATE "licenses"
+       SET "expiry_reminder_days" = $1, "expiry_reminder_for" = "expiration_date"
+       WHERE "id" = $2
+         AND "expiration_date" IS NOT NULL
+         AND ("expiry_reminder_for" IS DISTINCT FROM "expiration_date"
+              OR "expiry_reminder_days" IS NULL
+              OR "expiry_reminder_days" > $1)
+       RETURNING "id"`,
+      [step, licence.id],
+    );
+    const returned = Array.isArray(rows?.[0]) ? rows[0] : rows;
+    return Array.isArray(returned) && returned.length > 0;
   }
 }

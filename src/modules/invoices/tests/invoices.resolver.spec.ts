@@ -32,6 +32,7 @@ describe('InvoicesResolver', () => {
       update: jest.fn(),
       remove: jest.fn(),
       findByUser: jest.fn(),
+      document: jest.fn(),
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -112,6 +113,44 @@ describe('InvoicesResolver', () => {
       (service.findOne as jest.Mock).mockResolvedValue(invoice);
 
       await expect(resolver.findOne(2, holder)).resolves.toBe(invoice);
+    });
+  });
+
+  describe('invoiceDocument', () => {
+    const invoice = { id: 5, user: { id: holder.id } } as Invoice;
+    const file = { fileName: 'facture-2026-00005.pdf', content: 'JVBERi0=' };
+
+    beforeEach(() => {
+      (service.findOne as jest.Mock).mockResolvedValue(invoice);
+      (service.document as jest.Mock).mockResolvedValue(file);
+    });
+
+    it.each([
+      ['the member it was issued to', holder],
+      ['an administrator', admin],
+    ])(
+      'gives the PDF to %s, in the language of the interface',
+      async (_label, caller) => {
+        await expect(resolver.invoiceDocument(5, caller, 'en')).resolves.toBe(
+          file,
+        );
+        expect(service.document).toHaveBeenCalledWith(invoice, 'en');
+      },
+    );
+
+    it('refuses another member', async () => {
+      await expect(resolver.invoiceDocument(5, stranger, 'fr')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(service.document).not.toHaveBeenCalled();
+    });
+
+    it('answers not found for an unknown invoice', async () => {
+      (service.findOne as jest.Mock).mockResolvedValue(null);
+
+      await expect(resolver.invoiceDocument(404, admin, 'fr')).rejects.toThrow(
+        'Invoice not found',
+      );
     });
   });
 });

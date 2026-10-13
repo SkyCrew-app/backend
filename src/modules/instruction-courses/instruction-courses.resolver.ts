@@ -203,7 +203,7 @@ export class InstructionCoursesResolver {
       currentUser,
       await this.courseService.findCourseOfCompetency(competencyId),
     );
-    return this.courseService.validateCompetency(competencyId);
+    return this.courseService.validateCompetency(competencyId, currentUser);
   }
 
   // Ajouter un commentaire à un cours

@@ -4,11 +4,13 @@ import { AircraftResolver } from './aircraft.resolver';
 import { Aircraft } from './entity/aircraft.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MulterModule } from '@nestjs/platform-express';
+import { AdminActionsModule } from '../../common/admin-actions/admin-actions.module';
 import { FileController } from '../../common/controllers/file.controller';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Aircraft]),
+    AdminActionsModule,
     MulterModule.register({
       dest: './uploads',
     }),

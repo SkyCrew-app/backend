@@ -32,4 +32,8 @@ export class UpdateReservationInput {
 
   @Field({ nullable: true })
   notes?: string;
+
+  // Left out: the instructor stays. Null: the flight is made without one.
+  @Field(() => Int, { nullable: true })
+  instructor_id?: number | null;
 }

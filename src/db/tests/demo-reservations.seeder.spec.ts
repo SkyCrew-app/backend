@@ -66,6 +66,49 @@ describe('seedDemoReservations', () => {
     expect(invoices).toHaveLength(held.length);
   });
 
+  // users[8] is Emma, the student demo account (no valid licence), and
+  // users[2] Marie, an instructor.
+  it('gives the student an upcoming instruction booking with an instructor, paid like any other', async () => {
+    const { bookings, payments } = await seed();
+    const upcoming = bookings.filter(
+      (booking) =>
+        booking.user.id === 9 &&
+        booking.instructor?.id === 3 &&
+        booking.start_time.getTime() > Date.now(),
+    );
+
+    expect(upcoming).toHaveLength(1);
+    const [booking] = upcoming;
+    expect(booking.flight_category).toBe('instruction');
+    expect(booking.status).toBe('confirmed');
+    // The aircraft only: no instructor fee.
+    const hours =
+      (booking.end_time.getTime() - booking.start_time.getTime()) / 3_600_000;
+    expect(booking.charged_amount).toBeCloseTo(
+      hours * booking.aircraft.hourly_cost,
+      2,
+    );
+    expect(
+      payments.filter((payment) => payment.reservation_id === booking.id),
+    ).toEqual([
+      expect.objectContaining({
+        kind: 'booking',
+        amount: booking.charged_amount,
+        user: { id: 9 },
+      }),
+    ]);
+  });
+
+  it('never lets the student fly without an instructor', async () => {
+    const { bookings } = await seed();
+    const students = bookings.filter((booking) => booking.user.id === 9);
+
+    expect(students.length).toBeGreaterThan(0);
+    for (const booking of students) {
+      expect(booking.instructor?.id).toBe(3);
+    }
+  });
+
   it('charges nothing for a cancelled booking', async () => {
     const { bookings, payments } = await seed();
     const cancelled = bookings.filter(

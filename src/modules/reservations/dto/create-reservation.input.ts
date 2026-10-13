@@ -32,4 +32,13 @@ export class CreateReservationInput {
 
   @Field({ nullable: true })
   status?: string;
+
+  // The instructor on board: an active member with the instructor role.
+  @Field(() => Int, { nullable: true })
+  instructor_id?: number | null;
+
+  // The scheduled course this booking is made for: its student is the
+  // pilot and its instructor the instructor, whatever else is sent.
+  @Field(() => Int, { nullable: true })
+  course_id?: number | null;
 }

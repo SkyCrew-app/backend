@@ -75,8 +75,6 @@ export const fr = {
     'Ce membre est désactivé : aucune réservation ne peut être faite à son nom',
   'error.reservation.noClubSettings':
     "Aucune configuration d'administration trouvée",
-  'error.reservation.noValidLicence':
-    "Vous n'avez pas de licence valide pour réserver cet avion",
   'error.reservation.insufficientBalance':
     'Solde insuffisant pour réserver cet avion',
   'error.flight.notOwnFlightUpdate':
@@ -144,8 +142,6 @@ export const fr = {
     'Cet avion est en maintenance sur ce créneau',
   'error.reservation.pilotAlreadyBooked':
     'Ce pilote a déjà une réservation sur un autre avion à ce moment-là',
-  'error.reservation.noLessonThatDay':
-    "Sans licence valide, seul un vol d'instruction peut être réservé, un jour où un instructeur a planifié une leçon avec vous",
   'error.reservation.invalidPrice':
     "Le tarif horaire de cet avion n'est pas valide",
   'error.reservation.alreadyStarted':
@@ -228,6 +224,8 @@ export const fr = {
     'Ce cours ne peut pas être planifié avec un compte désactivé',
   'error.course.scheduleConflict':
     "L'instructeur ou l'élève a déjà un cours sur ce créneau",
+  'error.course.memberAlreadyBooked':
+    "L'instructeur ou l'élève a déjà un avion réservé pour autre chose sur ce créneau",
   'error.course.ratingIsStudents':
     "La note et l'avis d'un cours sont donnés par l'élève",
   'error.course.participantsAdminOnly':
@@ -246,6 +244,90 @@ export const fr = {
     'Cette checklist est terminée : elle ne peut plus être modifiée',
   'error.checklist.requiredItemsMissing':
     'Il reste {{count}} point(s) obligatoire(s) à vérifier',
+  // Instruction flights: a booking with an instructor.
+  'notification.instructionBookedForInstructor':
+    "Vol d'instruction avec {{student}} sur l'avion {{registration}}, le {{date}} : vous en êtes l'instructeur.",
+  'notification.instructionChangedForInstructor':
+    "Le vol d'instruction avec {{student}} sur l'avion {{registration}} a été modifié. Il est prévu le {{date}}.",
+  'notification.instructionCancelledForInstructor':
+    "Le vol d'instruction avec {{student}} sur l'avion {{registration}}, le {{date}}, a été annulé.",
+  'notification.instructionDeclined':
+    "Votre instructeur {{instructor}} a annulé le vol d'instruction du {{date}} sur l'avion {{registration}}. Ce que vous aviez payé vous est remboursé.",
+  'mail.instructionBooked.subject': "Nouveau vol d'instruction",
+  'mail.instructionChanged.subject': "Vol d'instruction modifié",
+  'mail.instructionCancelled.subject': "Vol d'instruction annulé",
+  'mail.instruction.greeting': 'Bonjour {{name}},',
+  'mail.instruction.start': 'Début :',
+  'mail.instruction.end': 'Fin :',
+  'error.reservation.instructorRequired':
+    "Sans licence valide, vous ne pouvez réserver qu'avec un instructeur : choisissez l'instructeur de ce vol",
+  'error.reservation.instructorNoValidLicence':
+    "Cet instructeur n'a pas de licence valide jusqu'à la fin de ce vol",
+  'error.reservation.instructorNotFound': 'Instructeur introuvable',
+  'error.reservation.notAnInstructor':
+    "La personne choisie n'est pas un instructeur actif du club",
+  'error.reservation.instructorIsPilot':
+    "L'instructeur et le pilote doivent être deux personnes différentes",
+  'error.reservation.instructorAlreadyBooked':
+    'Cet instructeur est déjà pris sur un autre vol à ce moment-là',
+  'error.reservation.instructorHasCourse':
+    'Cet instructeur donne un cours à un autre élève à ce moment-là',
+  'error.reservation.courseNotFound': 'Cours introuvable',
+  'error.reservation.courseNotYours':
+    "Ce cours n'est pas le vôtre : vous ne pouvez pas réserver d'avion pour lui",
+  'error.reservation.courseNotScheduled':
+    'Un avion ne se réserve que pour un cours planifié',
+  'error.reservation.courseAlreadyBooked':
+    'Un avion est déjà réservé pour ce cours',
+  'error.reservation.courseSlotMismatch':
+    'Le créneau de la réservation doit recouvrir celui du cours',
+
+  // Leftovers of the business-rules audit (members, incidents, licences,
+  // invoices).
+  'error.incident.deleteNotAllowed':
+    "Seul un administrateur peut supprimer un incident. Son auteur peut le retirer tant qu'il est ouvert et que personne ne l'a pris en charge.",
+  'error.licence.unknownStatus':
+    'Statut de licence inconnu : choisissez active, expirée ou en attente',
+  'error.licence.numberAlreadyUsed':
+    'Ce numéro est déjà celui d’une autre licence du même type',
+  'notification.licenceExpiresIn':
+    'Votre licence {{licenceType}} expire dans {{days}} jour(s), le {{date}}. Pensez à la renouveler.',
+  'mail.licenceExpiring.subject':
+    'Votre licence {{licenceType}} arrive à expiration',
+  'notification.licenceDigest':
+    '{{count}} licence(s) de membres expirent dans les {{days}} prochains jours (récapitulatif {{month}}).',
+  'mail.licenceDigest.subject': 'Licences arrivant à expiration : {{count}}',
+  'notification.aircraftGroundedByAudit':
+    "L'avion {{registration}} est immobilisé à la suite d'un audit de sécurité non conforme. Votre réservation N°{{reservationId}} du {{date}} est concernée : contactez le club.",
+  'notification.aircraftGroundedByAuditStaff':
+    "L'avion {{registration}} a été immobilisé à la suite de l'audit de sécurité N°{{auditId}}, non conforme. Réservations à venir concernées : {{count}}.",
+  'error.invoice.numberedCannotDelete':
+    'Une facture numérotée ne peut pas être supprimée : son numéro manquerait dans la suite de l’année',
+  'invoice.title': 'Facture',
+  'invoice.fileName': 'facture',
+  'invoice.number': 'Facture n° {{number}}',
+  'invoice.date': 'Date : {{date}}',
+  'invoice.billedTo': 'Facturé à',
+  'invoice.description': 'Désignation',
+  'invoice.amount': 'Montant',
+  'invoice.total': 'Total',
+  'invoice.amountPaid': 'Déjà réglé',
+  'invoice.balanceDue': 'Reste à payer',
+  'invoice.paidBy': 'Mode de règlement : {{method}}',
+  'invoice.line.booking':
+    "Réservation de l'avion {{registration}}, du {{start}} au {{end}}",
+  'invoice.line.instructionBooking':
+    "Vol d'instruction sur l'avion {{registration}} avec l'instructeur {{instructor}}, du {{start}} au {{end}}",
+  'invoice.line.bookingNumber': 'Réservation N°{{reservationId}}',
+  'invoice.line.bookingPlain': "Réservation d'avion",
+  'invoice.line.topUp': 'Approvisionnement du compte membre',
+  'invoice.line.other': 'Prestation',
+  'invoice.method.accountBalance': 'solde du compte membre',
+  'invoice.method.card': 'carte bancaire',
+  'invoice.method.paypal': 'PayPal',
+  'invoice.method.cash': 'espèces',
+  'invoice.method.cheque': 'chèque',
+  'invoice.method.transfer': 'virement',
 } as const;
 
 export type TranslationKey = keyof typeof fr;

@@ -1,6 +1,17 @@
 // invoices.resolver.ts
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import {
+  Resolver,
+  Query,
+  Mutation,
+  Args,
+  Int,
+  ObjectType,
+  Field,
+} from '@nestjs/graphql';
+import { NotFoundException, UseFilters, UseGuards } from '@nestjs/common';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
+import { RequestLanguage } from '../../common/i18n/request-language';
+import { Language } from '../../common/i18n/languages';
 import { InvoicesService } from './invoices.service';
 import { Invoice } from './entity/invoices.entity';
 import { CreateInvoiceInput } from './dto/create-invoice.input';
@@ -11,7 +22,18 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { assertSelfOrRole, SessionUser } from '../../common/auth/access';
 
+@ObjectType()
+export class InvoiceDocument {
+  @Field()
+  fileName: string;
+
+  // The PDF, in base64.
+  @Field()
+  content: string;
+}
+
 @Resolver(() => Invoice)
+@UseFilters(LocalizedExceptionFilter)
 export class InvoicesResolver {
   constructor(private readonly invoicesService: InvoicesService) {}
 
@@ -72,5 +94,22 @@ export class InvoicesResolver {
   ) {
     assertSelfOrRole(currentUser, userId);
     return this.invoicesService.findByUser(userId);
+  }
+
+  // The invoice as a PDF, for the member it was issued to (or an
+  // administrator), in the language of the interface.
+  @Query(() => InvoiceDocument, { name: 'invoiceDocument' })
+  @UseGuards(JwtAuthGuard)
+  async invoiceDocument(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() currentUser?: SessionUser,
+    @RequestLanguage() language?: Language,
+  ): Promise<InvoiceDocument> {
+    const invoice = await this.invoicesService.findOne(id);
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+    assertSelfOrRole(currentUser, invoice.user?.id);
+    return this.invoicesService.document(invoice, language ?? 'fr');
   }
 }

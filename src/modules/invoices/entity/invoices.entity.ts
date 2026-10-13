@@ -2,6 +2,7 @@ import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
 import {
   Entity,
   Column,
+  Index,
   PrimaryGeneratedColumn,
   ManyToOne,
   OneToMany,
@@ -9,12 +10,22 @@ import {
 import { User } from '../../users/entity/users.entity';
 import { Payment } from '../../payments/entity/payments.entity';
 
+// Created by a migration (no two invoices share a number).
+export const INVOICE_NUMBER_UNIQUE_INDEX = 'UQ_invoices_invoice_number';
+
 @ObjectType()
 @Entity('invoices')
+@Index(INVOICE_NUMBER_UNIQUE_INDEX, { synchronize: false })
 export class Invoice {
   @Field(() => Int)
   @PrimaryGeneratedColumn()
   id: number;
+
+  // "2026-00042": sequential within a year, without gaps, given when the
+  // invoice is created and never changed.
+  @Field({ nullable: true })
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  invoice_number: string;
 
   @Field(() => User)
   @ManyToOne(() => User, (user) => user.invoices)

@@ -7,12 +7,15 @@ import { Flight } from '../entity/flights.entity';
 import { ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../../../common/decorators/roles.decorator';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../../common/admin-actions/admin-actions';
 
 describe('FlightsResolver', () => {
   let resolver: FlightsResolver;
   let service: any;
   let airports: any;
   let metar: any;
+  let trace: { record: jest.Mock };
 
   const pilot = {
     id: 1,
@@ -85,12 +88,15 @@ describe('FlightsResolver', () => {
       }),
     };
 
+    trace = { record: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         FlightsResolver,
         { provide: FlightsService, useValue: service },
         { provide: AirportsService, useValue: airports },
         { provide: MetarService, useValue: metar },
+        { provide: AdminActionsService, useValue: trace },
       ],
     }).compile();
 
@@ -265,5 +271,75 @@ describe('FlightsResolver', () => {
 
     service.getRecentFlights.mockResolvedValue([{ id: 6 }]);
     expect(await resolver.getRecentFlights(1)).toEqual([{ id: 6 }]);
+  });
+
+  describe("administrators' action log", () => {
+    const closed = {
+      id: 9,
+      closed_at: new Date('2026-10-01T10:00:00Z'),
+      origin_icao: 'LFPG',
+      destination_icao: 'LFOB',
+      user: { id: 3, first_name: 'Jean', last_name: 'Dupont' },
+    };
+    const target = { type: 'flight', id: 9, label: 'LFPG → LFOB, Jean Dupont' };
+
+    it('records an administrator amending a closed flight', async () => {
+      service.findOne.mockResolvedValue(closed);
+      service.updateFlight.mockResolvedValue({ ...closed, flight_hours: 2 });
+
+      await resolver.updateFlight(
+        { id: 9, flight_hours: 2 } as any,
+        administrator,
+      );
+
+      expect(trace.record).toHaveBeenCalledWith(
+        administrator,
+        ADMIN_ACTION.FLIGHT_RECORD_AMENDED,
+        target,
+        { memberId: 3 },
+      );
+    });
+
+    it('records an administrator deleting a closed flight', async () => {
+      service.findOne.mockResolvedValue(closed);
+      service.removeFlight.mockResolvedValue(true);
+
+      await expect(resolver.removeFlight(9, administrator)).resolves.toBe(true);
+
+      expect(trace.record).toHaveBeenCalledWith(
+        administrator,
+        ADMIN_ACTION.FLIGHT_RECORD_DELETED,
+        target,
+        { memberId: 3 },
+      );
+    });
+
+    it('records nothing for an open flight, a member, or a refused action', async () => {
+      service.findOne.mockResolvedValue({ ...closed, closed_at: null });
+      service.updateFlight.mockResolvedValue({ id: 9 });
+      service.removeFlight.mockResolvedValue(true);
+      await resolver.updateFlight({ id: 9 } as any, administrator);
+      await resolver.removeFlight(9, administrator);
+
+      service.findOne.mockResolvedValue(closed);
+      await resolver.updateFlight({ id: 9 } as any, pilot);
+      service.removeFlight.mockResolvedValue(false);
+      await resolver.removeFlight(9, administrator);
+      service.updateFlight.mockRejectedValue(new ForbiddenException('non'));
+      await expect(
+        resolver.updateFlight({ id: 9 } as any, administrator),
+      ).rejects.toThrow('non');
+
+      expect(trace.record).not.toHaveBeenCalled();
+    });
+
+    it('still amends when the flight cannot be read for the trace', async () => {
+      service.findOne.mockRejectedValue(new Error('lecture impossible'));
+      service.updateFlight.mockResolvedValue({ id: 9 });
+
+      await expect(
+        resolver.updateFlight({ id: 9 } as any, administrator),
+      ).resolves.toEqual({ id: 9 });
+    });
   });
 });

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { AuthService } from '../auth.service';
+import { AuthService, SESSION_LIFETIME_SECONDS } from '../auth.service';
 import { UsersService } from '../../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -123,7 +123,7 @@ describe('AuthService', () => {
       expect(token).toBe('jwt-token');
       expect(jwtService.sign).toHaveBeenCalledWith(
         { email: 'a@example.com', sub: 1, role: 'admin', sv: 0 },
-        { expiresIn: '2h' },
+        { expiresIn: SESSION_LIFETIME_SECONDS },
       );
     });
 

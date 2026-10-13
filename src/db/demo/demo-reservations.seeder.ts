@@ -145,7 +145,8 @@ export const seedDemoReservations = async (
     },
     {
       aircraft: aircraft[2], // Robin DR400
-      user: pilotes[3], // Emma
+      user: pilotes[3], // Emma, student pilot: she flies with an instructor
+      instructor: instructeurs[0], // Marie
       reservation_date: makeDate(-3, 0),
       start_time: makeDate(-3, 8, 0),
       end_time: makeDate(-3, 10, 0),
@@ -221,6 +222,9 @@ export const seedDemoReservations = async (
     {
       aircraft: aircraft[2], // Robin DR400
       user: pilotes[3], // Emma
+      // The upcoming instruction booking of the student demo account. The
+      // student pays the aircraft, there is no instructor fee.
+      instructor: instructeurs[0], // Marie
       reservation_date: makeDate(3, 0),
       start_time: makeDate(3, 14, 0),
       end_time: makeDate(3, 16, 0),

@@ -8,6 +8,7 @@ import { AircraftModule } from '../aircraft/aircraft.module';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { Administration } from '../administration/entity/admin.entity';
+import { Payment } from '../payments/entity/payments.entity';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { Administration } from '../administration/entity/admin.entity';
       Aircraft,
       Reservation,
       Administration,
+      Payment,
     ]),
     AircraftModule,
   ],

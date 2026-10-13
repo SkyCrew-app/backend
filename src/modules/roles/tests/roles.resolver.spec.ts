@@ -6,10 +6,13 @@ import { CreateRoleInput } from '../dto/create-role.input';
 import { UpdateRoleInput } from '../dto/update-role.input';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
 
 describe('RolesResolver', () => {
   let resolver: RolesResolver;
   let service: RolesService;
+
+  const trace = { record: jest.fn() };
 
   const mockService = {
     findAll: jest.fn(),
@@ -22,6 +25,7 @@ describe('RolesResolver', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: AdminActionsService, useValue: trace },
         RolesResolver,
         {
           provide: RolesService,
@@ -131,6 +135,65 @@ describe('RolesResolver', () => {
 
       expect(mockService.deleteRole).toHaveBeenCalledWith(id);
       expect(result).toBe(false);
+    });
+  });
+
+  describe('trace of administrator actions', () => {
+    const administrator = {
+      id: 1,
+      email: 'admin@club.fr',
+      role: 'Administrateur',
+    };
+
+    it('records a role created, renamed and deleted', async () => {
+      mockService.createRole.mockResolvedValue({
+        id: 9,
+        role_name: 'Trésorier',
+      });
+      await resolver.createRole({ role_name: 'Trésorier' }, administrator);
+
+      mockService.findOne.mockResolvedValue({ id: 9, role_name: 'Trésorier' });
+      mockService.updateRole.mockResolvedValue({
+        id: 9,
+        role_name: 'Trésorière',
+      });
+      await resolver.updateRole(
+        { id: 9, role_name: 'Trésorière' },
+        administrator,
+      );
+
+      mockService.findOne.mockResolvedValue({ id: 9, role_name: 'Trésorière' });
+      mockService.deleteRole.mockResolvedValue(true);
+      await resolver.deleteRole(9, administrator);
+
+      expect(trace.record.mock.calls.map((call) => call.slice(1))).toEqual([
+        ['role.created', { type: 'role', id: 9, label: 'Trésorier' }],
+        [
+          'role.renamed',
+          { type: 'role', id: 9, label: 'Trésorière' },
+          { from: 'Trésorier', to: 'Trésorière' },
+        ],
+        ['role.deleted', { type: 'role', id: 9, label: 'Trésorière' }],
+      ]);
+    });
+
+    it('records nothing for a rename that changes nothing, nor for a refused deletion', async () => {
+      mockService.findOne.mockResolvedValue({ id: 9, role_name: 'Trésorier' });
+      mockService.updateRole.mockResolvedValue({
+        id: 9,
+        role_name: 'Trésorier',
+      });
+      await resolver.updateRole(
+        { id: 9, role_name: 'Trésorier' },
+        administrator,
+      );
+
+      mockService.deleteRole.mockRejectedValue(new Error('in use'));
+      await expect(resolver.deleteRole(9, administrator)).rejects.toThrow(
+        'in use',
+      );
+
+      expect(trace.record).not.toHaveBeenCalled();
     });
   });
 });
