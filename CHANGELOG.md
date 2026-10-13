@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.2](https://github.com/SkyCrew-app/backend/compare/2.12.1...2.12.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **security:** :lock: keep third-party keys on the server and sanitise rich text ([#156](https://github.com/SkyCrew-app/backend/issues/156)) ([9531818](https://github.com/SkyCrew-app/backend/commit/9531818634ad150c765f51134532c550370736da))
+
 ## [2.12.1](https://github.com/SkyCrew-app/backend/compare/2.12.0...2.12.1) (2026-10-12)
 
 
