@@ -1,7 +1,11 @@
 import { Resolver, Query, Mutation, Args, Context, Int } from '@nestjs/graphql';
 import { UsersService } from './users.service';
 import { User } from './entity/users.entity';
-import { ForbiddenException, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import {
@@ -27,6 +31,14 @@ import {
   isAdmin,
   ROLE_INSTRUCTOR,
 } from '../../common/auth/access';
+import {
+  DEFAULT_LANGUAGE,
+  Language,
+  languageOf,
+  LANGUAGES,
+  parseLanguage,
+} from '../../common/i18n/languages';
+import { RequestLanguage } from '../../common/i18n/request-language';
 
 @Resolver(() => User)
 export class UsersResolver {
@@ -56,12 +68,17 @@ export class UsersResolver {
     @Args('last_name') last_name: string,
     @Args('email') email: string,
     @Args('date_of_birth') date_of_birth: Date,
+    @Args('language', { nullable: true }) language?: string,
+    @RequestLanguage() requestLanguage?: Language,
   ) {
+    // Unless told otherwise, the new member is written to in the language
+    // the administrator is working in.
     return this.usersService.create({
       first_name,
       last_name,
       email,
       date_of_birth,
+      language: parseLanguage(language) ?? requestLanguage ?? DEFAULT_LANGUAGE,
     });
   }
 
@@ -158,6 +175,25 @@ export class UsersResolver {
       email_notifications_enabled,
       sms_notifications_enabled,
       newsletter_subscribed,
+    );
+  }
+
+  // The language the signed-in member is written to (e-mails, notifications).
+  @Mutation(() => User)
+  @UseGuards(JwtAuthGuard)
+  async updateMyLanguage(
+    @Args('language') language: string,
+    @Context() context,
+  ) {
+    const supported = (LANGUAGES as readonly string[]).includes(language);
+    if (!supported) {
+      throw new BadRequestException(
+        `Unsupported language. Accepted values: ${LANGUAGES.join(', ')}.`,
+      );
+    }
+    return this.usersService.updateLanguage(
+      context.req.user.id,
+      language as Language,
     );
   }
 
@@ -293,13 +329,14 @@ export class UsersResolver {
 
   @Query(() => User)
   @UseGuards(JwtAuthGuard)
-  me(@Context() context): { id: number; email: string } {
+  me(@Context() context): { id: number; email: string; language: Language } {
     if (!context.req.user) {
       throw new Error('Utilisateur non authentifié');
     }
     return {
       id: context.req.user.id,
       email: context.req.user.email,
+      language: languageOf(context.req.user),
     };
   }
 }

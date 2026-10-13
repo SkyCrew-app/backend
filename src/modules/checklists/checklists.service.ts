@@ -15,6 +15,8 @@ import { SubmitChecklistInput } from './dto/submit-checklist.input';
 import { UpdateChecklistSubmissionInput } from './dto/update-checklist-submission.input';
 import { User } from '../users/entity/users.entity';
 import { ChecklistTemplateRemoval } from './dto/checklist-template-removal.type';
+import { DEFAULT_LANGUAGE, Language } from '../../common/i18n/languages';
+import { translate } from '../../common/i18n/translate';
 
 @Injectable()
 export class ChecklistsService {
@@ -88,7 +90,10 @@ export class ChecklistsService {
 
   // A template nobody filled in is deleted with its items. Once checklists
   // refer to it, it is kept for the record and only taken out of use.
-  async removeTemplate(id: number): Promise<ChecklistTemplateRemoval> {
+  async removeTemplate(
+    id: number,
+    language: Language = DEFAULT_LANGUAGE,
+  ): Promise<ChecklistTemplateRemoval> {
     const template = await this.templateRepository.findOne({ where: { id } });
     if (!template) {
       throw new NotFoundException('Modèle de checklist introuvable');
@@ -105,7 +110,10 @@ export class ChecklistsService {
         deleted: false,
         deactivated: true,
         submissions_count: submissionsCount,
-        message: `Le modèle « ${template.name} » est utilisé par ${submissionsCount} checklist(s) déjà remplie(s) : il a été désactivé au lieu d'être supprimé, afin de conserver l'historique.`,
+        message: translate(language, 'checklist.templateDeactivated', {
+          name: template.name,
+          count: submissionsCount,
+        }),
       };
     }
 
@@ -114,7 +122,9 @@ export class ChecklistsService {
       deleted: true,
       deactivated: false,
       submissions_count: 0,
-      message: `Le modèle « ${template.name} » a été supprimé.`,
+      message: translate(language, 'checklist.templateDeleted', {
+        name: template.name,
+      }),
     };
   }
 

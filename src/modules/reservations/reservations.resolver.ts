@@ -6,7 +6,8 @@ import { CreateReservationInput } from './dto/create-reservation.input';
 import { UpdateReservationInput } from './dto/update-reservation.input';
 import { CreateReservationTemplateInput } from './dto/create-reservation-template.input';
 import { UpdateReservationTemplateInput } from './dto/update-reservation-template.input';
-import { NotFoundException, UseGuards } from '@nestjs/common';
+import { NotFoundException, UseFilters, UseGuards } from '@nestjs/common';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -15,6 +16,7 @@ import { User } from '../users/entity/users.entity';
 import { assertSelfOrRole, isAdmin } from '../../common/auth/access';
 
 @Resolver(() => Reservation)
+@UseFilters(LocalizedExceptionFilter)
 export class ReservationsResolver {
   constructor(private readonly reservationService: ReservationsService) {}
 

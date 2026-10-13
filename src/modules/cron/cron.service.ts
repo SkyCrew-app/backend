@@ -10,6 +10,11 @@ import {
   Reservation,
   ReservationStatus,
 } from '../reservations/entity/reservations.entity';
+import { formatDate, languageOf } from '../../common/i18n/languages';
+import {
+  translate,
+  translateInEveryLanguage,
+} from '../../common/i18n/translate';
 
 @Injectable()
 export class CronService {
@@ -40,7 +45,12 @@ export class CronService {
         await this.notificationsService.create({
           user_id: course.student.id && course.instructor.id,
           notification_type: 'COURSE_COMPLETED',
-          message: `Votre cours ${course.id} est terminé.`,
+          // Written to the instructor, who is the one notified here.
+          message: translate(
+            languageOf(course.instructor),
+            'notification.courseCompleted',
+            { courseId: course.id },
+          ),
           notification_date: new Date(),
           is_read: false,
         });
@@ -62,6 +72,7 @@ export class CronService {
         await this.licensesService.findExpiringLicenses(thresholdDays);
       for (const license of expiringLicenses) {
         const userId = license.user.id;
+        const language = languageOf(license.user);
         if (
           license.expiration_date &&
           new Date(license.expiration_date) < new Date()
@@ -75,7 +86,9 @@ export class CronService {
             await this.notificationsService.create({
               user_id: userId,
               notification_type: 'LICENSE_EXPIRED',
-              message: `Votre licence ${license.license_type} est expirée.`,
+              message: translate(language, 'notification.licenceExpired', {
+                licenceType: license.license_type,
+              }),
               notification_date: new Date(),
               expiration_date: license.expiration_date,
               is_read: false,
@@ -85,7 +98,10 @@ export class CronService {
           await this.notificationsService.create({
             user_id: userId,
             notification_type: 'LICENSE_EXPIRING_SOON',
-            message: `Votre licence ${license.license_type} expirera bientôt, le ${new Date(license.expiration_date).toLocaleDateString()}. Veuillez prendre les mesures nécessaires.`,
+            message: translate(language, 'notification.licenceExpiringSoon', {
+              licenceType: license.license_type,
+              date: formatDate(language, license.expiration_date),
+            }),
             notification_date: new Date(),
             expiration_date: license.expiration_date,
             is_read: false,
@@ -119,12 +135,17 @@ export class CronService {
       );
 
     for (const reservation of reservations) {
+      const language = languageOf(reservation.user);
+      const reservationId = reservation.id;
+
       // Vérification 1 : Si la réservation est en attente de confirmation
       if (reservation.status === ReservationStatus.PENDING) {
         await this.notificationsService.create({
           user_id: reservation.user.id,
           notification_type: 'RESERVATION_PENDING',
-          message: `Votre réservation N°${reservation.id} n'est pas confirmée. Veuillez la confirmer.`,
+          message: translate(language, 'notification.reservationPending', {
+            reservationId,
+          }),
           notification_date: new Date(),
           is_read: false,
         });
@@ -139,7 +160,9 @@ export class CronService {
           await this.notificationsService.create({
             user_id: reservation.user.id,
             notification_type: 'MISSING_FLIGHT_PLAN',
-            message: `Votre vol prévu demain pour la réservation N°${reservation.id} n'a pas de plan de vol. Veuillez le soumettre.`,
+            message: translate(language, 'notification.missingFlightPlan', {
+              reservationId,
+            }),
             notification_date: new Date(),
             is_read: false,
           });
@@ -158,7 +181,11 @@ export class CronService {
             await this.notificationsService.create({
               user_id: reservation.user.id,
               notification_type: 'INCOMPLETE_FLIGHT_PLAN',
-              message: `Votre vol prévu demain pour la réservation N°${reservation.id} a un plan de vol incomplet. Veuillez le compléter.`,
+              message: translate(
+                language,
+                'notification.incompleteFlightPlan',
+                { reservationId },
+              ),
               notification_date: new Date(),
               is_read: false,
             });
@@ -173,7 +200,9 @@ export class CronService {
           await this.notificationsService.create({
             user_id: reservation.user.id,
             notification_type: 'MISSING_PASSENGER_COUNT',
-            message: `Le nombre de passagers pour votre vol prévu demain (Réservation N°${reservation.id}) n'est pas renseigné. Veuillez le compléter.`,
+            message: translate(language, 'notification.missingPassengerCount', {
+              reservationId,
+            }),
             notification_date: new Date(),
             is_read: false,
           });
@@ -244,12 +273,19 @@ export class CronService {
         continue;
       }
 
-      const message = `Votre réservation N°${reservation.id} est terminée. Veuillez clôturer votre vol.`;
-      // This job runs every hour: remind once, not at every run.
+      const params = { reservationId: reservation.id };
+      const message = translate(
+        languageOf(reservation.user),
+        'notification.reservationFinished',
+        params,
+      );
+      // This job runs every hour: remind once, not at every run. The reminder
+      // may have been written in another language if the member changed
+      // theirs since.
       const alreadySent = await this.notificationsService.alreadySent(
         reservation.user.id,
         'RESERVATION_FINISHED',
-        message,
+        translateInEveryLanguage('notification.reservationFinished', params),
       );
       if (alreadySent) continue;
 

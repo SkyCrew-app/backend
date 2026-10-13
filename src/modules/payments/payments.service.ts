@@ -14,6 +14,9 @@ import { User } from '../users/entity/users.entity';
 import { Invoice } from '../invoices/entity/invoices.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isAdmin, SessionUser } from '../../common/auth/access';
+import { languageOf } from '../../common/i18n/languages';
+import { translate } from '../../common/i18n/translate';
+import { localized } from '../../common/i18n/localized-exception';
 
 // Bounds of an account top-up, in euros.
 export const TOP_UP_MIN = 1;
@@ -83,7 +86,9 @@ export class PaymentsService {
       user_id: user.id,
       notification_type: 'WITHDRAWAL',
       notification_date: new Date(),
-      message: `Un paiement de ${createPaymentInput.amount} a été effectué sur votre compte`,
+      message: translate(languageOf(user), 'notification.withdrawal', {
+        amount: createPaymentInput.amount,
+      }),
       is_read: false,
     });
 
@@ -129,9 +134,10 @@ export class PaymentsService {
 
     const amount = Number(createPaymentInput.amount);
     if (!(amount >= TOP_UP_MIN && amount <= TOP_UP_MAX)) {
-      throw new BadRequestException(
-        `Le montant doit être compris entre ${TOP_UP_MIN} et ${TOP_UP_MAX} euros`,
-      );
+      throw localized(BadRequestException, 'error.payment.amountOutOfRange', {
+        min: TOP_UP_MIN,
+        max: TOP_UP_MAX,
+      });
     }
 
     let paymentDetails: { id: string; client_secret?: string };
@@ -203,7 +209,11 @@ export class PaymentsService {
       user_id: payment.user.id,
       notification_type: 'INVOICE_CREATED',
       notification_date: new Date(),
-      message: `Une facture de ${payment.amount} a été créée`,
+      message: translate(
+        languageOf(payment.user),
+        'notification.invoiceCreated',
+        { amount: payment.amount },
+      ),
       is_read: false,
     });
 
@@ -233,15 +243,13 @@ export class PaymentsService {
       !isAdmin(requester) &&
       Number(payment.user?.id) !== Number(requester.id)
     ) {
-      throw new ForbiddenException(
-        'Vous ne pouvez confirmer que vos propres paiements',
-      );
+      throw localized(ForbiddenException, 'error.payment.notOwnPayment');
     }
     if (payment.payment_status === 'completed') {
       return payment;
     }
     if (!SETTLEABLE_STATUSES.includes(payment.payment_status)) {
-      throw new BadRequestException('Ce paiement ne peut plus être confirmé');
+      throw localized(BadRequestException, 'error.payment.notConfirmable');
     }
 
     await this.assertPaidAtProvider(payment);
@@ -267,7 +275,11 @@ export class PaymentsService {
       user_id: payment.user.id,
       notification_type: 'PAYMENT_RECEIVED',
       notification_date: new Date(),
-      message: `Un ajout de ${payment.amount} a été effectué sur votre compte`,
+      message: translate(
+        languageOf(payment.user),
+        'notification.paymentReceived',
+        { amount: payment.amount },
+      ),
       is_read: false,
     });
 
@@ -294,8 +306,9 @@ export class PaymentsService {
     }
 
     if (!paid) {
-      throw new BadRequestException(
-        "Le paiement n'a pas été confirmé par le prestataire",
+      throw localized(
+        BadRequestException,
+        'error.payment.notConfirmedByProvider',
       );
     }
   }
@@ -352,7 +365,11 @@ export class PaymentsService {
         user_id: payment.user.id,
         notification_type: 'PAYMENT_REFUNDED',
         notification_date: new Date(),
-        message: `Un remboursement de ${amount} a été effectué sur votre compte`,
+        message: translate(
+          languageOf(payment.user),
+          'notification.paymentRefunded',
+          { amount },
+        ),
         is_read: false,
       });
 
@@ -377,7 +394,11 @@ export class PaymentsService {
         user_id: payment.user.id,
         notification_type: 'PAYMENT_REFUNDED',
         notification_date: new Date(),
-        message: `Un remboursement de ${amount} a été effectué sur votre compte`,
+        message: translate(
+          languageOf(payment.user),
+          'notification.paymentRefunded',
+          { amount },
+        ),
         is_read: false,
       });
 

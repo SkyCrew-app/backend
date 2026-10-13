@@ -154,6 +154,7 @@ describe('FlightsResolver', () => {
     await resolver.createFlight(input as any, mockContext);
     expect(service.createFlightByUser).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 1 }),
+      'fr',
     );
   });
 

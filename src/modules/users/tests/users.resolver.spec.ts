@@ -64,6 +64,7 @@ describe('UsersResolver', () => {
       last_name: lastName,
       email,
       date_of_birth: dob,
+      language: 'fr',
     });
     expect(result).toEqual(createdUser);
   });
@@ -333,7 +334,11 @@ describe('UsersResolver', () => {
 
       const result = resolver.me(context);
 
-      expect(result).toEqual({ id: 12, email: 'user@dom.com' });
+      expect(result).toEqual({
+        id: 12,
+        email: 'user@dom.com',
+        language: 'fr',
+      });
     });
 
     it("devrait lever une erreur si aucun utilisateur n'est présent dans le contexte (non authentifié)", () => {

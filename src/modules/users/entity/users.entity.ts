@@ -119,8 +119,9 @@ export class User {
   @Column({ type: 'int', default: 0 })
   sessionVersion: number;
 
+  // Language the member is written to (e-mails, notifications): 'fr' or 'en'.
   @Field({ nullable: true })
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', default: 'fr' })
   language: string;
 
   @Field({ nullable: true })
