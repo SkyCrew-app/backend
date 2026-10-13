@@ -4,9 +4,10 @@ import { NotificationsResolver } from './notifications.resolver';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Notification } from './entity/notifications.entity';
 import { NotificationsGateway } from './notifications.gateway';
+import { User } from '../users/entity/users.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Notification])],
+  imports: [TypeOrmModule.forFeature([Notification, User])],
   providers: [
     NotificationsService,
     NotificationsResolver,
