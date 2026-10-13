@@ -169,4 +169,42 @@ describe('ELearningService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('lesson content', () => {
+    const DIRTY =
+      '<h2>Titre</h2><p onclick="steal()">Texte</p><script>steal()</script>';
+    const CLEAN = '<h2>Titre</h2><p>Texte</p>';
+
+    it('is sanitised when a lesson is created', async () => {
+      (moduleRepo.findOne as jest.Mock).mockResolvedValue({ id: 5 });
+      (lessonRepo.create as jest.Mock).mockImplementation((dto) => dto);
+      (lessonRepo.save as jest.Mock).mockResolvedValue({});
+      (lessonRepo.findOne as jest.Mock).mockResolvedValue({ id: 6 });
+
+      await service.createLesson({
+        moduleId: 5,
+        title: 'L',
+        content: DIRTY,
+      } as any);
+
+      expect(lessonRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ content: CLEAN }),
+      );
+    });
+
+    it('is sanitised when a lesson is updated, and left alone when absent', async () => {
+      lessonRepo.update = jest.fn().mockResolvedValue({});
+      (lessonRepo.findOne as jest.Mock).mockResolvedValue({ id: 6 });
+
+      await service.updateLesson(6, { content: DIRTY } as any);
+      expect(lessonRepo.update).toHaveBeenLastCalledWith(6, {
+        content: CLEAN,
+      });
+
+      await service.updateLesson(6, { title: 'Nouveau titre' } as any);
+      expect(lessonRepo.update).toHaveBeenLastCalledWith(6, {
+        title: 'Nouveau titre',
+      });
+    });
+  });
 });
