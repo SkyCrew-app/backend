@@ -10,6 +10,8 @@ import {
   MinLength,
 } from 'class-validator';
 
+import { IsPhoneNumberField } from '../../../common/validation/phone-number';
+
 @InputType()
 export class CreateUserInput {
   @Field()
@@ -30,7 +32,9 @@ export class CreateUserInput {
   @Field({ nullable: true })
   @IsOptional()
   @IsString()
-  @MinLength(6, { message: 'Le mot de passe doit contenir au moins 6 caractères' })
+  @MinLength(6, {
+    message: 'Le mot de passe doit contenir au moins 6 caractères',
+  })
   password?: string;
 
   @Field({ nullable: true })
@@ -44,8 +48,7 @@ export class CreateUserInput {
   twoFactorAuthSecret?: string;
 
   @Field({ nullable: true })
-  @IsOptional()
-  @IsString()
+  @IsPhoneNumberField({ optional: true })
   phone_number?: string;
 
   @Field({ nullable: true })

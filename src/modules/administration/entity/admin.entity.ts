@@ -18,7 +18,7 @@ export class Administration {
   contactEmail: string;
 
   @Field()
-  @Column({ length: 15 })
+  @Column({ length: 20 })
   contactPhone: string;
 
   @Field()

@@ -624,32 +624,56 @@ describe('PaymentsService', () => {
   });
 
   describe('refund', () => {
-    it('should refund payment by user and amount', async () => {
-      const userId = 1;
-      const amount = 100.0;
+    const userId = 1;
+    const amount = 100.0;
+
+    beforeEach(() => {
+      jest.spyOn(service, 'updateUserBalance').mockResolvedValue({} as any);
+    });
+
+    it('gives the amount back to the member and marks the withdrawal as refunded', async () => {
       const mockPayment = {
         id: 1,
         amount,
         payment_status: 'completed',
         user: { id: userId },
       };
-
       mockPaymentsRepository.findOne.mockResolvedValue(mockPayment);
       mockPaymentsRepository.save.mockResolvedValue({
         ...mockPayment,
         payment_status: 'refunded',
       });
 
-      jest.spyOn(service, 'updateUserBalance').mockResolvedValue({} as any);
-
       const result = await service.refund(userId, amount);
 
       expect(mockPaymentsRepository.findOne).toHaveBeenCalledWith({
-        where: { user: { id: userId }, amount },
+        where: {
+          user: { id: userId },
+          amount,
+          payment_method: 'account_balance',
+          payment_status: 'completed',
+        },
+        order: { payment_date: 'DESC' },
         relations: ['user'],
       });
-      expect(service.updateUserBalance).toHaveBeenCalledWith(userId, -amount);
+      // Credited, not debited a second time.
+      expect(service.updateUserBalance).toHaveBeenCalledWith(userId, amount);
       expect(result.payment_status).toBe('refunded');
+    });
+
+    it('still gives the amount back when the withdrawal is not found', async () => {
+      mockPaymentsRepository.findOne.mockResolvedValue(null);
+
+      const result = await service.refund(userId, amount);
+
+      expect(service.updateUserBalance).toHaveBeenCalledWith(userId, amount);
+      expect(result).toBeNull();
+    });
+
+    it('does nothing for an amount that is not positive', async () => {
+      await service.refund(userId, 0);
+
+      expect(service.updateUserBalance).not.toHaveBeenCalled();
     });
   });
 });

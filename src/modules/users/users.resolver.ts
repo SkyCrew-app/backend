@@ -1,7 +1,11 @@
 import { Resolver, Query, Mutation, Args, Context, Int } from '@nestjs/graphql';
 import { UsersService } from './users.service';
 import { User } from './entity/users.entity';
-import { ForbiddenException, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import {
@@ -13,8 +17,7 @@ import { UpdateUserInput } from './dto/update-user.input';
 import { UpdateUserPreferencesInput } from './dto/update-user-preferences.input';
 import { DashboardWidgetConfigInput } from './dto/dashboard-widget-config.type';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
-import * as path from 'path';
-import * as fs from 'fs';
+import { saveUploadToTmp } from '../../common/uploads/save-upload';
 import { EvalService } from '../eval/eval.service';
 import { Evaluation } from '../eval/entity/evaluation.entity';
 import { UserProgress } from './entity/user-progress.entity';
@@ -27,6 +30,14 @@ import {
   isAdmin,
   ROLE_INSTRUCTOR,
 } from '../../common/auth/access';
+import {
+  DEFAULT_LANGUAGE,
+  Language,
+  languageOf,
+  LANGUAGES,
+  parseLanguage,
+} from '../../common/i18n/languages';
+import { RequestLanguage } from '../../common/i18n/request-language';
 
 @Resolver(() => User)
 export class UsersResolver {
@@ -56,13 +67,23 @@ export class UsersResolver {
     @Args('last_name') last_name: string,
     @Args('email') email: string,
     @Args('date_of_birth') date_of_birth: Date,
+    @Args('language', { nullable: true }) language?: string,
+    @RequestLanguage() requestLanguage?: Language,
+    @Args('roleId', { type: () => Int, nullable: true }) roleId?: number,
   ) {
-    return this.usersService.create({
-      first_name,
-      last_name,
-      email,
-      date_of_birth,
-    });
+    // Unless told otherwise, the new member is written to in the language
+    // the administrator is working in.
+    return this.usersService.create(
+      {
+        first_name,
+        last_name,
+        email,
+        date_of_birth,
+        language:
+          parseLanguage(language) ?? requestLanguage ?? DEFAULT_LANGUAGE,
+      },
+      roleId ?? undefined,
+    );
   }
 
   @Query(() => User)
@@ -97,20 +118,7 @@ export class UsersResolver {
     let imagePath: string | null = null;
 
     if (image) {
-      const { createReadStream, filename } = await image;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp');
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      imagePath = path.join(uploadDir, filename);
-      const stream = createReadStream();
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = fs.createWriteStream(imagePath);
-        stream.pipe(writeStream);
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-      });
+      imagePath = await saveUploadToTmp(image, 'picture');
     }
 
     return this.usersService.updateUser(
@@ -158,6 +166,25 @@ export class UsersResolver {
       email_notifications_enabled,
       sms_notifications_enabled,
       newsletter_subscribed,
+    );
+  }
+
+  // The language the signed-in member is written to (e-mails, notifications).
+  @Mutation(() => User)
+  @UseGuards(JwtAuthGuard)
+  async updateMyLanguage(
+    @Args('language') language: string,
+    @Context() context,
+  ) {
+    const supported = (LANGUAGES as readonly string[]).includes(language);
+    if (!supported) {
+      throw new BadRequestException(
+        `Unsupported language. Accepted values: ${LANGUAGES.join(', ')}.`,
+      );
+    }
+    return this.usersService.updateLanguage(
+      context.req.user.id,
+      language as Language,
     );
   }
 
@@ -293,13 +320,14 @@ export class UsersResolver {
 
   @Query(() => User)
   @UseGuards(JwtAuthGuard)
-  me(@Context() context): { id: number; email: string } {
+  me(@Context() context): { id: number; email: string; language: Language } {
     if (!context.req.user) {
       throw new Error('Utilisateur non authentifié');
     }
     return {
       id: context.req.user.id,
       email: context.req.user.email,
+      language: languageOf(context.req.user),
     };
   }
 }

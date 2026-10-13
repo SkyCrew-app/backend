@@ -75,8 +75,7 @@ const FALLBACK_DESTINATIONS = ['LFLL', 'LFBO', 'LFBD', 'LFML', 'LFMN'];
 
 const getReservationOrigin = (reservation: Reservation): string => {
   return (
-    reservation.user?.preferred_aerodrome?.toUpperCase() ??
-    DEFAULT_ORIGIN
+    reservation.user?.preferred_aerodrome?.toUpperCase() ?? DEFAULT_ORIGIN
   ).trim();
 };
 
@@ -140,6 +139,12 @@ export const seedDemoFlights = async (
       throw new Error(
         `Unable to generate demo flight for reservation ${reservation.id} (${origin}): ${reason}`,
       );
+    }
+
+    // A flight in the past has taken place: it is closed, and so in the logbook.
+    if (new Date(reservation.end_time) < new Date()) {
+      savedFlight.closed_at = new Date(reservation.end_time);
+      savedFlight = await flightRepository.save(savedFlight);
     }
 
     savedFlights.push(savedFlight);

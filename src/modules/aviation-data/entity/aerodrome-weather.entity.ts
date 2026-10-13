@@ -14,8 +14,15 @@ export class AerodromeWeather {
   @Field(() => Float, { nullable: true, description: 'Percent' })
   cloudCover?: number;
 
-  @Field(() => Float, { nullable: true })
+  @Field(() => Float, {
+    nullable: true,
+    description: 'Metres per second, as the provider gives it',
+    deprecationReason: 'Use windSpeedKmh',
+  })
   windSpeed?: number;
+
+  @Field(() => Float, { nullable: true, description: 'Kilometres per hour' })
+  windSpeedKmh?: number;
 
   @Field(() => Float, { nullable: true, description: 'Degrees' })
   windDegrees?: number;

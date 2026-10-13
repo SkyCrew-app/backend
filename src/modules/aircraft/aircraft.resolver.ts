@@ -3,8 +3,7 @@ import { AircraftService } from './aircraft.service';
 import { Aircraft } from './entity/aircraft.entity';
 import { CreateAircraftInput } from './dto/create-aircraft.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
-import { createWriteStream, existsSync, mkdirSync } from 'fs';
-import * as path from 'path';
+import { saveUploadToTmp } from '../../common/uploads/save-upload';
 import { UpdateAircraftInput } from './dto/update-aircraft.input';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
@@ -31,39 +30,15 @@ export class AircraftResolver {
     @Args({ name: 'image', type: () => GraphQLUpload, nullable: true })
     image?: FileUpload,
   ): Promise<Aircraft> {
-    const filePaths = [];
-    let imagePath = null;
+    const filePaths: string[] = [];
+    let imagePath: string | null = null;
 
     if (file) {
-      const { createReadStream, filename } = await file;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp');
-      if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-
-      const filePath = path.join(uploadDir, filename);
-      const stream = createReadStream();
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = createWriteStream(filePath);
-        stream.pipe(writeStream);
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-      });
-      filePaths.push(filePath);
+      filePaths.push(await saveUploadToTmp(file, 'document'));
     }
 
-    // Gérer l'image
     if (image) {
-      const { createReadStream, filename } = await image;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp');
-      if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-
-      imagePath = path.join(uploadDir, filename);
-      const stream = createReadStream();
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = createWriteStream(imagePath);
-        stream.pipe(writeStream);
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-      });
+      imagePath = await saveUploadToTmp(image, 'picture');
     }
 
     return this.aircraftService.create(
@@ -82,42 +57,17 @@ export class AircraftResolver {
     @Args({ name: 'file', type: () => GraphQLUpload, nullable: true })
     file?: FileUpload,
     @Args({ name: 'image', type: () => GraphQLUpload, nullable: true })
-    image?: FileUpload, // Ajout de l'image
+    image?: FileUpload,
   ): Promise<Aircraft> {
-    const filePaths = [];
-    let imagePath = null;
+    const filePaths: string[] = [];
+    let imagePath: string | null = null;
 
-    // Gérer les fichiers de documents
     if (file) {
-      const { createReadStream, filename } = await file;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp'); // Temporaire
-      if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-
-      const filePath = path.join(uploadDir, filename);
-      const stream = createReadStream();
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = createWriteStream(filePath);
-        stream.pipe(writeStream);
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-      });
-      filePaths.push(filePath);
+      filePaths.push(await saveUploadToTmp(file, 'document'));
     }
 
-    // Gérer l'image
     if (image) {
-      const { createReadStream, filename } = await image;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp'); // Temporaire
-      if (!existsSync(uploadDir)) mkdirSync(uploadDir, { recursive: true });
-
-      imagePath = path.join(uploadDir, filename);
-      const stream = createReadStream();
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = createWriteStream(imagePath);
-        stream.pipe(writeStream);
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-      });
+      imagePath = await saveUploadToTmp(image, 'picture');
     }
 
     return this.aircraftService.update(

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Notification } from './entity/notifications.entity';
 import { CreateNotificationInput } from './dto/create-notification.input';
 import { UpdateNotificationInput } from './dto/update-notification.input';
@@ -35,17 +35,19 @@ export class NotificationsService {
     return savedNotification;
   }
 
-  // True when this user already received this exact notification.
+  // True when this user already received this exact notification. Several
+  // messages may be given: the same text in each language it can have been
+  // written in.
   async alreadySent(
     userId: number,
     notificationType: string,
-    message: string,
+    message: string | string[],
   ): Promise<boolean> {
     const count = await this.notificationRepository.count({
       where: {
         user: { id: userId },
         notification_type: notificationType,
-        message,
+        message: Array.isArray(message) ? In(message) : message,
       },
     });
     return count > 0;

@@ -13,6 +13,13 @@ import { UserProgress } from './entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Role } from '../roles/entity/roles.entity';
+import {
+  DEFAULT_LANGUAGE,
+  Language,
+  languageOf,
+  parseLanguage,
+} from '../../common/i18n/languages';
+import { translate } from '../../common/i18n/translate';
 
 const SELF_EDITABLE_FIELDS = [
   'first_name',
@@ -37,6 +44,8 @@ export const PASSWORD_MIN_LENGTH = 8;
 
 const hashResetToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
+
+const DEFAULT_MEMBER_ROLE = 'Pilote';
 
 @Injectable()
 export class UsersService {
@@ -73,24 +82,46 @@ export class UsersService {
     });
   }
 
-  async create(userData: Partial<User>): Promise<User> {
+  // A new member is a pilot unless the administrator chose another role:
+  // nobody becomes an administrator by default.
+  private async roleOfNewMember(roleId?: number): Promise<Role> {
+    const roles = this.usersRepository.manager.getRepository(Role);
+    const role = roleId
+      ? await roles.findOne({ where: { id: roleId } })
+      : await roles.findOne({ where: { role_name: DEFAULT_MEMBER_ROLE } });
+    if (!role) {
+      throw new BadRequestException(
+        roleId
+          ? 'Rôle introuvable'
+          : `Rôle « ${DEFAULT_MEMBER_ROLE} » introuvable`,
+      );
+    }
+    return role;
+  }
+
+  async create(userData: Partial<User>, roleId?: number): Promise<User> {
     const generatedPassword = uuidv4();
     const token = uuidv4();
     const hashedPassword = await bcrypt.hash(generatedPassword, 10);
     userData.password = hashedPassword;
 
+    // The account is written to in the language it is created with.
+    const language = languageOf(userData);
+
     const newUser = this.usersRepository.create({
       ...userData,
-      role: { id: 1 },
+      language,
+      role: await this.roleOfNewMember(roleId),
       validation_token: token,
     });
     const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${token}`;
     await this.emailService.sendMail(
       newUser.email,
-      'Bienvenue sur notre plateforme',
-      'Bienvenue sur notre plateforme, veuillez cliquer sur le lien suivant pour confirmer votre adresse email',
+      translate(language, 'mail.welcome.subject'),
+      translate(language, 'mail.welcome.text'),
       'confirmation-email',
       { name: newUser.first_name, confirmationUrl },
+      language,
     );
     return this.usersRepository.save(newUser);
   }
@@ -121,19 +152,21 @@ export class UsersService {
     // The account is already protected at this point: a failed email or
     // notification must not make the confirmation look like it failed.
     try {
+      const language = languageOf(user);
       await this.emailService.sendMail(
         user.email,
-        'Authentification à deux facteurs activée',
-        "L'authentification à deux facteurs a été activée avec succès",
+        translate(language, 'mail.twoFactorEnabled.subject'),
+        translate(language, 'mail.twoFactorEnabled.text'),
         '2fa-enabled',
-        { first_name: user.first_name },
+        { name: user.first_name },
+        language,
       );
 
       await this.notificationService.create({
         user_id: user.id,
         notification_type: '2FA_ENABLED',
         notification_date: new Date(),
-        message: 'Authentification à deux facteurs activée',
+        message: translate(language, 'notification.twoFactorEnabled'),
         is_read: false,
       });
     } catch (error) {
@@ -143,14 +176,6 @@ export class UsersService {
     }
 
     return savedUser;
-  }
-
-  async setPassword(email: string, password: string): Promise<void> {
-    const user = await this.usersRepository.findOne({ where: { email } });
-    if (!user) throw new Error('User not found');
-
-    user.password = password;
-    await this.usersRepository.save(user);
   }
 
   async updateUser(
@@ -185,28 +210,37 @@ export class UsersService {
       : SELF_EDITABLE_FIELDS;
 
     for (const field of editableFields) {
-      if (updateUserInput[field] !== undefined) {
-        (user as any)[field] = updateUserInput[field];
+      if (updateUserInput[field] === undefined) {
+        continue;
       }
+      if (field === 'language') {
+        // A language we do not write in leaves the current one in place.
+        user.language =
+          parseLanguage(updateUserInput.language) ?? user.language;
+        continue;
+      }
+      (user as any)[field] = updateUserInput[field];
     }
 
     if (asAdmin && updateUserInput.roleId) {
       user.role = { id: updateUserInput.roleId } as Role;
     }
 
+    const language = languageOf(user);
     await this.emailService.sendMail(
       user.email,
-      'Vos informations ont été mises à jour',
-      'Vos informations ont été mises à jour avec succès.',
+      translate(language, 'mail.userUpdated.subject'),
+      translate(language, 'mail.userUpdated.text'),
       'update-user',
-      { first_name: user.first_name },
+      { name: user.first_name },
+      language,
     );
 
     await this.notificationService.create({
       user_id: user.id,
       notification_type: 'USER_UPDATED',
       notification_date: new Date(),
-      message: 'Vos informations ont été mises à jour',
+      message: translate(language, 'notification.userUpdated'),
       is_read: false,
     });
 
@@ -256,11 +290,25 @@ export class UsersService {
       relations: ['role'],
     });
     if (!user) throw new Error('User not found');
-    user.language = language;
+    user.language =
+      parseLanguage(language) ?? user.language ?? DEFAULT_LANGUAGE;
     user.speed_unit = speed_unit;
     user.distance_unit = distance_unit;
     user.timezone = timezone;
     user.preferred_aerodrome = preferred_aerodrome;
+    return this.usersRepository.save(user);
+  }
+
+  // The language the member is written to when they are not there. The
+  // interface keeps its own choice, in the browser.
+  async updateLanguage(userId: number, language: Language): Promise<User> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+
+    if (user.language === language) {
+      return user;
+    }
+    user.language = language;
     return this.usersRepository.save(user);
   }
 
@@ -297,13 +345,15 @@ export class UsersService {
     user.sessionVersion = (user.sessionVersion ?? 0) + 1;
 
     const first_name = user.first_name;
+    const language = languageOf(user);
 
     await this.emailService.sendMail(
       user.email,
-      'Votre mot de passe a été modifié',
-      'Votre mot de passe a été modifié avec succès',
+      translate(language, 'mail.passwordChanged.subject'),
+      translate(language, 'mail.passwordChanged.text'),
       'change-password',
-      { first_name },
+      { name: first_name },
+      language,
     );
     return this.usersRepository.save(user);
   }
@@ -326,16 +376,18 @@ export class UsersService {
     await this.usersRepository.save(user);
 
     try {
+      const language = languageOf(user);
       await this.emailService.sendMail(
         user.email,
-        'Réinitialisation de votre mot de passe',
-        'Une réinitialisation de votre mot de passe a été demandée.',
+        translate(language, 'mail.passwordReset.subject'),
+        translate(language, 'mail.passwordReset.text'),
         'reset-password',
         {
           first_name: user.first_name,
           resetUrl: `${process.env.FRONTEND_URL}/auth/reset-password?token=${token}`,
           validityMinutes: PASSWORD_RESET_VALIDITY_MINUTES,
         },
+        language,
       );
     } catch (error) {
       this.logger.error(
@@ -372,12 +424,14 @@ export class UsersService {
     await this.usersRepository.save(user);
 
     try {
+      const language = languageOf(user);
       await this.emailService.sendMail(
         user.email,
-        'Votre mot de passe a été modifié',
-        'Votre mot de passe a été modifié avec succès',
+        translate(language, 'mail.passwordChanged.subject'),
+        translate(language, 'mail.passwordChanged.text'),
         'change-password',
-        { first_name: user.first_name },
+        { name: user.first_name },
+        language,
       );
     } catch (error) {
       this.logger.error(
@@ -391,15 +445,20 @@ export class UsersService {
     token: string,
     password: string,
   ): Promise<User> {
-    const user = await this.usersRepository.findOne({
-      where: { validation_token: token },
-    });
+    // An empty token must never be looked up: it would match any account.
+    const user = token
+      ? await this.usersRepository.findOne({
+          where: { validation_token: token },
+        })
+      : null;
     if (!user) throw new Error('User not found');
 
     const hashedPassword = await bcrypt.hash(password, 10);
     user.password = hashedPassword;
     user.isEmailConfirmed = true;
     user.validation_token = null;
+    // Like every password change: sessions opened before are closed.
+    user.sessionVersion = (user.sessionVersion ?? 0) + 1;
 
     return this.usersRepository.save(user);
   }

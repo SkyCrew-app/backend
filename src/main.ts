@@ -13,17 +13,11 @@ import {
   setUploadHeaders,
 } from './common/middleware/protect-uploads.middleware';
 import { validationPipeOptions } from './config/validation.config';
+import { allowedOrigins } from './config/cors.config';
 import { DataSource } from 'typeorm';
 import { ensureBaseData } from './db/ensure-base-data';
 import { User } from './modules/users/entity/users.entity';
-
-const DEFAULT_ALLOWED_ORIGINS = [
-  'https://staging.skycrew.fr',
-  'https://skycrew.fr',
-  'https://anthonydenin.dev',
-  'http://localhost:5173',
-  'http://localhost:3000',
-];
+import { UPLOAD_MAX_FILE_SIZE } from './common/uploads/save-upload';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -50,22 +44,14 @@ async function bootstrap() {
     }),
   );
 
-  app.use(graphqlUploadExpress({ maxFileSize: 1000000, maxFiles: 10 }));
+  app.use(
+    graphqlUploadExpress({ maxFileSize: UPLOAD_MAX_FILE_SIZE, maxFiles: 10 }),
+  );
 
   app.use(cookieParser());
 
-  const allowedOrigins = Array.from(
-    new Set([
-      ...DEFAULT_ALLOWED_ORIGINS,
-      ...(process.env.ALLOWED_ORIGINS || '')
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean),
-    ]),
-  );
-
   app.enableCors({
-    origin: allowedOrigins,
+    origin: allowedOrigins(),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });

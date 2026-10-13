@@ -22,7 +22,11 @@ import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { WeatherResponse } from './interfaces/weather.interface';
 import { isAdmin, SessionUser } from '../../common/auth/access';
+import { User } from '../users/entity/users.entity';
 import { buildFlightRecapPdf } from './flight-recap-pdf';
+import { DEFAULT_LANGUAGE, Language } from '../../common/i18n/languages';
+import { translate } from '../../common/i18n/translate';
+import { localized } from '../../common/i18n/localized-exception';
 
 export interface AIFlightOptions {
   preferred_runway_dep?: string;
@@ -30,6 +34,8 @@ export interface AIFlightOptions {
   cruise_altitude_ft?: number;
   departure_time?: Date;
   flight_rules?: 'VFR' | 'IFR';
+  // Stored language of the pilot, who is the one notified.
+  language?: Language;
 }
 
 @Injectable()
@@ -51,8 +57,10 @@ export class FlightsService {
     private readonly metarService: MetarService,
   ) {}
 
+  // `language` is the stored language of the pilot, who is the one notified.
   async createFlightByUser(
     createFlightInput: CreateFlightInput,
+    language: Language = DEFAULT_LANGUAGE,
   ): Promise<Flight> {
     const { reservation_id, user_id, ...otherFields } = createFlightInput;
 
@@ -80,7 +88,10 @@ export class FlightsService {
       user_id: user_id,
       notification_type: 'FLIGHT_CREATED',
       notification_date: new Date(),
-      message: `Votre plan de vol de ${flight.origin_icao} a ${flight.destination_icao} a ete cree`,
+      message: translate(language, 'notification.flightPlanCreated', {
+        origin: flight.origin_icao,
+        destination: flight.destination_icao,
+      }),
       is_read: false,
     });
 
@@ -94,6 +105,7 @@ export class FlightsService {
     reservation_id?: number,
     options?: AIFlightOptions,
   ): Promise<Flight> {
+    const language = options?.language ?? DEFAULT_LANGUAGE;
     try {
       if (!reservation_id) {
         throw new BadRequestException('Reservation ID is required');
@@ -227,7 +239,10 @@ export class FlightsService {
         user_id: user_id,
         notification_type: 'FLIGHT_CREATED',
         notification_date: new Date(),
-        message: `Votre plan de vol de ${origin_icao} a ${destination_icao} a ete genere automatiquement`,
+        message: translate(language, 'notification.flightPlanGenerated', {
+          origin: origin_icao,
+          destination: destination_icao,
+        }),
         is_read: false,
       });
 
@@ -266,9 +281,7 @@ export class FlightsService {
       !isAdmin(requester) &&
       Number(flight.user?.id) !== Number(requester?.id)
     ) {
-      throw new ForbiddenException(
-        'Vous ne pouvez exporter que vos propres vols',
-      );
+      throw localized(ForbiddenException, 'error.flight.notOwnFlightExport');
     }
     return buildFlightRecapPdf(flight);
   }
@@ -302,13 +315,11 @@ export class FlightsService {
 
     if (!isAdmin(requester)) {
       if (Number(flight.user?.id) !== Number(requester?.id)) {
-        throw new ForbiddenException(
-          'Vous ne pouvez modifier que vos propres vols',
-        );
+        throw localized(ForbiddenException, 'error.flight.notOwnFlightUpdate');
       }
       // A closed flight is final for its pilot; an administrator can amend it.
       if (flight.closed_at) {
-        throw new ConflictException('Ce vol est déjà clôturé');
+        throw localized(ConflictException, 'error.flight.alreadyClosed');
       }
       // Only an administrator moves a flight to another member or reservation.
       delete changes.user_id;
@@ -319,11 +330,32 @@ export class FlightsService {
       (changes as any).waypoints = JSON.stringify(changes.waypoints);
     }
 
+    const wasClosed = !!flight.closed_at;
+    const hoursBefore = Number(flight.flight_hours) || 0;
+
     Object.assign(flight, changes);
     if (closed && !flight.closed_at) {
       flight.closed_at = new Date();
     }
-    return this.flightsRepository.save(flight);
+    const saved = await this.flightsRepository.save(flight);
+
+    // The member's total follows their closed flights: the whole flight when
+    // it is closed, the difference when a closed flight is amended.
+    const hoursAfter = Number(saved.flight_hours) || 0;
+    const delta = wasClosed
+      ? hoursAfter - hoursBefore
+      : saved.closed_at
+        ? hoursAfter
+        : 0;
+    if (delta !== 0 && flight.user?.id) {
+      await this.flightsRepository.manager.increment(
+        User,
+        { id: flight.user.id },
+        'total_flight_hours',
+        delta,
+      );
+    }
+    return saved;
   }
 
   async removeFlight(id: number, requestingUserId: number): Promise<boolean> {
@@ -412,8 +444,12 @@ export class FlightsService {
         ];
         if (wp.speed_kts) parts.push(`IAS: ${wp.speed_kts}kt`);
         if (wp.ground_speed_kts) parts.push(`GS: ${wp.ground_speed_kts}kt`);
-        if (wp.wind_correction_deg) parts.push(`WCA: ${wp.wind_correction_deg > 0 ? '+' : ''}${wp.wind_correction_deg}°`);
-        if (wp.time_from_dep_min != null) parts.push(`T+${wp.time_from_dep_min}min`);
+        if (wp.wind_correction_deg)
+          parts.push(
+            `WCA: ${wp.wind_correction_deg > 0 ? '+' : ''}${wp.wind_correction_deg}°`,
+          );
+        if (wp.time_from_dep_min != null)
+          parts.push(`T+${wp.time_from_dep_min}min`);
         if (wp.leg_distance_nm) parts.push(`LEG: ${wp.leg_distance_nm}NM`);
         return parts.join(', ');
       },

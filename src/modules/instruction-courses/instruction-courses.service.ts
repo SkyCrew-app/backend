@@ -21,6 +21,8 @@ import { ELearningService } from '../e-learning/e-learning.service';
 import { UserProgress } from '../users/entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
 import { User } from '../users/entity/users.entity';
+import { languageOf } from '../../common/i18n/languages';
+import { translate } from '../../common/i18n/translate';
 
 @Injectable()
 export class InstructionCoursesService {
@@ -101,7 +103,11 @@ export class InstructionCoursesService {
       user_id: studentId,
       notification_type: 'COURSE_CREATED',
       notification_date: new Date(),
-      message: `Votre cours avec l'instructeur ${instructorId} a été créé.`,
+      message: translate(
+        languageOf(student),
+        'notification.courseCreatedForStudent',
+        { instructorId },
+      ),
       is_read: false,
     });
 
@@ -109,7 +115,11 @@ export class InstructionCoursesService {
       user_id: instructorId,
       notification_type: 'COURSE_CREATED',
       notification_date: new Date(),
-      message: `Votre cours avec l'étudiant ${studentId} a été créé.`,
+      message: translate(
+        languageOf(instructor),
+        'notification.courseCreatedForInstructor',
+        { studentId },
+      ),
       is_read: false,
     });
 
@@ -232,7 +242,10 @@ export class InstructionCoursesService {
       user_id: competency.course.student.id,
       notification_type: 'COMPETENCY_VALIDATED',
       notification_date: new Date(),
-      message: `Une compétence a été validée dans votre cours.`,
+      message: translate(
+        languageOf(competency.course.student),
+        'notification.competencyValidated',
+      ),
       is_read: false,
     });
 
@@ -254,7 +267,10 @@ export class InstructionCoursesService {
       user_id: course.student.id,
       notification_type: 'COURSE_COMMENT',
       notification_date: new Date(),
-      message: `Un commentaire a été ajouté à votre cours.`,
+      message: translate(
+        languageOf(course.student),
+        'notification.courseComment',
+      ),
       is_read: false,
     });
 

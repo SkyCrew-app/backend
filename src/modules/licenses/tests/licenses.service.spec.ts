@@ -4,6 +4,11 @@ import { Repository } from 'typeorm';
 import { LicensesService } from '../licenses.service';
 import { License } from '../entity/licenses.entity';
 import { UsersService } from '../../users/users.service';
+import { saveUploadTo } from '../../../common/uploads/save-upload';
+
+jest.mock('../../../common/uploads/save-upload', () => ({
+  saveUploadTo: jest.fn(async () => '/uploads/licences/ppl-0a1b2c3d4e5f.pdf'),
+}));
 
 describe('LicensesService', () => {
   let service: LicensesService;
@@ -138,6 +143,22 @@ describe('LicensesService', () => {
         }),
         relations: ['user'],
       });
+    });
+  });
+
+  describe('uploadFiles', () => {
+    it('returns null without files', async () => {
+      expect(await service.uploadFiles()).toBeNull();
+      expect(await service.uploadFiles([])).toBeNull();
+    });
+
+    it('stores each file as a checked document in the licences folder', async () => {
+      const file = { filename: 'ppl.pdf' } as any;
+
+      expect(await service.uploadFiles([file])).toEqual([
+        '/uploads/licences/ppl-0a1b2c3d4e5f.pdf',
+      ]);
+      expect(saveUploadTo).toHaveBeenCalledWith(file, 'document', 'licences');
     });
   });
 });
