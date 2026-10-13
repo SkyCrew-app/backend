@@ -4,6 +4,11 @@ import { MaintenanceService } from '../maintenance.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
+import { saveNamedUploadToTmp } from '../../../common/uploads/save-upload';
+
+jest.mock('../../../common/uploads/save-upload', () => ({
+  saveNamedUploadToTmp: jest.fn(async (_upload, kind) => `/tmp/${kind}`),
+}));
 
 const mockService = {
   create: jest.fn(),
@@ -54,6 +59,32 @@ describe('MaintenanceResolver', () => {
       const result = await resolver.createMaintenance(input, [], []);
       expect(mockService.create).toHaveBeenCalledWith(input, [], []);
       expect(result).toEqual({ id: 10 });
+    });
+  });
+
+  describe('uploads', () => {
+    it('stores documents and pictures through the checked helper', async () => {
+      const input = { aircraft_id: 1 } as any;
+      const report = { filename: 'rapport.pdf' } as any;
+      const photo = { filename: 'photo.png' } as any;
+      mockService.create.mockResolvedValue({ id: 11 });
+      mockService.update.mockResolvedValue({ id: 11 });
+
+      await resolver.createMaintenance(input, [report], [photo]);
+      await resolver.updateMaintenance(input, [report], [photo]);
+
+      expect(saveNamedUploadToTmp).toHaveBeenCalledWith(report, 'document');
+      expect(saveNamedUploadToTmp).toHaveBeenCalledWith(photo, 'picture');
+      expect(mockService.create).toHaveBeenCalledWith(
+        input,
+        ['/tmp/document'],
+        ['/tmp/picture'],
+      );
+      expect(mockService.update).toHaveBeenCalledWith(
+        input,
+        ['/tmp/document'],
+        ['/tmp/picture'],
+      );
     });
   });
 

@@ -145,14 +145,6 @@ export class UsersService {
     return savedUser;
   }
 
-  async setPassword(email: string, password: string): Promise<void> {
-    const user = await this.usersRepository.findOne({ where: { email } });
-    if (!user) throw new Error('User not found');
-
-    user.password = password;
-    await this.usersRepository.save(user);
-  }
-
   async updateUser(
     targetEmail: string,
     updateUserInput: UpdateUserInput,
@@ -391,15 +383,20 @@ export class UsersService {
     token: string,
     password: string,
   ): Promise<User> {
-    const user = await this.usersRepository.findOne({
-      where: { validation_token: token },
-    });
+    // An empty token must never be looked up: it would match any account.
+    const user = token
+      ? await this.usersRepository.findOne({
+          where: { validation_token: token },
+        })
+      : null;
     if (!user) throw new Error('User not found');
 
     const hashedPassword = await bcrypt.hash(password, 10);
     user.password = hashedPassword;
     user.isEmailConfirmed = true;
     user.validation_token = null;
+    // Like every password change: sessions opened before are closed.
+    user.sessionVersion = (user.sessionVersion ?? 0) + 1;
 
     return this.usersRepository.save(user);
   }

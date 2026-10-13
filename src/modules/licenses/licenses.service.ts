@@ -6,9 +6,7 @@ import { CreateLicenseInput } from './dto/create-license.input';
 import { UpdateLicenseInput } from './dto/update-license.input';
 import { FileUpload } from 'graphql-upload-ts';
 import { UsersService } from '../users/users.service';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import { saveUploadTo } from '../../common/uploads/save-upload';
 
 @Injectable()
 export class LicensesService {
@@ -79,28 +77,7 @@ export class LicensesService {
 
   async uploadFile(file: FileUpload): Promise<string | null> {
     if (!file) return null;
-
-    const { createReadStream, filename } = file;
-
-    const uploadDir = path.join(__dirname, '../../uploads/licences');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
-    const uniqueFilename = `${uniqueSuffix}-${filename}`;
-    const filePath = path.join(uploadDir, uniqueFilename);
-
-    const stream = createReadStream();
-
-    await new Promise<void>((resolve, reject) => {
-      const writeStream = fs.createWriteStream(filePath);
-      stream.pipe(writeStream);
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
-
-    return `/uploads/licences/${uniqueFilename}`;
+    return saveUploadTo(file, 'document', 'licences');
   }
 
   async findExpiringLicenses(thresholdDays: number = 7): Promise<License[]> {

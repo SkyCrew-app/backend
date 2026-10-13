@@ -386,6 +386,7 @@ describe('ReservationsService', () => {
 
       expect(mockReservationRepository.findOne).toHaveBeenCalledWith({
         where: { id: 1 },
+        relations: ['flights'],
       });
       expect(mockMailerService.sendMail).toHaveBeenCalledWith(
         'john@test.com',
@@ -407,6 +408,18 @@ describe('ReservationsService', () => {
       await expect(service.delete(1)).rejects.toThrow(
         'Réservation introuvable',
       );
+    });
+
+    it('devrait refuser de supprimer une réservation dont le vol est clôturé', async () => {
+      (reservationRepository.findOne as jest.Mock).mockResolvedValue({
+        id: 1,
+        aircraft: { id: 1 },
+        user: { id: 1 },
+        flights: [{ id: 5, closed_at: new Date() }],
+      });
+
+      await expect(service.delete(1)).rejects.toThrow('clôturé');
+      expect(reservationRepository.remove).not.toHaveBeenCalled();
     });
   });
 

@@ -1,26 +1,50 @@
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { Request } from 'express';
+import { rm } from 'fs';
+import { StorageEngine } from 'multer';
 import * as path from 'path';
-import * as fs from 'fs';
+import {
+  storeUpload,
+  UPLOAD_MAX_FILE_SIZE,
+  UploadKind,
+} from '../uploads/save-upload';
+
+const TMP_DIRECTORY = path.join(__dirname, '../../uploads/tmp');
+
+// Multer storage built on the shared upload helper: same allow-list, same
+// content check and same unique names as the GraphQL uploads.
+export const checkedStorage = (kind: UploadKind): StorageEngine => ({
+  _handleFile(_request: Request, file, callback) {
+    storeUpload(
+      {
+        stream: file.stream,
+        filename: file.originalname,
+        mimetype: file.mimetype,
+      },
+      kind,
+      TMP_DIRECTORY,
+    ).then(
+      (stored) =>
+        callback(null, {
+          destination: TMP_DIRECTORY,
+          filename: path.basename(stored),
+          path: stored,
+        }),
+      (error) => callback(error),
+    );
+  },
+  _removeFile(_request: Request, file, callback) {
+    rm(file.path, { force: true }, callback);
+  },
+});
 
 export function fileUploadInterceptor(
   fieldName: string,
   maxFiles: number = 10,
+  kind: UploadKind = 'document',
 ) {
   return FilesInterceptor(fieldName, maxFiles, {
-    storage: diskStorage({
-      destination: (req, file, cb) => {
-        const uploadPath = path.join(__dirname, '../../uploads/tmp');
-
-        if (!fs.existsSync(uploadPath)) {
-          fs.mkdirSync(uploadPath, { recursive: true });
-        }
-        cb(null, uploadPath);
-      },
-      filename: (req, file, cb) => {
-        const fileName = `${Date.now()}-${file.originalname}`;
-        cb(null, fileName);
-      },
-    }),
+    storage: checkedStorage(kind),
+    limits: { fileSize: UPLOAD_MAX_FILE_SIZE, files: maxFiles },
   });
 }

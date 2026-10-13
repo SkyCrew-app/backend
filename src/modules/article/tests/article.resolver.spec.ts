@@ -58,8 +58,8 @@ describe('ArticlesResolver', () => {
 
   it('createArticle', async () => {
     const res = await resolver.createArticle({} as any, file, [file]);
-    expect(service.uploadFile).toHaveBeenCalled();
-    expect(service.uploadFiles).toHaveBeenCalled();
+    expect(service.uploadFile).toHaveBeenCalledWith(file, 'picture');
+    expect(service.uploadFiles).toHaveBeenCalledWith([file]);
     expect(service.create).toHaveBeenCalledWith({} as any, '/tmp/f', [
       '/tmp/f',
     ]);

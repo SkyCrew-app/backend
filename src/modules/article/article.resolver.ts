@@ -24,7 +24,7 @@ export class ArticlesResolver {
     @Args({ name: 'documents', type: () => [GraphQLUpload], nullable: true })
     documents?: FileUpload[],
   ): Promise<Article> {
-    const photoPath = await this.articlesService.uploadFile(photo);
+    const photoPath = await this.articlesService.uploadFile(photo, 'picture');
     const documentPaths = await this.articlesService.uploadFiles(documents);
 
     return this.articlesService.create(
@@ -54,7 +54,7 @@ export class ArticlesResolver {
     @Args({ name: 'documents', type: () => [GraphQLUpload], nullable: true })
     documents?: FileUpload[],
   ): Promise<Article> {
-    const photoPath = await this.articlesService.uploadFile(photo);
+    const photoPath = await this.articlesService.uploadFile(photo, 'picture');
     const documentPaths = await this.articlesService.uploadFiles(documents);
 
     return this.articlesService.update(

@@ -13,8 +13,7 @@ import { UpdateUserInput } from './dto/update-user.input';
 import { UpdateUserPreferencesInput } from './dto/update-user-preferences.input';
 import { DashboardWidgetConfigInput } from './dto/dashboard-widget-config.type';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
-import * as path from 'path';
-import * as fs from 'fs';
+import { saveUploadToTmp } from '../../common/uploads/save-upload';
 import { EvalService } from '../eval/eval.service';
 import { Evaluation } from '../eval/entity/evaluation.entity';
 import { UserProgress } from './entity/user-progress.entity';
@@ -97,20 +96,7 @@ export class UsersResolver {
     let imagePath: string | null = null;
 
     if (image) {
-      const { createReadStream, filename } = await image;
-      const uploadDir = path.join(__dirname, '../../uploads/tmp');
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      imagePath = path.join(uploadDir, filename);
-      const stream = createReadStream();
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = fs.createWriteStream(imagePath);
-        stream.pipe(writeStream);
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-      });
+      imagePath = await saveUploadToTmp(image, 'picture');
     }
 
     return this.usersService.updateUser(

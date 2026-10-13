@@ -4,7 +4,10 @@ import { Maintenance } from './entity/maintenance.entity';
 import { CreateMaintenanceInput } from './dto/create-maintenance.input';
 import { UpdateMaintenanceInput } from './dto/update-maintenance.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
-import { saveUploadToTmp } from '../../common/uploads/save-upload';
+import {
+  saveNamedUploadToTmp,
+  UploadKind,
+} from '../../common/uploads/save-upload';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -25,8 +28,8 @@ export class MaintenanceResolver {
     @Args({ name: 'images', type: () => [GraphQLUpload], nullable: true })
     images?: FileUpload[],
   ): Promise<Maintenance> {
-    const filePaths = await this.saveUploads(files);
-    const imagePaths = await this.saveUploads(images);
+    const filePaths = await this.saveUploads(files, 'document');
+    const imagePaths = await this.saveUploads(images, 'picture');
 
     return this.maintenanceService.create(
       createMaintenanceInput,
@@ -46,8 +49,8 @@ export class MaintenanceResolver {
     @Args({ name: 'images', type: () => [GraphQLUpload], nullable: true })
     images?: FileUpload[],
   ): Promise<Maintenance> {
-    const filePaths = await this.saveUploads(files);
-    const imagePaths = await this.saveUploads(images);
+    const filePaths = await this.saveUploads(files, 'document');
+    const imagePaths = await this.saveUploads(images, 'picture');
 
     return this.maintenanceService.update(
       updateMaintenanceInput,
@@ -67,10 +70,13 @@ export class MaintenanceResolver {
     return this.maintenanceService.removeAttachment(maintenanceId, url);
   }
 
-  private async saveUploads(uploads?: FileUpload[]): Promise<string[]> {
+  private async saveUploads(
+    uploads: FileUpload[] | undefined,
+    kind: UploadKind,
+  ): Promise<string[]> {
     const paths: string[] = [];
     for (const upload of uploads ?? []) {
-      paths.push(await saveUploadToTmp(upload));
+      paths.push(await saveNamedUploadToTmp(upload, kind));
     }
     return paths;
   }
