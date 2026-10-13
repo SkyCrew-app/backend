@@ -8,10 +8,14 @@ import { graphqlUploadExpress } from 'graphql-upload-ts';
 import * as express from 'express';
 import helmet from 'helmet';
 import { join } from 'path';
-import { protectUploads } from './common/middleware/protect-uploads.middleware';
+import {
+  protectUploads,
+  setUploadHeaders,
+} from './common/middleware/protect-uploads.middleware';
 import { validationPipeOptions } from './config/validation.config';
 import { DataSource } from 'typeorm';
 import { ensureBaseData } from './db/ensure-base-data';
+import { User } from './modules/users/entity/users.entity';
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://staging.skycrew.fr',
@@ -79,8 +83,18 @@ async function bootstrap() {
 
   app.use(
     '/uploads',
-    protectUploads,
-    express.static(join(__dirname, 'uploads')),
+    protectUploads((email) =>
+      app
+        .get(DataSource)
+        .getRepository(User)
+        .findOne({
+          where: { email },
+          relations: ['role'],
+        }),
+    ),
+    express.static(join(__dirname, 'uploads'), {
+      setHeaders: setUploadHeaders,
+    }),
   );
 
   app.useGlobalPipes(new ValidationPipe(validationPipeOptions));

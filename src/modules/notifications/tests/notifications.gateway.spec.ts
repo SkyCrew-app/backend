@@ -2,15 +2,21 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationsGateway } from '../notifications.gateway';
 import { Socket, Server } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { User } from '../../users/entity/users.entity';
 
 describe('NotificationsGateway', () => {
   let gateway: NotificationsGateway;
   let mockServer: jest.Mocked<Server>;
   let mockSocket: jest.Mocked<Socket>;
+  const usersRepository = { findOne: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [NotificationsGateway],
+      providers: [
+        NotificationsGateway,
+        { provide: getRepositoryToken(User), useValue: usersRepository },
+      ],
     }).compile();
 
     gateway = module.get<NotificationsGateway>(NotificationsGateway);
@@ -49,22 +55,31 @@ describe('NotificationsGateway', () => {
       new JwtService({ secret }).sign(payload, { expiresIn: '5m' });
     const connectWith = (cookie?: string, query: object = {}) => {
       (mockSocket.handshake as any) = { query, headers: { cookie } };
-      gateway.handleConnection(mockSocket);
+      return gateway.handleConnection(mockSocket);
     };
 
     beforeEach(() => {
       process.env.JWT_SECRET = SECRET;
+      usersRepository.findOne.mockResolvedValue({
+        id: 123,
+        email: 'a@b.c',
+        sessionVersion: 0,
+      });
     });
 
-    it('joins the room of the user in the session cookie', () => {
-      connectWith(`email=a%40b.c; token=${sign({ sub: 123, email: 'a@b.c' })}`);
+    it('joins the room of the user in the session cookie', async () => {
+      await connectWith(
+        `email=a%40b.c; token=${sign({ sub: 123, email: 'a@b.c' })}`,
+      );
 
       expect(mockSocket.join).toHaveBeenCalledWith('user-123');
       expect(mockSocket.disconnect).not.toHaveBeenCalled();
     });
 
-    it('ignores a user id supplied by the client', () => {
-      connectWith(`token=${sign({ sub: 123 })}`, { userId: '999' });
+    it('ignores a user id supplied by the client', async () => {
+      await connectWith(`token=${sign({ sub: 123, email: 'a@b.c' })}`, {
+        userId: '999',
+      });
 
       expect(mockSocket.join).toHaveBeenCalledTimes(1);
       expect(mockSocket.join).toHaveBeenCalledWith('user-123');
@@ -75,20 +90,49 @@ describe('NotificationsGateway', () => {
       ['a cookie without token', 'email=a%40b.c'],
       ['a malformed token', 'token=not-a-jwt'],
       ['a token signed with another secret', `token=${'PLACEHOLDER'}`],
-    ])('refuses and disconnects a client with %s', (label, cookie) => {
+      ['a cookie that cannot be decoded', 'token=%E0%A4%A'],
+    ])('refuses and disconnects a client with %s', async (label, cookie) => {
       const value =
         label === 'a token signed with another secret'
           ? `token=${sign({ sub: 123 }, 'another-secret')}`
           : cookie;
 
-      connectWith(value, { userId: '123' });
+      await connectWith(value, { userId: '123' });
 
       expect(mockSocket.join).not.toHaveBeenCalled();
       expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
     });
 
-    it('refuses a single-purpose token such as the two-factor challenge', () => {
-      connectWith(`token=${sign({ sub: 123, purpose: '2fa' })}`);
+    it('refuses a single-purpose token such as the two-factor challenge', async () => {
+      await connectWith(
+        `token=${sign({ sub: 123, email: 'a@b.c', purpose: '2fa' })}`,
+      );
+
+      expect(mockSocket.join).not.toHaveBeenCalled();
+      expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
+    });
+
+    it('refuses a session opened before the password changed', async () => {
+      usersRepository.findOne.mockResolvedValue({
+        id: 123,
+        email: 'a@b.c',
+        sessionVersion: 4,
+      });
+
+      await connectWith(`token=${sign({ sub: 123, email: 'a@b.c', sv: 3 })}`);
+
+      expect(mockSocket.join).not.toHaveBeenCalled();
+      expect(mockSocket.disconnect).toHaveBeenCalledWith(true);
+
+      await connectWith(`token=${sign({ sub: 123, email: 'a@b.c', sv: 4 })}`);
+
+      expect(mockSocket.join).toHaveBeenCalledWith('user-123');
+    });
+
+    it('refuses the session of an account that no longer exists', async () => {
+      usersRepository.findOne.mockResolvedValue(null);
+
+      await connectWith(`token=${sign({ sub: 123, email: 'a@b.c' })}`);
 
       expect(mockSocket.join).not.toHaveBeenCalled();
       expect(mockSocket.disconnect).toHaveBeenCalledWith(true);

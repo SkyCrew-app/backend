@@ -5,6 +5,7 @@ import { NotificationsService } from '../notifications.service';
 import { NotificationsResolver } from '../notifications.resolver';
 import { NotificationsGateway } from '../notifications.gateway';
 import { Notification } from '../entity/notifications.entity';
+import { User } from '../../users/entity/users.entity';
 
 describe('NotificationsModule', () => {
   let module: TestingModule;
@@ -17,6 +18,8 @@ describe('NotificationsModule', () => {
       imports: [NotificationsModule],
     })
       .overrideProvider(getRepositoryToken(Notification))
+      .useValue({})
+      .overrideProvider(getRepositoryToken(User))
       .useValue({})
       .compile();
 

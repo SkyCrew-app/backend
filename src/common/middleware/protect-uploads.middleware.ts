@@ -1,7 +1,7 @@
-import { JwtService } from '@nestjs/jwt';
 import { NextFunction, Request, Response } from 'express';
-import { posix } from 'path';
-import { ROLE_ADMIN } from '../auth/access';
+import { extname, posix } from 'path';
+import { isAdmin, SessionUser } from '../auth/access';
+import { userOfSessionToken } from '../auth/session';
 
 // Profile pictures (users/) and article images (tmp/) are shown by their
 // link, sometimes outside a session. Everything else under /uploads —
@@ -10,61 +10,78 @@ import { ROLE_ADMIN } from '../auth/access';
 const PUBLIC_DIRECTORIES = ['users', 'tmp'];
 const ADMIN_DIRECTORIES = ['exports'];
 
-const sessionOf = (request: Request): { role?: string } | null => {
-  const token = request.cookies?.token;
-  const secret = process.env.JWT_SECRET;
+// Loads the user of a session; the application wires it to the database.
+export type UploadsUser = SessionUser & { sessionVersion?: number | null };
+export type SessionUserLoader = (email: string) => Promise<UploadsUser | null>;
 
-  if (!token || !secret) {
-    return null;
-  }
+export const protectUploads =
+  (findUserByEmail: SessionUserLoader) =>
+  async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+  ): Promise<void> => {
+    let requestedPath: string;
+    try {
+      requestedPath = posix.normalize(decodeURIComponent(request.path));
+    } catch {
+      response.status(400).json({ message: 'Bad request' });
+      return;
+    }
 
-  try {
-    const payload = new JwtService({ secret }).verify(token);
-    // Single-purpose tokens (two-factor challenge…) are not sessions.
-    return payload.purpose ? null : payload;
-  } catch {
-    return null;
-  }
-};
+    // The directory is read after normalisation, so `users/../exports/x`
+    // is judged as `exports`.
+    const [directory] = requestedPath.split('/').filter(Boolean);
 
-export const protectUploads = (
-  request: Request,
-  response: Response,
-  next: NextFunction,
-): void => {
-  let requestedPath: string;
-  try {
-    requestedPath = posix.normalize(decodeURIComponent(request.path));
-  } catch {
-    response.status(400).json({ message: 'Bad request' });
-    return;
-  }
+    if (!directory || directory === '..') {
+      response.status(404).json({ message: 'File not found' });
+      return;
+    }
 
-  // The directory is read after normalisation, so `users/../exports/x`
-  // is judged as `exports`.
-  const [directory] = requestedPath.split('/').filter(Boolean);
+    if (PUBLIC_DIRECTORIES.includes(directory)) {
+      next();
+      return;
+    }
 
-  if (!directory || directory === '..') {
-    response.status(404).json({ message: 'File not found' });
-    return;
-  }
+    // Same rule as the API: a session opened before the last password change
+    // is refused, and the role is the current one, not the one in the token.
+    const user = await userOfSessionToken(
+      request.cookies?.token,
+      findUserByEmail,
+    );
 
-  if (PUBLIC_DIRECTORIES.includes(directory)) {
+    if (!user) {
+      response.status(401).json({ message: 'Unauthorized' });
+      return;
+    }
+
+    if (ADMIN_DIRECTORIES.includes(directory) && !isAdmin(user)) {
+      response.status(403).json({ message: 'Forbidden' });
+      return;
+    }
+
     next();
-    return;
+  };
+
+// Uploaded files are served from the address of the application. Only
+// pictures and PDF documents are displayed by the browser; anything else —
+// in particular HTML or SVG, which can carry scripts — is downloaded.
+const DISPLAYED_EXTENSIONS = [
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.avif',
+  '.pdf',
+];
+
+export const setUploadHeaders = (
+  response: Response,
+  filePath: string,
+): void => {
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  if (!DISPLAYED_EXTENSIONS.includes(extname(filePath).toLowerCase())) {
+    response.setHeader('Content-Disposition', 'attachment');
   }
-
-  const session = sessionOf(request);
-
-  if (!session) {
-    response.status(401).json({ message: 'Unauthorized' });
-    return;
-  }
-
-  if (ADMIN_DIRECTORIES.includes(directory) && session.role !== ROLE_ADMIN) {
-    response.status(403).json({ message: 'Forbidden' });
-    return;
-  }
-
-  next();
 };
