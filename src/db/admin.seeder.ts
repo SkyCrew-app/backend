@@ -20,7 +20,7 @@ export const seedAdministration = async (
     contactEmail: 'contact@skycrew.com',
     contactPhone: '+33123456789',
     address: '123 Airport Road, 75000 Paris, France',
-    closureDays: ['Sunday'],
+    closureDays: ['Dimanche'],
     timeSlotDuration: 30,
     reservationStartTime: '08:00',
     reservationEndTime: '20:00',
