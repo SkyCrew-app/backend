@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.15.1](https://github.com/SkyCrew-app/backend/compare/2.15.0...2.15.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **docker:** :bug: build the image without the test files ([#174](https://github.com/SkyCrew-app/backend/issues/174)) ([7a08935](https://github.com/SkyCrew-app/backend/commit/7a08935e7d359ebc7282ed52f57e9062475b7c39))
+
 ## [2.15.0](https://github.com/SkyCrew-app/backend/compare/2.14.0...2.15.0) (2026-10-13)
 
 
