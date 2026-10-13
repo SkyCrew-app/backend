@@ -45,6 +45,15 @@ const isStaff = (user: SessionUser | undefined | null): boolean =>
 const sameId = (a: unknown, b: unknown): boolean =>
   a != null && b != null && Number(a) === Number(b);
 
+// Still open, and nobody of the staff has acted on it: no resolution, no
+// follow-up note. (Incidents have no assignee; this is what "unassigned"
+// means here.)
+export const isUntouched = (incident: Incident): boolean =>
+  incident.status === INCIDENT_STATUS_OPEN &&
+  !incident.resolved_by &&
+  !incident.resolved_at &&
+  !incident.resolution_note;
+
 // A value was sent, and it is not the current one.
 const differs = (value: unknown, current: unknown): boolean =>
   value != null && !sameId(value, current);
@@ -56,6 +65,10 @@ export class IncidentsService {
   private readonly incidentRelations = [
     'aircraft',
     'flight',
+    // The pilot of the flight decides who may read it (Incident.flight).
+    'flight.user',
+    // …and so does the instructor who was on board.
+    'flight.instructor',
     'flight.reservation',
     'user',
     'resolved_by',
@@ -193,8 +206,31 @@ export class IncidentsService {
       });
       aircraft.availability_status = AvailabilityStatus.UNAVAILABLE;
     }
+    await this.announceGrounding(aircraft, {
+      kind: 'incident',
+      id: incidentId,
+    });
+  }
 
-    // Telling people must never undo the report itself.
+  // Tells the members who have a grounded aircraft booked, and the staff who
+  // can put it back, why it is on the ground: a severe incident or a
+  // non-conforming safety audit. It never throws: telling people must never
+  // undo the report itself.
+  async announceGrounding(
+    aircraft: Pick<Aircraft, 'id' | 'registration_number'>,
+    cause: { kind: 'incident' | 'audit'; id: number },
+  ): Promise<void> {
+    const texts =
+      cause.kind === 'audit'
+        ? ({
+            member: 'notification.aircraftGroundedByAudit',
+            staff: 'notification.aircraftGroundedByAuditStaff',
+          } as const)
+        : ({
+            member: 'notification.aircraftGrounded',
+            staff: 'notification.aircraftGroundedStaff',
+          } as const);
+
     try {
       const registration = aircraft.registration_number;
 
@@ -213,7 +249,7 @@ export class IncidentsService {
           user_id: reservation.user.id,
           notification_type: 'AIRCRAFT_GROUNDED',
           notification_date: new Date(),
-          message: translate(language, 'notification.aircraftGrounded', {
+          message: translate(language, texts.member, {
             registration,
             reservationId: reservation.id,
             date: formatDate(language, reservation.start_time),
@@ -226,15 +262,21 @@ export class IncidentsService {
         where: { role: { role_name: In([ROLE_ADMIN, ROLE_TECHNICIAN]) } },
       });
       for (const member of staff) {
+        const params = { registration, count: upcoming.length };
         await this.notificationsService.create({
           user_id: member.id,
           notification_type: 'AIRCRAFT_GROUNDED',
           notification_date: new Date(),
-          message: translate(
-            languageOf(member),
-            'notification.aircraftGroundedStaff',
-            { registration, incidentId, count: upcoming.length },
-          ),
+          message:
+            texts.staff === 'notification.aircraftGroundedByAuditStaff'
+              ? translate(languageOf(member), texts.staff, {
+                  ...params,
+                  auditId: cause.id,
+                })
+              : translate(languageOf(member), texts.staff, {
+                  ...params,
+                  incidentId: cause.id,
+                }),
           is_read: false,
         });
       }
@@ -408,8 +450,37 @@ export class IncidentsService {
     return this.getIncident(id);
   }
 
-  async deleteIncident(id: string): Promise<boolean> {
-    const result = await this.incidentRepository.delete(id);
+  // Id of the pilot of a flight, or null when the flight is unknown.
+  async pilotIdOfFlight(flightId: number): Promise<number | null> {
+    const flight = await this.flightRepository.findOne({
+      where: { id: flightId },
+      relations: ['user'],
+    });
+    return flight?.user?.id ?? null;
+  }
+
+  // An incident is part of the aircraft's history: only an administrator
+  // deletes one. Its author may still withdraw a report nobody has taken up
+  // yet (see isUntouched).
+  async deleteIncident(
+    id: string | number,
+    requester: SessionUser | undefined | null,
+  ): Promise<boolean> {
+    const incident = await this.incidentRepository.findOne({
+      where: { id: Number(id) },
+      relations: ['user', 'resolved_by'],
+    });
+    if (!incident) {
+      return false;
+    }
+
+    const ownUntouchedReport =
+      sameId(incident.user?.id, requester?.id) && isUntouched(incident);
+    if (!isAdmin(requester) && !ownUntouchedReport) {
+      throw localized(ForbiddenException, 'error.incident.deleteNotAllowed');
+    }
+
+    const result = await this.incidentRepository.delete(incident.id);
     return (result?.affected ?? 0) > 0;
   }
 

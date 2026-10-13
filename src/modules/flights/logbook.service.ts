@@ -10,6 +10,14 @@ import {
   MonthlyHoursEntry,
 } from './dto/logbook-stats.type';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { LogbookRole, logbookRoleOf } from './logbook-role';
+
+// The role as printed in the (French) PDF logbook.
+const PDF_ROLE: Record<LogbookRole, string> = {
+  [LogbookRole.PILOT_IN_COMMAND]: 'CDB',
+  [LogbookRole.DUAL]: 'Double',
+  [LogbookRole.INSTRUCTOR]: 'Instructeur',
+};
 
 @Injectable()
 export class LogbookService {
@@ -22,6 +30,8 @@ export class LogbookService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
+  // The logbook of a member: the flights they piloted and those they
+  // instructed, each with the part they took in it.
   async getLogbookEntries(
     userId: number,
     filter?: LogbookFilterInput,
@@ -31,7 +41,8 @@ export class LogbookService {
       .leftJoinAndSelect('flight.reservation', 'reservation')
       .leftJoinAndSelect('reservation.aircraft', 'aircraft')
       .leftJoinAndSelect('flight.user', 'user')
-      .where('user.id = :userId', { userId })
+      .leftJoinAndSelect('flight.instructor', 'instructor')
+      .where('(user.id = :userId OR instructor.id = :userId)', { userId })
       // The logbook holds flights that took place: closed ones only.
       .andWhere('flight.closed_at IS NOT NULL')
       .orderBy('flight.departure_time', 'DESC');
@@ -60,7 +71,13 @@ export class LogbookService {
       });
     }
 
-    return qb.getMany();
+    const flights = await qb.getMany();
+    for (const flight of flights) {
+      flight.logbook_role = logbookRoleOf(flight, userId);
+    }
+    return filter?.role
+      ? flights.filter((flight) => flight.logbook_role === filter.role)
+      : flights;
   }
 
   async getLogbookStats(
@@ -165,7 +182,17 @@ export class LogbookService {
           .reduce((sum, f) => sum + (f.flight_hours || 0), 0) * 100,
       ) / 100;
 
+    const hoursAs = (role: LogbookRole) =>
+      Math.round(
+        flights
+          .filter((flight) => flight.logbook_role === role)
+          .reduce((sum, flight) => sum + (flight.flight_hours || 0), 0) * 100,
+      ) / 100;
+
     return {
+      pilotInCommandHours: hoursAs(LogbookRole.PILOT_IN_COMMAND),
+      dualHours: hoursAs(LogbookRole.DUAL),
+      instructionGivenHours: hoursAs(LogbookRole.INSTRUCTOR),
       totalHours: Math.round(totalHours * 100) / 100,
       totalFlights,
       hoursByModel,
@@ -205,7 +232,8 @@ export class LogbookService {
       { header: 'Arrivée (OACI)', width: 85 },
       { header: 'Temps de vol', width: 75 },
       { header: 'Nature du vol', width: 90 },
-      { header: 'Observations', width: 140 },
+      { header: 'Fonction', width: 60 },
+      { header: 'Observations', width: 115 },
     ];
 
     const totalPages = Math.max(
@@ -299,7 +327,8 @@ export class LogbookService {
           flight.destination_icao || '-',
           flightHoursStr,
           flight.flight_type || '-',
-          remarks.length > 25 ? remarks.substring(0, 22) + '...' : remarks,
+          flight.logbook_role ? PDF_ROLE[flight.logbook_role] : '-',
+          remarks.length > 22 ? remarks.substring(0, 19) + '...' : remarks,
         ];
 
         x = MARGIN;

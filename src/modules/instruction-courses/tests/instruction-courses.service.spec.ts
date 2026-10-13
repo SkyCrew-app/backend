@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { DEFAULT_COURSE_MINUTES } from '../course-rules';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { LessThan, MoreThan, Not, Repository } from 'typeorm';
 import { InstructionCoursesService } from '../instruction-courses.service';
@@ -43,6 +44,8 @@ describe('InstructionCoursesService', () => {
       save: jest.fn(),
       delete: jest.fn(),
       count: jest.fn(),
+      // Aircraft bookings of the participants: none unless a test says so.
+      manager: { find: jest.fn().mockResolvedValue([]) } as any,
     };
     competencyRepo = { findOne: jest.fn(), create: jest.fn(), save: jest.fn() };
     commentRepo = { create: jest.fn(), save: jest.fn() };
@@ -136,6 +139,102 @@ describe('InstructionCoursesService', () => {
     });
   });
 
+  describe('aircraft bookings of the participants', () => {
+    const input = { instructorId: 1, studentId: 2, ...slot } as any;
+    const bookings = () => (courseRepo as any).manager.find as jest.Mock;
+    const planned = () =>
+      ({
+        id: 3,
+        ...slot,
+        status: 'SCHEDULED',
+        instructor: { id: 1 },
+        student: { id: 2 },
+        reservation: { id: 70 },
+        competencies: [],
+        comments: [],
+      }) as any;
+
+    beforeEach(() => {
+      (userService.findOneById as jest.Mock).mockImplementation(async (id) =>
+        id === 1 ? instructor : { id },
+      );
+      (courseRepo.findOne as jest.Mock).mockResolvedValue(undefined);
+      (courseRepo.create as jest.Mock).mockImplementation((value) => value);
+      (courseRepo.save as jest.Mock).mockImplementation(async (value) => ({
+        id: 5,
+        ...value,
+      }));
+    });
+
+    it('looks for bookings that overlap the course, in either seat, cancelled ones left out', async () => {
+      await service.checkBookingConflict(1, 2, slot.startTime, slot.endTime);
+
+      const [, { where }] = bookings().mock.calls[0];
+      expect(where).toHaveLength(2);
+      expect(where[0].user.id.value).toEqual([1, 2]);
+      expect(where[1].instructor.id.value).toEqual([1, 2]);
+      for (const condition of where) {
+        expect(condition.start_time).toEqual(LessThan(slot.endTime));
+        expect(condition.end_time).toEqual(MoreThan(slot.startTime));
+        expect(condition.status).toEqual(Not('cancelled'));
+      }
+    });
+
+    it.each([
+      ['the instructor flies alone', { id: 60, user: { id: 1 } }],
+      [
+        'the instructor instructs someone else',
+        { id: 61, user: { id: 9 }, instructor: { id: 1 } },
+      ],
+      ['the student flies alone', { id: 62, user: { id: 2 } }],
+      [
+        'the student flies with another instructor',
+        { id: 63, user: { id: 2 }, instructor: { id: 8 } },
+      ],
+    ])('refuses a course when %s over the slot', async (_label, booking) => {
+      bookings().mockResolvedValue([booking]);
+
+      const error = await service.createCourse(input).catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect(translationOf(error)?.key).toBe(
+        'error.course.memberAlreadyBooked',
+      );
+      expect(courseRepo.save).not.toHaveBeenCalled();
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a course over the flight the student booked with this instructor', async () => {
+      bookings().mockResolvedValue([
+        { id: 64, user: { id: 2 }, instructor: { id: 1 } },
+      ]);
+
+      await expect(service.createCourse(input)).resolves.toMatchObject({
+        id: 5,
+      });
+    });
+
+    it('moves a course over its own booking, not over another one', async () => {
+      jest.spyOn(service, 'findOne').mockImplementation(async () => planned());
+      const later = new Date(slot.endTime.getTime() + hour);
+      const instructs = { role: { role_name: 'Instructeur' }, id: 1 } as any;
+
+      // Its own booking, held by the student alone, is the lesson.
+      bookings().mockResolvedValue([{ id: 70, user: { id: 2 } }]);
+      await expect(
+        service.updateCourse(3, { id: 3, endTime: later } as any, instructs),
+      ).resolves.toBeDefined();
+
+      bookings().mockResolvedValue([{ id: 71, user: { id: 2 } }]);
+      const error = await service
+        .updateCourse(3, { id: 3, endTime: later } as any, instructs)
+        .catch((caught) => caught);
+      expect(translationOf(error)?.key).toBe(
+        'error.course.memberAlreadyBooked',
+      );
+    });
+  });
+
   describe('createCourse', () => {
     const input = { instructorId: 1, studentId: 2, ...slot } as any;
 
@@ -166,6 +265,29 @@ describe('InstructionCoursesService', () => {
       const res = await service.createCourse(input);
       expect(notifications.create).toHaveBeenCalledTimes(2);
       expect(res).toMatchObject({ id: 5, student: { id: 2 } });
+    });
+
+    it('gives a course planned without an end the default hour', async () => {
+      const conflict = jest
+        .spyOn(service, 'checkScheduleConflict')
+        .mockResolvedValue(false);
+      const startTime = new Date('2030-03-01T09:00:00Z');
+
+      const res = await service.createCourse({
+        instructorId: 1,
+        studentId: 2,
+        startTime,
+      } as any);
+
+      expect(DEFAULT_COURSE_MINUTES).toBe(60);
+      expect(res.endTime).toEqual(new Date('2030-03-01T10:00:00Z'));
+      // The conflict is looked for over that hour, not over an instant.
+      expect(conflict).toHaveBeenCalledWith(
+        1,
+        2,
+        startTime,
+        new Date('2030-03-01T10:00:00Z'),
+      );
     });
 
     it('never takes a rating from whoever plans the course', async () => {
@@ -484,6 +606,51 @@ describe('InstructionCoursesService', () => {
         NotFoundException,
       );
     });
+    it('validateCompetency records who validated and when', async () => {
+      const comp = {
+        id: 9,
+        course: { student: { id: 11 }, startTime: new Date(0) },
+        validated: false,
+      } as any;
+      (competencyRepo.findOne as jest.Mock).mockResolvedValue(comp);
+      (competencyRepo.save as jest.Mock).mockImplementation(
+        async (value) => value,
+      );
+      const before = Date.now();
+
+      const res = await service.validateCompetency(9, {
+        id: 4,
+        email: 'i@example.com',
+        role: 'Instructeur',
+      });
+
+      expect(res.validated).toBe(true);
+      expect(res.validatedBy).toEqual({ id: 4 });
+      expect(res.validatedAt.getTime()).toBeGreaterThanOrEqual(before);
+    });
+
+    it('validateCompetency keeps the first validation when asked again', async () => {
+      const validatedAt = new Date('2026-09-01T10:00:00Z');
+      const comp = {
+        id: 9,
+        course: { student: { id: 11 }, startTime: new Date(0) },
+        validated: true,
+        validatedBy: { id: 4 },
+        validatedAt,
+      } as any;
+      (competencyRepo.findOne as jest.Mock).mockResolvedValue(comp);
+
+      const res = await service.validateCompetency(9, {
+        id: 1,
+        email: 'a@example.com',
+        role: 'Administrateur',
+      });
+
+      expect(res).toMatchObject({ validatedBy: { id: 4 }, validatedAt });
+      expect(competencyRepo.save).not.toHaveBeenCalled();
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
     it('validateCompetency saves validated and notifies', async () => {
       const comp = {
         id: 9,
@@ -544,6 +711,7 @@ describe('InstructionCoursesService', () => {
       expect(res.status).toBe('COMPLETED');
     });
     it('findExpiredCourses uses LessThan filter', async () => {
+      (courseRepo.find as jest.Mock).mockResolvedValue([]);
       await service.findExpiredCourses();
       expect(courseRepo.find).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.any(Object) }),
@@ -552,10 +720,36 @@ describe('InstructionCoursesService', () => {
     // The nightly job notifies both: without them it failed on the first
     // course and stopped.
     it('findExpiredCourses loads the instructor and the student', async () => {
+      (courseRepo.find as jest.Mock).mockResolvedValue([]);
       await service.findExpiredCourses();
       expect(courseRepo.find).toHaveBeenCalledWith(
-        expect.objectContaining({ relations: ['instructor', 'student'] }),
+        expect.objectContaining({
+          relations: expect.arrayContaining(['instructor', 'student']),
+        }),
       );
+    });
+    // Rewritten: it used to hand every past SCHEDULED course to the nightly
+    // job, which marked it COMPLETED although nobody said it took place.
+    it('findExpiredCourses keeps a merely scheduled course out of the completed ones', async () => {
+      (courseRepo.find as jest.Mock).mockResolvedValue([
+        { id: 1, status: 'SCHEDULED' },
+        { id: 2, status: 'IN_PROGRESS' },
+        {
+          id: 3,
+          status: 'SCHEDULED',
+          reservation: { flights: [{ closed_at: null }] },
+        },
+        {
+          id: 4,
+          status: 'SCHEDULED',
+          reservation: { flights: [{ closed_at: new Date() }] },
+        },
+      ]);
+
+      const expired = await service.findExpiredCourses();
+
+      // Started by its instructor, or flown: these took place.
+      expect(expired.map((course) => course.id)).toEqual([2, 4]);
     });
   });
 

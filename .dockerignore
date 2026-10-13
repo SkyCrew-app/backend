@@ -14,3 +14,12 @@ monitoring
 **/*.spec.ts
 **/*.test.ts
 jest.config.*
+# Not part of the application: a change to the workflows, the deployment kit
+# or the screenshots must not rebuild the image.
+.github
+.husky
+deploy
+deploy-k8s.sh
+docker-compose.yml
+k8s
+screen

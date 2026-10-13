@@ -26,6 +26,8 @@ import { isAdmin, SessionUser } from '../../common/auth/access';
 import { languageOf } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
+import { InvoiceLine, nextInvoiceNumber } from '../invoices/invoice-number';
+import { Reservation } from '../reservations/entity/reservations.entity';
 
 // Bounds of an account top-up, in euros.
 export const TOP_UP_MIN = 1;
@@ -120,12 +122,17 @@ export class PaymentsService {
     }
 
     const amount = fromCents(charge.cents);
+    const invoiceDate = new Date();
     const invoice = await manager.save(Invoice, {
       user: { id: charge.userId },
-      invoice_date: new Date(),
+      invoice_number: await nextInvoiceNumber(manager, invoiceDate),
+      invoice_date: invoiceDate,
       amount,
       payment_status: 'completed',
       payment_method: 'account_balance',
+      invoice_items: JSON.stringify([
+        await this.bookingLine(manager, charge.reservationId, amount),
+      ]),
       amount_paid: amount,
       balance_due: 0,
     });
@@ -140,6 +147,39 @@ export class PaymentsService {
       kind: PAYMENT_KIND.BOOKING,
       reservation_id: charge.reservationId ?? null,
     });
+  }
+
+  // What the invoice of a booking says it is for: the aircraft and the slot,
+  // read from the booking being charged.
+  private async bookingLine(
+    manager: EntityManager,
+    reservationId: number | null | undefined,
+    amount: number,
+  ): Promise<InvoiceLine> {
+    const line: InvoiceLine = {
+      kind: 'booking',
+      amount,
+      reservationId: reservationId ?? null,
+    };
+    if (reservationId == null) {
+      return line;
+    }
+    const reservation = await manager.findOne(Reservation, {
+      where: { id: reservationId },
+    });
+    if (!reservation) {
+      return line;
+    }
+    return {
+      ...line,
+      registration: reservation.aircraft?.registration_number ?? null,
+      start: new Date(reservation.start_time).toISOString(),
+      end: new Date(reservation.end_time).toISOString(),
+      instructor:
+        [reservation.instructor?.first_name, reservation.instructor?.last_name]
+          .filter(Boolean)
+          .join(' ') || null,
+    };
   }
 
   // Gives back to a member what a booking had taken, as a line of its own.
@@ -445,12 +485,20 @@ export class PaymentsService {
       if (balance === null) {
         throw new NotFoundException('User not found');
       }
+      const invoiceDate = new Date();
+      const topUpLine: InvoiceLine = {
+        kind: 'top_up',
+        amount: Number(payment.amount),
+        method: payment.payment_method,
+      };
       const invoice = await manager.save(Invoice, {
         user: { id: payment.user.id },
-        invoice_date: new Date(),
+        invoice_number: await nextInvoiceNumber(manager, invoiceDate),
+        invoice_date: invoiceDate,
         amount: payment.amount,
         payment_status: 'completed',
         payment_method: payment.payment_method,
+        invoice_items: JSON.stringify([topUpLine]),
         amount_paid: payment.amount,
         balance_due: 0,
       });
@@ -670,6 +718,61 @@ export class PaymentsService {
       await this.notifyMovement(
         disputed.member,
         'WITHDRAWAL',
+        Number(line.amount),
+      );
+    }
+    return line;
+  }
+
+  // The bank ruled for the club: what the dispute had taken from the member's
+  // balance comes back, once, whatever the number of announcements. Returns
+  // null when there is nothing to give back (a dispute this application
+  // never debited, or one already given back).
+  async applyDisputeWon(disputeId: string): Promise<Payment | null> {
+    if (!disputeId) {
+      throw localized(BadRequestException, 'error.payment.invalidAmount');
+    }
+    const reversalId = `${disputeId}:won`;
+
+    const credited: { member?: Payment['user'] } = {};
+    const line = await this.inTransaction(async (manager) => {
+      const debit = await manager.findOne(Payment, {
+        where: {
+          external_payment_id: disputeId,
+          kind: PAYMENT_KIND.PROVIDER_REFUND,
+        },
+        relations: ['user'],
+      });
+      if (!debit || !(await lockRow(manager, 'payments', debit.id))) {
+        return null;
+      }
+      // Read under the lock: another announcement may have just passed.
+      const already = await manager.findOne(Payment, {
+        where: { external_payment_id: reversalId },
+      });
+      if (already) {
+        return null;
+      }
+
+      const cents = toCents(debit.amount);
+      await moveBalance(manager, debit.user.id, cents, { notBelowZero: false });
+      credited.member = debit.user;
+      return manager.save(Payment, {
+        user: { id: debit.user.id },
+        amount: fromCents(cents),
+        payment_date: new Date(),
+        payment_method: debit.payment_method,
+        payment_status: 'completed',
+        kind: PAYMENT_KIND.DISPUTE_WON,
+        external_payment_id: reversalId,
+        reason: debit.reason,
+      });
+    });
+
+    if (line && credited.member) {
+      await this.notifyMovement(
+        credited.member,
+        'PAYMENT_RECEIVED',
         Number(line.amount),
       );
     }

@@ -17,6 +17,7 @@ import {
 } from 'typeorm';
 import { InstructionCourse } from './entity/instruction-courses.entity';
 import { CourseStatus } from './enum/course-status.enum';
+import { defaultCourseEnd } from './course-rules';
 import { CourseCompetency } from './entity/course-competency.entity';
 import { CourseComment } from './entity/course-comment.entity';
 import { CreateCourseInstructionInput } from './dto/create-course.input';
@@ -29,6 +30,10 @@ import { ELearningService } from '../e-learning/e-learning.service';
 import { UserProgress } from '../users/entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
 import { User } from '../users/entity/users.entity';
+import {
+  Reservation,
+  ReservationStatus,
+} from '../reservations/entity/reservations.entity';
 import { languageOf } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
@@ -67,7 +72,7 @@ export class InstructionCoursesService {
 
   // Two courses conflict when they share time for the same instructor or the
   // same student. Courses that follow each other do not, cancelled ones never
-  // do. A course without an end only takes its starting time.
+  // do. A course planned without an end lasts the default duration.
   async checkScheduleConflict(
     instructorId: number,
     studentId: number,
@@ -76,7 +81,7 @@ export class InstructionCoursesService {
     exceptCourseId?: number,
   ): Promise<boolean> {
     const start = new Date(startTime);
-    const end = endTime ? new Date(endTime) : start;
+    const end = endTime ? new Date(endTime) : defaultCourseEnd(start);
     const overlapping = {
       startTime: LessThan(end.getTime() > start.getTime() ? end : start),
       endTime: MoreThan(start),
@@ -92,6 +97,45 @@ export class InstructionCoursesService {
     });
 
     return !!conflict;
+  }
+
+  // The instructor or the student is already on an aircraft over the slot,
+  // whichever seat they take there. Two bookings are the lesson itself and
+  // never in the way: the one made for this course, and one the student
+  // flies with this instructor.
+  async checkBookingConflict(
+    instructorId: number,
+    studentId: number,
+    startTime: Date,
+    endTime?: Date | null,
+    exceptReservationId?: number | null,
+  ): Promise<boolean> {
+    const start = new Date(startTime);
+    const end = endTime ? new Date(endTime) : defaultCourseEnd(start);
+    const overlapping = {
+      start_time: LessThan(end),
+      end_time: MoreThan(start),
+      status: Not(ReservationStatus.CANCELLED),
+    };
+    const members = In([Number(instructorId), Number(studentId)]);
+
+    const bookings = await this.courseRepository.manager.find(Reservation, {
+      where: [
+        { ...overlapping, user: { id: members } },
+        { ...overlapping, instructor: { id: members } },
+      ],
+      relations: ['user', 'instructor'],
+      loadEagerRelations: false,
+    });
+
+    return bookings.some(
+      (booking) =>
+        Number(booking.id) !== Number(exceptReservationId ?? NaN) &&
+        !(
+          Number(booking.user?.id) === Number(studentId) &&
+          Number(booking.instructor?.id) === Number(instructorId)
+        ),
+    );
   }
 
   private assertCoherent(
@@ -125,7 +169,10 @@ export class InstructionCoursesService {
   async createCourse(
     input: CreateCourseInstructionInput,
   ): Promise<InstructionCourse> {
-    const { instructorId, studentId, startTime, endTime } = input;
+    const { instructorId, studentId, startTime } = input;
+    // A course always has an end: its conflicts and its completion rely on
+    // it.
+    const endTime = input.endTime ?? defaultCourseEnd(startTime);
 
     this.assertCoherent(instructorId, studentId, startTime, endTime);
 
@@ -152,6 +199,16 @@ export class InstructionCoursesService {
 
     if (hasConflict) {
       throw localized(ConflictException, 'error.course.scheduleConflict');
+    }
+    if (
+      await this.checkBookingConflict(
+        instructorId,
+        studentId,
+        startTime,
+        endTime,
+      )
+    ) {
+      throw localized(ConflictException, 'error.course.memberAlreadyBooked');
     }
 
     // The rating and its comment are the student's, given afterwards.
@@ -192,7 +249,13 @@ export class InstructionCoursesService {
   // Récupérer tous les cours
   async findAll(): Promise<InstructionCourse[]> {
     return this.courseRepository.find({
-      relations: ['instructor', 'student', 'competencies', 'comments'],
+      relations: [
+        'instructor',
+        'student',
+        'competencies',
+        'comments',
+        'reservation',
+      ],
     });
   }
 
@@ -200,7 +263,13 @@ export class InstructionCoursesService {
   async findCoursesByStudent(studentId: number): Promise<InstructionCourse[]> {
     return this.courseRepository.find({
       where: { student: { id: studentId } },
-      relations: ['instructor', 'student', 'competencies', 'comments'],
+      relations: [
+        'instructor',
+        'student',
+        'competencies',
+        'comments',
+        'reservation',
+      ],
     });
   }
 
@@ -210,7 +279,13 @@ export class InstructionCoursesService {
   ): Promise<InstructionCourse[]> {
     return this.courseRepository.find({
       where: { instructor: { id: instructorId } },
-      relations: ['instructor', 'student', 'competencies', 'comments'],
+      relations: [
+        'instructor',
+        'student',
+        'competencies',
+        'comments',
+        'reservation',
+      ],
     });
   }
 
@@ -224,6 +299,7 @@ export class InstructionCoursesService {
         'competencies',
         'comments',
         'comments.author',
+        'reservation',
       ],
     });
 
@@ -267,7 +343,7 @@ export class InstructionCoursesService {
     const nextStudentId = movesStudent ? studentId : course.student?.id;
     const nextStart = fields.startTime ?? course.startTime;
     const nextEnd =
-      fields.endTime !== undefined ? fields.endTime : course.endTime;
+      fields.endTime ?? course.endTime ?? defaultCourseEnd(nextStart);
     const nextStatus = fields.status ?? course.status;
 
     this.assertCoherent(nextInstructorId, nextStudentId, nextStart, nextEnd);
@@ -309,8 +385,22 @@ export class InstructionCoursesService {
     ) {
       throw localized(ConflictException, 'error.course.scheduleConflict');
     }
+    if (
+      slotChanged &&
+      nextStatus !== CourseStatus.CANCELED &&
+      (await this.checkBookingConflict(
+        nextInstructorId,
+        nextStudentId,
+        nextStart,
+        nextEnd,
+        course.reservation?.id,
+      ))
+    ) {
+      throw localized(ConflictException, 'error.course.memberAlreadyBooked');
+    }
 
     Object.assign(course, fields);
+    course.endTime = nextEnd;
 
     // The instructor and the student are relations: their ids cannot simply
     // be copied onto the course.
@@ -395,7 +485,12 @@ export class InstructionCoursesService {
   }
 
   // Valider une compétence dans un cours
-  async validateCompetency(competencyId: number): Promise<CourseCompetency> {
+  // Who validates and when is recorded once: validating again changes
+  // nothing.
+  async validateCompetency(
+    competencyId: number,
+    requester?: SessionUser | null,
+  ): Promise<CourseCompetency> {
     const competency = await this.competencyRepository.findOne({
       where: { id: competencyId },
       relations: ['course', 'course.student'],
@@ -406,7 +501,13 @@ export class InstructionCoursesService {
       );
     }
     this.assertTookPlace(competency.course);
+    if (competency.validated) {
+      return competency;
+    }
     competency.validated = true;
+    competency.validatedAt = new Date();
+    competency.validatedBy =
+      requester?.id != null ? ({ id: requester.id } as User) : null;
 
     await this.notificationsService.create({
       user_id: competency.course.student.id,
@@ -488,6 +589,7 @@ export class InstructionCoursesService {
         'competencies',
         'comments',
         'comments.author',
+        'reservation',
       ],
     });
   }
@@ -502,17 +604,32 @@ export class InstructionCoursesService {
     return this.courseRepository.save(course);
   }
 
-  // cherche les cours expirés
+  // The courses whose time has passed and that did take place: the nightly
+  // job marks these, and only these, as completed. A course is known to have
+  // taken place when its instructor started it (IN_PROGRESS) or when the
+  // flight of its booking was closed. A course merely SCHEDULED stays so
+  // until its instructor says whether it was held or cancelled: nothing
+  // enters a training record on the strength of the calendar alone.
   async findExpiredCourses(): Promise<InstructionCourse[]> {
     const now = new Date();
-    return this.courseRepository.find({
+    const overdue = await this.courseRepository.find({
       where: {
         endTime: LessThan(now),
-        status: In(['IN_PROGRESS', 'SCHEDULED']),
+        status: In([CourseStatus.IN_PROGRESS, CourseStatus.SCHEDULED]),
       },
       // Both are notified when the course is marked as completed.
-      relations: ['instructor', 'student'],
+      relations: [
+        'instructor',
+        'student',
+        'reservation',
+        'reservation.flights',
+      ],
     });
+    return overdue.filter(
+      (course) =>
+        course.status === CourseStatus.IN_PROGRESS ||
+        (course.reservation?.flights ?? []).some((flight) => flight.closed_at),
+    );
   }
 
   async getUserInstructionSummary(userId: number): Promise<any> {

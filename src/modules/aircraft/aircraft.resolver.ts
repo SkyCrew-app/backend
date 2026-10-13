@@ -10,11 +10,63 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { SessionUser } from '../../common/auth/access';
+import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
+
+type StoredStatus = Awaited<ReturnType<AircraftService['storedStatus']>>;
 
 @Resolver(() => Aircraft)
 @UseFilters(LocalizedExceptionFilter)
 export class AircraftResolver {
-  constructor(private readonly aircraftService: AircraftService) {}
+  constructor(
+    private readonly aircraftService: AircraftService,
+    private readonly adminActions: AdminActionsService,
+  ) {}
+
+  // The aircraft as it stands before an action, for the trace only: a
+  // failed lookup never stops the action itself.
+  private async before(aircraftId: number): Promise<StoredStatus> {
+    try {
+      return await this.aircraftService.storedStatus(aircraftId);
+    } catch {
+      return null;
+    }
+  }
+
+  // An aircraft grounded or put back in service by hand leaves a line.
+  private async traceAvailability(
+    currentUser: SessionUser | undefined,
+    aircraftId: number,
+    before: StoredStatus,
+    after: Aircraft | null | undefined,
+  ): Promise<void> {
+    const from = before?.availability_status ?? null;
+    const to = after?.availability_status ?? null;
+    if (!to || from === to) {
+      return;
+    }
+    const action =
+      to === AvailabilityStatus.UNAVAILABLE
+        ? ADMIN_ACTION.AIRCRAFT_GROUNDED
+        : from === AvailabilityStatus.UNAVAILABLE
+          ? ADMIN_ACTION.AIRCRAFT_RETURNED_TO_SERVICE
+          : null;
+    if (!action) {
+      return;
+    }
+    await this.adminActions.record(
+      currentUser,
+      action,
+      {
+        type: 'aircraft',
+        id: aircraftId,
+        label: after?.registration_number ?? before?.registration_number,
+      },
+      { from, to },
+    );
+  }
 
   @Query(() => [Aircraft], { name: 'getAircrafts' })
   @UseGuards(JwtAuthGuard)
@@ -60,6 +112,7 @@ export class AircraftResolver {
     file?: FileUpload,
     @Args({ name: 'image', type: () => GraphQLUpload, nullable: true })
     image?: FileUpload,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Aircraft> {
     const filePaths: string[] = [];
     let imagePath: string | null = null;
@@ -72,12 +125,21 @@ export class AircraftResolver {
       imagePath = await saveUploadToTmp(image, 'picture');
     }
 
-    return this.aircraftService.update(
+    // The form can also ground the aircraft or put it back in service.
+    const before =
+      updateAircraftInput?.availability_status != null
+        ? await this.before(aircraftId)
+        : null;
+    const updated = await this.aircraftService.update(
       aircraftId,
       updateAircraftInput,
       filePaths,
       imagePath,
     );
+    if (before) {
+      await this.traceAvailability(currentUser, aircraftId, before, updated);
+    }
+    return updated;
   }
 
   @Query(() => [Aircraft])
@@ -98,12 +160,19 @@ export class AircraftResolver {
   @Mutation(() => Aircraft)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur', 'Technicien')
-  setAircraftAvailability(
+  async setAircraftAvailability(
     @Args('aircraftId', { type: () => Int }) aircraftId: number,
     @Args('availability_status', { type: () => AvailabilityStatus })
     availabilityStatus: AvailabilityStatus,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Aircraft> {
-    return this.aircraftService.updateStatus(aircraftId, availabilityStatus);
+    const before = await this.before(aircraftId);
+    const updated = await this.aircraftService.updateStatus(
+      aircraftId,
+      availabilityStatus,
+    );
+    await this.traceAvailability(currentUser, aircraftId, before, updated);
+    return updated;
   }
 
   @Mutation(() => Boolean, {
@@ -114,7 +183,19 @@ export class AircraftResolver {
   @Roles('Administrateur')
   async deleteAircraft(
     @Args('aircraftId', { type: () => Int }) aircraftId: number,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<boolean> {
-    return this.aircraftService.remove(aircraftId);
+    const before = await this.before(aircraftId);
+    const deleted = await this.aircraftService.remove(aircraftId);
+    await this.adminActions.record(
+      currentUser,
+      deleted ? ADMIN_ACTION.AIRCRAFT_DELETED : ADMIN_ACTION.AIRCRAFT_RETIRED,
+      {
+        type: 'aircraft',
+        id: aircraftId,
+        label: before?.registration_number,
+      },
+    );
+    return deleted;
   }
 }

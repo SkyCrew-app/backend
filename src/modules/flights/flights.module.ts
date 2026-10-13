@@ -14,11 +14,13 @@ import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { LogbookService } from './logbook.service';
 import { LogbookResolver } from './logbook.resolver';
+import { AdminActionsModule } from '../../common/admin-actions/admin-actions.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Flight, FlightAmendment, Reservation, User]),
     NotificationsModule,
+    AdminActionsModule,
   ],
   exports: [FlightsService, LogbookService],
   providers: [

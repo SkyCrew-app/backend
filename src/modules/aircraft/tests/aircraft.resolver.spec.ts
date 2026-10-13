@@ -10,6 +10,8 @@ import { RolesGuard } from '../../../common/guards/roles.guard';
 import { FileUpload, ReadStream, WriteStream } from 'graphql-upload-ts';
 import { Readable } from 'stream';
 import { saveUploadToTmp } from '../../../common/uploads/save-upload';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../../common/admin-actions/admin-actions';
 
 jest.mock('../../../common/uploads/save-upload', () => ({
   saveUploadToTmp: jest.fn(),
@@ -27,6 +29,7 @@ jest.mock('@nestjs/common', () => {
 describe('AircraftResolver', () => {
   let resolver: AircraftResolver;
   let service: Partial<AircraftService>;
+  let trace: { record: jest.Mock };
   const sample: Aircraft = {
     id: 1,
     registration_number: 'RN',
@@ -60,12 +63,18 @@ describe('AircraftResolver', () => {
       update: jest.fn().mockResolvedValue(sample),
       remove: jest.fn().mockResolvedValue(true),
       aircraftHistory: jest.fn().mockResolvedValue([sample]),
+      storedStatus: jest.fn().mockResolvedValue({
+        registration_number: 'RN',
+        availability_status: AvailabilityStatus.AVAILABLE,
+      }),
     };
+    trace = { record: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AircraftResolver,
         { provide: AircraftService, useValue: service },
+        { provide: AdminActionsService, useValue: trace },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -150,5 +159,107 @@ describe('AircraftResolver', () => {
       1,
       AvailabilityStatus.AVAILABLE,
     );
+  });
+
+  describe("administrators' action log", () => {
+    const admin = { id: 1, role: { role_name: 'Administrateur' } } as any;
+    const target = { type: 'aircraft', id: 1, label: 'RN' };
+    const stored = (availability_status: AvailabilityStatus) =>
+      (service.storedStatus as jest.Mock).mockResolvedValue({
+        registration_number: 'RN',
+        availability_status,
+      });
+    const becomes = (availability_status: AvailabilityStatus) => ({
+      ...sample,
+      availability_status,
+    });
+
+    it('records an aircraft grounded by hand', async () => {
+      service.updateStatus = jest
+        .fn()
+        .mockResolvedValue(becomes(AvailabilityStatus.UNAVAILABLE));
+
+      await resolver.setAircraftAvailability(
+        1,
+        AvailabilityStatus.UNAVAILABLE,
+        admin,
+      );
+
+      expect(trace.record).toHaveBeenCalledWith(
+        admin,
+        ADMIN_ACTION.AIRCRAFT_GROUNDED,
+        target,
+        { from: 'AVAILABLE', to: 'UNAVAILABLE' },
+      );
+    });
+
+    it('records an aircraft put back in service, also from its form', async () => {
+      stored(AvailabilityStatus.UNAVAILABLE);
+      service.updateStatus = jest
+        .fn()
+        .mockResolvedValue(becomes(AvailabilityStatus.AVAILABLE));
+      (service.update as jest.Mock).mockResolvedValue(
+        becomes(AvailabilityStatus.AVAILABLE),
+      );
+
+      await resolver.setAircraftAvailability(
+        1,
+        AvailabilityStatus.AVAILABLE,
+        admin,
+      );
+      await resolver.updateAircraft(
+        1,
+        { availability_status: AvailabilityStatus.AVAILABLE } as any,
+        undefined,
+        undefined,
+        admin,
+      );
+
+      expect(trace.record).toHaveBeenCalledTimes(2);
+      for (const call of trace.record.mock.calls) {
+        expect(call).toEqual([
+          admin,
+          ADMIN_ACTION.AIRCRAFT_RETURNED_TO_SERVICE,
+          target,
+          { from: 'UNAVAILABLE', to: 'AVAILABLE' },
+        ]);
+      }
+    });
+
+    it('records nothing when the availability did not change', async () => {
+      service.updateStatus = jest
+        .fn()
+        .mockResolvedValue(becomes(AvailabilityStatus.AVAILABLE));
+
+      await resolver.setAircraftAvailability(
+        1,
+        AvailabilityStatus.AVAILABLE,
+        admin,
+      );
+      await resolver.updateAircraft(1, { model: 'DR400' } as any);
+
+      expect(trace.record).not.toHaveBeenCalled();
+    });
+
+    it('tells a deleted aircraft from a retired one', async () => {
+      await resolver.deleteAircraft(1, admin);
+      (service.remove as jest.Mock).mockResolvedValue(false);
+      await resolver.deleteAircraft(1, admin);
+
+      expect(trace.record.mock.calls).toEqual([
+        [admin, ADMIN_ACTION.AIRCRAFT_DELETED, target],
+        [admin, ADMIN_ACTION.AIRCRAFT_RETIRED, target],
+      ]);
+    });
+
+    it('records nothing when the deletion is refused, and still acts when the aircraft cannot be read first', async () => {
+      (service.remove as jest.Mock).mockRejectedValue(new Error('refusé'));
+      await expect(resolver.deleteAircraft(1, admin)).rejects.toThrow('refusé');
+      expect(trace.record).not.toHaveBeenCalled();
+
+      (service.storedStatus as jest.Mock).mockRejectedValue(new Error('ko'));
+      (service.remove as jest.Mock).mockResolvedValue(true);
+      await expect(resolver.deleteAircraft(1, admin)).resolves.toBe(true);
+    });
   });
 });

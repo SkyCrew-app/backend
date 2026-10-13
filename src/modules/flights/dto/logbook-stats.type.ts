@@ -46,4 +46,14 @@ export class LogbookStats {
 
   @Field(() => Float)
   last90DaysHours: number;
+
+  // The total, by the part the member took in each flight.
+  @Field(() => Float)
+  pilotInCommandHours: number;
+
+  @Field(() => Float)
+  dualHours: number;
+
+  @Field(() => Float)
+  instructionGivenHours: number;
 }

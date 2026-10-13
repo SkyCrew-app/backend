@@ -12,6 +12,8 @@ export const PAYMENT_KIND = {
   MANUAL_CREDIT: 'manual_credit',
   MANUAL_DEBIT: 'manual_debit',
   PROVIDER_REFUND: 'provider_refund',
+  // A chargeback the club won: what the dispute had taken comes back.
+  DISPUTE_WON: 'dispute_won',
 } as const;
 
 export type PaymentKind = (typeof PAYMENT_KIND)[keyof typeof PAYMENT_KIND];
@@ -20,6 +22,7 @@ const CREDIT_KINDS: string[] = [
   PAYMENT_KIND.TOP_UP,
   PAYMENT_KIND.BOOKING_REFUND,
   PAYMENT_KIND.MANUAL_CREDIT,
+  PAYMENT_KIND.DISPUTE_WON,
 ];
 
 // +1 when the line adds to the member's balance, -1 when it takes from it.

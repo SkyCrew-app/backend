@@ -41,11 +41,28 @@ import {
 import { RequestLanguage } from '../../common/i18n/request-language';
 import { normalizeEmail } from '../../common/validation/email';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
+import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
+
+const memberTarget = (
+  id: number,
+  user?: { first_name?: string; last_name?: string; email?: string } | null,
+) => ({
+  type: 'member',
+  id,
+  label:
+    [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
+    user?.email ||
+    null,
+});
 
 @Resolver(() => User)
 @UseFilters(LocalizedExceptionFilter)
 export class UsersResolver {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly adminActions: AdminActionsService,
+  ) {}
 
   @Query(() => [User])
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -71,28 +88,56 @@ export class UsersResolver {
   @Mutation(() => User)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  setUserActive(
+  async setUserActive(
     @Args('id', { type: () => Int }) id: number,
     @Args('active') active: boolean,
+    @CurrentUser() currentUser?: User,
   ): Promise<User> {
-    return this.usersService.setActive(id, active);
+    const user = await this.usersService.setActive(id, active);
+    await this.adminActions.record(
+      currentUser,
+      active
+        ? ADMIN_ACTION.MEMBER_REACTIVATED
+        : ADMIN_ACTION.MEMBER_DEACTIVATED,
+      memberTarget(id, user),
+    );
+    return user;
   }
 
   // Refused for a member with any history: see setUserActive.
   @Mutation(() => Boolean)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  deleteUser(@Args('id', { type: () => Int }) id: number): Promise<boolean> {
-    return this.usersService.remove(id);
+  async deleteUser(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() currentUser?: User,
+  ): Promise<boolean> {
+    // Read first: once deleted, the trace could no longer name the member.
+    const user = await this.usersService.findOneById(id);
+    const deleted = await this.usersService.remove(id);
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.MEMBER_DELETED,
+      memberTarget(id, user),
+      { email: user?.email ?? null },
+    );
+    return deleted;
   }
 
   @Mutation(() => Boolean)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  resendInvitation(
+  async resendInvitation(
     @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() currentUser?: User,
   ): Promise<boolean> {
-    return this.usersService.resendInvitation(id);
+    const sent = await this.usersService.resendInvitation(id);
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.INVITATION_RESENT,
+      memberTarget(id, await this.usersService.findOneById(id)),
+    );
+    return sent;
   }
 
   @Mutation(() => User)
@@ -161,12 +206,30 @@ export class UsersResolver {
       imagePath = await saveUploadToTmp(image, 'picture');
     }
 
-    return this.usersService.updateUser(
+    // Only a role change is traced: the rest of a profile is the member's.
+    const previous =
+      asAdmin && updateUserInput.roleId
+        ? await this.usersService.findOneByEmail(targetEmail)
+        : null;
+
+    const updated = await this.usersService.updateUser(
       targetEmail,
       updateUserInput,
       imagePath,
       { asAdmin },
     );
+
+    const previousRole = previous?.role?.role_name ?? null;
+    const newRole = updated?.role?.role_name ?? null;
+    if (previous && newRole !== previousRole) {
+      await this.adminActions.record(
+        currentUser,
+        ADMIN_ACTION.MEMBER_ROLE_CHANGED,
+        memberTarget(updated.id, updated),
+        { from: previousRole, to: newRole },
+      );
+    }
+    return updated;
   }
 
   @Mutation(() => User)

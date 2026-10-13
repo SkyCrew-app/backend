@@ -8,6 +8,7 @@ import { AuditTemplate } from './entity/audit-template.entity';
 import { AuditTemplateItem } from './entity/audit-template-item.entity';
 import { AircraftModule } from '../aircraft/aircraft.module';
 import { UsersModule } from '../users/users.module';
+import { IncidentsModule } from '../incidents/incidents.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { UsersModule } from '../users/users.module';
     ]),
     AircraftModule,
     UsersModule,
+    IncidentsModule,
   ],
   providers: [AuditService, AuditResolver],
   exports: [AuditService],

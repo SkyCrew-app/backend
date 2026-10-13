@@ -8,7 +8,11 @@ jest.mock('uuid', () => ({
 import { v4 as uuidv4 } from 'uuid';
 import * as bcrypt from 'bcrypt';
 import * as fs from 'fs';
-import { PASSWORD_MIN_LENGTH, UsersService } from '../users.service';
+import {
+  hashLinkToken,
+  PASSWORD_MIN_LENGTH,
+  UsersService,
+} from '../users.service';
 import { User } from '../entity/users.entity';
 import { UserProgress } from '../entity/user-progress.entity';
 import { Lesson } from '../../e-learning/entity/lesson.entity';
@@ -149,9 +153,7 @@ describe('UsersService', () => {
 
   describe('create', () => {
     it("devrait créer un nouvel utilisateur avec mot de passe généré, envoyer un email de confirmation, et retourner l'utilisateur", async () => {
-      (uuidv4 as jest.Mock)
-        .mockReturnValueOnce('generated-pass-uuid')
-        .mockReturnValueOnce('validation-token-uuid');
+      (uuidv4 as jest.Mock).mockReturnValueOnce('generated-pass-uuid');
       jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedPassword');
 
       const newUserData = {
@@ -198,18 +200,29 @@ describe('UsersService', () => {
           last_name: 'Doe',
           email: 'john.doe@example.com',
           role: { id: 2, role_name: 'Pilote' },
-          validation_token: 'validation-token-uuid',
         }),
       );
-      const expectedUrl = `http://frontend.test/auth/new-account?token=validation-token-uuid`;
       expect(mailerService.sendMail).toHaveBeenCalledWith(
         'john.doe@example.com',
         'Bienvenue sur notre plateforme',
         expect.stringContaining('veuillez cliquer sur le lien suivant'),
         'confirmation-email',
-        { name: 'John', confirmationUrl: expectedUrl },
+        {
+          name: 'John',
+          confirmationUrl: expect.stringMatching(
+            /^http:\/\/frontend\.test\/auth\/new-account\?token=[0-9a-f]{64}$/,
+          ),
+        },
         'fr',
       );
+      // The link carries the token; the account only keeps its hash.
+      // (This test used to expect the token itself in the database.)
+      const sentUrl = (mailerService.sendMail as jest.Mock).mock.calls[0][4]
+        .confirmationUrl as string;
+      const sentToken = sentUrl.split('token=')[1];
+      const stored = userRepository.create.mock.calls[0][0].validation_token;
+      expect(stored).toBe(hashLinkToken(sentToken));
+      expect(stored).not.toBe(sentToken);
       expect(userRepository.save).toHaveBeenCalled();
       expect(result).toEqual(savedUser);
     });
@@ -265,6 +278,78 @@ describe('UsersService', () => {
     });
   });
 
+  describe('password rule', () => {
+    it('asks for 10 characters when a password is chosen', async () => {
+      expect(PASSWORD_MIN_LENGTH).toBe(10);
+      const user = {
+        id: 40,
+        validation_token: hashLinkToken('valid-token'),
+        validationTokenExpiresAt: new Date(Date.now() + 3600_000),
+      } as User;
+      userRepository.findOne.mockResolvedValue(user);
+      userRepository.save.mockImplementation(async (saved: User) => saved);
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed' as never);
+
+      // Nine characters were accepted under the previous rule (eight).
+      await expect(
+        service.confirmEmailAndSetPassword('valid-token', '123456789'),
+      ).rejects.toThrow('Le mot de passe doit contenir au moins 10 caractères');
+      await expect(
+        service.confirmEmailAndSetPassword('valid-token', '1234567890'),
+      ).resolves.toBeDefined();
+    });
+
+    it('still lets a member with an older, shorter password change it', async () => {
+      const user = {
+        id: 1,
+        password: 'hash-of-short',
+        email: 'a@b.fr',
+      } as User;
+      userRepository.findOne.mockResolvedValue(user);
+      userRepository.save.mockImplementation(async (saved: User) => saved);
+      // The current password is only compared, whatever its length.
+      const compare = jest
+        .spyOn(bcrypt, 'compare')
+        .mockResolvedValue(true as never);
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashed' as never);
+
+      await expect(
+        service.updatePassword(1, 'short1', 'tooshort9'),
+      ).rejects.toThrow('Le mot de passe doit contenir au moins 10 caractères');
+      await expect(
+        service.updatePassword(1, 'short1', 'long-enough-10'),
+      ).resolves.toBeDefined();
+      expect(compare).toHaveBeenCalledWith('short1', 'hash-of-short');
+    });
+  });
+
+  describe('assertMayDeactivate', () => {
+    it('refuses the last administrator before anything else is done', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: 1,
+        is_active: true,
+        isEmailConfirmed: true,
+        role: { role_name: 'Administrateur' },
+      });
+      userRepository.count.mockResolvedValue(0);
+
+      await expect(service.assertMayDeactivate(1)).rejects.toThrow(
+        'Le club doit garder au moins un administrateur actif',
+      );
+    });
+
+    it('answers not found for an unknown member, and passes an ordinary one', async () => {
+      userRepository.findOne.mockResolvedValueOnce(null);
+      await expect(service.assertMayDeactivate(404)).rejects.toThrow(
+        'introuvable',
+      );
+
+      const pilot = { id: 2, is_active: true, role: { role_name: 'Pilote' } };
+      userRepository.findOne.mockResolvedValueOnce(pilot);
+      await expect(service.assertMayDeactivate(2)).resolves.toBe(pilot);
+    });
+  });
+
   describe('resendInvitation', () => {
     it('sends a new link and replaces the previous one', async () => {
       const user = {
@@ -277,11 +362,9 @@ describe('UsersService', () => {
       } as User;
       userRepository.findOne.mockResolvedValue(user);
       userRepository.save.mockImplementation(async (saved) => saved);
-      (uuidv4 as jest.Mock).mockReturnValue('new-token');
 
       await expect(service.resendInvitation(5)).resolves.toBe(true);
 
-      expect(user.validation_token).toBe('new-token');
       expect(user.validationTokenExpiresAt.getTime()).toBeGreaterThan(
         Date.now(),
       );
@@ -292,11 +375,19 @@ describe('UsersService', () => {
         'confirmation-email',
         {
           name: 'New',
-          confirmationUrl:
-            'http://frontend.test/auth/new-account?token=new-token',
+          confirmationUrl: expect.stringMatching(
+            /^http:\/\/frontend\.test\/auth\/new-account\?token=[0-9a-f]{64}$/,
+          ),
         },
         'fr',
       );
+      // The new token is in the link only; its hash replaced the old one.
+      const sentToken = (
+        (mailerService.sendMail as jest.Mock).mock.calls[0][4]
+          .confirmationUrl as string
+      ).split('token=')[1];
+      expect(user.validation_token).toBe(hashLinkToken(sentToken));
+      expect(user.validation_token).not.toBe('old-token');
     });
 
     it('refuses for a member who already activated their account', async () => {
@@ -633,6 +724,41 @@ describe('UsersService', () => {
       );
 
       expect(user.role.role_name).toBe('Pilote');
+    });
+
+    it('signs the member out when their role changes, and only then', async () => {
+      mockFilesystem();
+      const user = {
+        id: 8,
+        email: 'pilot@example.com',
+        is_active: true,
+        isEmailConfirmed: true,
+        sessionVersion: 4,
+        role: { id: 3, role_name: 'Pilote' },
+      } as any;
+      userRepository.findOne.mockResolvedValue(user);
+      userRepository.save.mockImplementation(async (u) => u);
+      withRoles({ id: 5, role_name: 'Instructeur' });
+
+      // The role travels in the session token: an open session would keep
+      // showing the pages of the old role.
+      await service.updateUser(
+        'pilot@example.com',
+        { roleId: 5 } as any,
+        null,
+        { asAdmin: true },
+      );
+      expect(user.role.role_name).toBe('Instructeur');
+      expect(user.sessionVersion).toBe(5);
+
+      // Same role again, or a plain profile change: the session stays.
+      await service.updateUser(
+        'pilot@example.com',
+        { roleId: 5, first_name: 'Paul' } as any,
+        null,
+        { asAdmin: true },
+      );
+      expect(user.sessionVersion).toBe(5);
     });
 
     it("cible le compte demandé par l'appelant, pas l'email du formulaire", async () => {
@@ -1082,7 +1208,7 @@ describe('UsersService', () => {
       userRepository.findOne.mockResolvedValue(user);
 
       await expect(
-        service.confirmEmailAndSetPassword('valid-token', 'NewPass!'),
+        service.confirmEmailAndSetPassword('valid-token', 'NewPassw0rd!'),
       ).rejects.toThrow(INVALID_INVITATION);
       expect(user.isEmailConfirmed).toBe(false);
       expect(userRepository.save).not.toHaveBeenCalled();
@@ -1095,7 +1221,7 @@ describe('UsersService', () => {
       });
 
       await expect(
-        service.confirmEmailAndSetPassword('valid-token', 'NewPass!'),
+        service.confirmEmailAndSetPassword('valid-token', 'NewPassw0rd!'),
       ).rejects.toThrow(INVALID_INVITATION);
     });
 
@@ -1131,7 +1257,7 @@ describe('UsersService', () => {
       userRepository.save.mockImplementation(async (saved: User) => saved);
       jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedNewPass' as never);
 
-      await service.confirmEmailAndSetPassword('valid-token', 'NewPass!');
+      await service.confirmEmailAndSetPassword('valid-token', 'NewPassw0rd!');
 
       expect(user.validation_token).toBeNull();
       expect(user.validationTokenExpiresAt).toBeNull();
@@ -1157,13 +1283,14 @@ describe('UsersService', () => {
 
       const result = await service.confirmEmailAndSetPassword(
         'valid-token',
-        'NewPass!',
+        'NewPassw0rd!',
       );
 
+      // Looked up by the hash of the token of the link, never the token.
       expect(userRepository.findOne).toHaveBeenCalledWith({
-        where: { validation_token: 'valid-token' },
+        where: { validation_token: hashLinkToken('valid-token') },
       });
-      expect(bcrypt.hash).toHaveBeenCalledWith('NewPass!', 10);
+      expect(bcrypt.hash).toHaveBeenCalledWith('NewPassw0rd!', 10);
       expect(user.isEmailConfirmed).toBe(true);
       expect(user.validation_token).toBeNull();
       expect(user.password).toBe('hashedNewPass');
@@ -1185,7 +1312,7 @@ describe('UsersService', () => {
 
       const result = await service.confirmEmailAndSetPassword(
         'valid-token',
-        'NewPass!',
+        'NewPassw0rd!',
       );
 
       expect(result.sessionVersion).toBe(3);
@@ -1201,7 +1328,7 @@ describe('UsersService', () => {
       userRepository.findOne.mockResolvedValue(user);
       userRepository.save.mockImplementation(async (saved: User) => saved);
 
-      await service.confirmEmailAndSetPassword('valid-token', 'NewPass!');
+      await service.confirmEmailAndSetPassword('valid-token', 'NewPassw0rd!');
 
       expect(user.sessionVersion).toBe(1);
     });
@@ -1210,10 +1337,10 @@ describe('UsersService', () => {
       userRepository.findOne.mockClear();
 
       await expect(
-        service.confirmEmailAndSetPassword('', 'NewPass!'),
+        service.confirmEmailAndSetPassword('', 'NewPassw0rd!'),
       ).rejects.toThrow(INVALID_INVITATION);
       await expect(
-        service.confirmEmailAndSetPassword(undefined, 'NewPass!'),
+        service.confirmEmailAndSetPassword(undefined, 'NewPassw0rd!'),
       ).rejects.toThrow(INVALID_INVITATION);
       expect(userRepository.findOne).not.toHaveBeenCalled();
     });

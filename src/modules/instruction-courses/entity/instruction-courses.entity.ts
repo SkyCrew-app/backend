@@ -7,6 +7,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { User } from '../../users/entity/users.entity';
+import { Reservation } from '../../reservations/entity/reservations.entity';
 import { CourseStatus } from '../enum/course-status.enum';
 import { CourseComment } from './course-comment.entity';
 import { CourseCompetency } from './course-competency.entity';
@@ -33,6 +34,12 @@ export class InstructionCourse {
   @Field({ nullable: true })
   @Column({ type: 'timestamp', nullable: true })
   endTime?: Date;
+
+  // The aircraft booking made for this course, if any. When that booking is
+  // cancelled the course stays, without an aircraft.
+  @Field(() => Reservation, { nullable: true })
+  @ManyToOne(() => Reservation, { nullable: true, onDelete: 'SET NULL' })
+  reservation?: Reservation | null;
 
   @Field(() => CourseStatus)
   @Column({

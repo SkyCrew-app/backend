@@ -9,12 +9,14 @@ import { WebhookController } from '../../common/controllers/webhook.controller';
 import { User } from '../users/entity/users.entity';
 import { Invoice } from '../invoices/entity/invoices.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AdminActionsModule } from '../../common/admin-actions/admin-actions.module';
 
 @Module({
   controllers: [WebhookController],
   imports: [
     TypeOrmModule.forFeature([Payment, User, Invoice]),
     NotificationsModule,
+    AdminActionsModule,
   ],
   providers: [PaymentsResolver, PaymentsService, StripeService, PaypalService],
   exports: [PaymentsService, StripeService, PaypalService],

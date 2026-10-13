@@ -5,6 +5,7 @@ import { AdministrationService } from '../administration.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Administration } from '../entity/admin.entity';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
 
 // Bypass Guards
 jest.mock('@nestjs/common', () => {
@@ -18,6 +19,7 @@ jest.mock('@nestjs/common', () => {
 describe('AdministrationResolver', () => {
   let resolver: AdministrationResolver;
   let service: Partial<AdministrationService>;
+  const trace = { record: jest.fn() };
   const adminSample: Administration = {
     id: 1,
     clubName: 'Club',
@@ -47,6 +49,7 @@ describe('AdministrationResolver', () => {
   beforeEach(async () => {
     service = {
       findAll: jest.fn().mockResolvedValue([adminSample]),
+      findOne: jest.fn().mockResolvedValue(adminSample),
       create: jest.fn().mockResolvedValue(adminSample),
       update: jest.fn().mockResolvedValue(adminSample),
       remove: jest.fn().mockResolvedValue(true),
@@ -72,6 +75,7 @@ describe('AdministrationResolver', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: AdminActionsService, useValue: trace },
         AdministrationResolver,
         { provide: AdministrationService, useValue: service },
       ],
@@ -103,6 +107,43 @@ describe('AdministrationResolver', () => {
     const result = await resolver.update(input);
     expect(service.update).toHaveBeenCalledWith(input.id, input);
     expect(result).toEqual(adminSample);
+  });
+
+  describe('trace', () => {
+    const admin = { id: 1, email: 'admin@club.fr', role: 'Administrateur' };
+
+    beforeEach(() => trace.record.mockClear());
+
+    it('records what changed in the settings, before and after', async () => {
+      await resolver.update(
+        { id: 1, clubName: 'Aéroclub du Nord', fuelPrice: 0 } as any,
+        admin,
+      );
+
+      expect(trace.record).toHaveBeenCalledWith(
+        admin,
+        'settings.changed',
+        { type: 'settings', id: 1 },
+        { changes: { clubName: { from: 'Club', to: 'Aéroclub du Nord' } } },
+      );
+    });
+
+    it('records nothing when the form is saved unchanged', async () => {
+      await resolver.update({ id: 1, clubName: 'Club' } as any, admin);
+
+      expect(trace.record).not.toHaveBeenCalled();
+    });
+
+    it('records the site being put under maintenance or back', async () => {
+      await resolver.setSiteStatus(admin);
+
+      expect(trace.record).toHaveBeenCalledWith(
+        admin,
+        'settings.maintenance_toggled',
+        { type: 'settings', id: 1 },
+        { maintenanceActive: false },
+      );
+    });
   });
 
   it('delete devrait appeler service.remove', async () => {

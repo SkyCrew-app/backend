@@ -8,6 +8,7 @@ import { UserProgress } from './entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
 import { EvalModule } from '../eval/eval.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AdminActionsModule } from '../../common/admin-actions/admin-actions.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     MailerModule,
     forwardRef(() => EvalModule),
     NotificationsModule,
+    AdminActionsModule,
   ],
   providers: [UsersService, UsersResolver, UserProgressResolver],
   exports: [UsersService],

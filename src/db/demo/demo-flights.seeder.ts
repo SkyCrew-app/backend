@@ -3,6 +3,7 @@ import { Flight } from '../../modules/flights/entity/flights.entity';
 import { User } from '../../modules/users/entity/users.entity';
 import { Aircraft } from '../../modules/aircraft/entity/aircraft.entity';
 import { FlightsService } from '../../modules/flights/flights.service';
+import { INSTRUCTION_COUNTS_IN_INSTRUCTOR_TOTAL } from '../../modules/flights/flight-rules';
 import {
   FlightCategory,
   Reservation,
@@ -155,6 +156,16 @@ export const seedDemoFlights = async (
         await dataSource
           .getRepository(User)
           .increment({ id: reservation.user.id }, 'total_flight_hours', hours);
+        // The instructor of an instruction flight was on board too.
+        if (INSTRUCTION_COUNTS_IN_INSTRUCTOR_TOTAL && reservation.instructor) {
+          await dataSource
+            .getRepository(User)
+            .increment(
+              { id: reservation.instructor.id },
+              'total_flight_hours',
+              hours,
+            );
+        }
         await dataSource
           .getRepository(Aircraft)
           .increment(

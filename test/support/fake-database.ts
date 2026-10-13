@@ -90,6 +90,8 @@ export class FakeDatabase {
   checklistSubmissions: { id: number; reservationId: number | null }[] = [];
   flights: { id: number; reservationId: number; closed_at?: Date | null }[] =
     [];
+  // Last invoice number given, per year.
+  invoiceSequences = new Map<number, number>();
   // Row locks asked for, in order: "aircraft:1", "users:2"…
   locks: string[] = [];
   // Every hand-written SQL statement received.
@@ -167,7 +169,14 @@ export class FakeDatabase {
       }
     }
     // Relations are kept as references, as foreign keys are.
-    for (const relation of ['user', 'aircraft', 'invoice', 'student']) {
+    for (const relation of [
+      'user',
+      'aircraft',
+      'invoice',
+      'student',
+      'instructor',
+      'reservation',
+    ]) {
       if (stored[relation] && typeof stored[relation] === 'object') {
         stored[relation] = { id: stored[relation].id };
       }
@@ -188,6 +197,7 @@ export class FakeDatabase {
     if (entity === Reservation) {
       loaded.aircraft = related(Aircraft, row.aircraft);
       loaded.user = related(User, row.user);
+      loaded.instructor = related(User, row.instructor) ?? null;
       loaded.flights = this.flights.filter(
         (flight) => flight.reservationId === row.id,
       );
@@ -300,6 +310,14 @@ export class FakeDatabase {
       return [[], attached.length];
     }
 
+    // The year's invoice counter: created at 1, or raised by one.
+    if (sql.startsWith('INSERT INTO "invoice_sequences"')) {
+      const year = Number(parameters[0]);
+      const next = (this.invoiceSequences.get(year) ?? 0) + 1;
+      this.invoiceSequences.set(year, next);
+      return [{ last_number: next }];
+    }
+
     throw new Error(`Fake database: unexpected statement ${sql}`);
   }
 
@@ -313,6 +331,7 @@ export class FakeDatabase {
           ]),
         ),
         sequences: new Map(this.sequences),
+        invoiceSequences: new Map(this.invoiceSequences),
         checklistSubmissions: structuredClone(this.checklistSubmissions),
         flights: structuredClone(this.flights),
       };
@@ -321,6 +340,7 @@ export class FakeDatabase {
       } catch (error) {
         this.tables = snapshot.tables;
         this.sequences = snapshot.sequences;
+        this.invoiceSequences = snapshot.invoiceSequences;
         this.checklistSubmissions = snapshot.checklistSubmissions;
         this.flights = snapshot.flights;
         throw error;

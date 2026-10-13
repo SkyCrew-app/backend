@@ -119,6 +119,23 @@ describe('FlightsService', () => {
       });
     });
 
+    it('records the instructor of the booking on the flight', async () => {
+      resRepo.findOne.mockResolvedValue({
+        id: 1,
+        user: { id: 2 },
+        instructor: { id: 8, first_name: 'Irene' },
+      } as any);
+
+      const res = await service.createFlightByUser(input as any, pilot);
+
+      expect(res.instructor).toEqual({ id: 8 });
+      expect(resRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          relations: expect.arrayContaining(['instructor']),
+        }),
+      );
+    });
+
     it('throws if reservation not found', async () => {
       resRepo.findOne.mockResolvedValue(null);
       await expect(
@@ -453,6 +470,44 @@ describe('FlightsService', () => {
       );
     });
 
+    // The instructor of the booking was on board: they read this flight
+    // without any course with its pilot.
+    it('gives the flight to the instructor of its booking, not to another instructor', async () => {
+      const onBoard = { id: 8, email: 'i@example.com', role: 'Instructeur' };
+      const another = { id: 9, email: 'j@example.com', role: 'Instructeur' };
+      manager.count.mockResolvedValue(0);
+
+      repo.findOne.mockResolvedValue({ ...stored, instructor: { id: 8 } });
+      await expect(service.findOneFor(5, onBoard)).resolves.toMatchObject({
+        id: 5,
+      });
+      await expect(service.findOneFor(5, another)).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      // A flight plan not yet closed: the instructor is on the booking.
+      repo.findOne.mockResolvedValue({
+        ...stored,
+        reservation: { id: 40, instructor: { id: 8 } },
+      });
+      await expect(service.findOneFor(5, onBoard)).resolves.toMatchObject({
+        id: 5,
+      });
+    });
+
+    it('lets the instructor of one booking read that booking’s flights only', async () => {
+      const onBoard = { id: 8, email: 'i@example.com', role: 'Instructeur' };
+      manager.count.mockResolvedValue(0);
+
+      await expect(service.canReadFlightsOf(3, onBoard, 8)).resolves.toBe(true);
+      await expect(service.canReadFlightsOf(3, onBoard, null)).resolves.toBe(
+        false,
+      );
+      await expect(service.canReadFlightsOf(3, onBoard, 9)).resolves.toBe(
+        false,
+      );
+    });
+
     it('gives the flight to an instructor who teaches its pilot, not to another one', async () => {
       const instructor = { id: 6, email: 'i@example.com', role: 'Instructeur' };
       repo.findOne.mockResolvedValue(stored);
@@ -585,6 +640,139 @@ describe('FlightsService', () => {
         1.2,
       );
       expect(manager.increment).toHaveBeenCalledTimes(2);
+    });
+
+    describe('on an instruction booking', () => {
+      const withInstructor = (values: object = {}) =>
+        stored({
+          reservation: { ...booking(), instructor: { id: 8 } },
+          ...values,
+        });
+
+      it('records the instructor when the flight is closed and counts the hours for both', async () => {
+        repo.findOne.mockResolvedValue(withInstructor());
+
+        const res = await service.updateFlight(
+          7,
+          { id: 7, flight_hours: 1.2, closed: true } as any,
+          owner,
+        );
+
+        expect(res.instructor).toEqual({ id: 8 });
+        // The student's total grows as on any flight…
+        expect(manager.increment).toHaveBeenCalledWith(
+          User,
+          { id: 3 },
+          'total_flight_hours',
+          1.2,
+        );
+        // …the instructor was on board too…
+        expect(manager.increment).toHaveBeenCalledWith(
+          User,
+          { id: 8 },
+          'total_flight_hours',
+          1.2,
+        );
+        // …and the aircraft flew once.
+        expect(manager.increment).toHaveBeenCalledWith(
+          Aircraft,
+          { id: 12 },
+          'total_flight_hours',
+          1.2,
+        );
+        expect(manager.increment).toHaveBeenCalledTimes(3);
+      });
+
+      it('takes the instructor of the booking as it stands at closing', async () => {
+        // Planned with instructor 8; the booking is now with instructor 9.
+        repo.findOne.mockResolvedValue(
+          withInstructor({
+            instructor: { id: 8 },
+            reservation: { ...booking(), instructor: { id: 9 } },
+          }),
+        );
+
+        const res = await service.updateFlight(
+          7,
+          { id: 7, closed: true } as any,
+          owner,
+        );
+
+        expect(res.instructor).toEqual({ id: 9 });
+        expect(manager.increment).toHaveBeenCalledWith(
+          User,
+          { id: 9 },
+          'total_flight_hours',
+          1,
+        );
+        expect(manager.increment).not.toHaveBeenCalledWith(
+          User,
+          { id: 8 },
+          'total_flight_hours',
+          expect.anything(),
+        );
+      });
+
+      it('amends the hours of a closed instruction flight for the student, the instructor and the aircraft', async () => {
+        repo.findOne.mockResolvedValue(
+          withInstructor({
+            flight_hours: 1.5,
+            closed_at: new Date(),
+            instructor: { id: 8 },
+          }),
+        );
+
+        await service.updateFlight(7, { id: 7, flight_hours: 2 } as any, admin);
+
+        for (const [entity, id] of [
+          [User, 3],
+          [User, 8],
+          [Aircraft, 12],
+        ] as const) {
+          expect(manager.increment).toHaveBeenCalledWith(
+            entity,
+            { id },
+            'total_flight_hours',
+            0.5,
+          );
+        }
+        expect(manager.increment).toHaveBeenCalledTimes(3);
+        expect(manager.save).toHaveBeenCalledWith(
+          FlightAmendment,
+          expect.objectContaining({
+            before: expect.objectContaining({ instructor_id: 8 }),
+            after: expect.objectContaining({ instructor_id: 8 }),
+          }),
+        );
+      });
+
+      it('moves the instructor’s hours when an administrator moves the flight to a booking without instructor', async () => {
+        repo.findOne.mockResolvedValue(
+          withInstructor({
+            flight_hours: 1.5,
+            closed_at: new Date(),
+            instructor: { id: 8 },
+          }),
+        );
+        resRepo.findOne.mockResolvedValue({
+          id: 41,
+          user: { id: 3 },
+          aircraft: { id: 12 },
+          instructor: null,
+        } as any);
+
+        const res = await service.updateFlight(
+          7,
+          { id: 7, reservation_id: 41 } as any,
+          admin,
+        );
+
+        expect(res.instructor).toBeNull();
+        // Only the instructor loses the hours: same pilot, same aircraft.
+        expect(manager.increment.mock.calls).toEqual([
+          [User, { id: 8 }, 'total_flight_hours', -1.5],
+        ]);
+      });
     });
 
     it('counts a flight closed twice at the same time only once', async () => {
@@ -887,6 +1075,21 @@ describe('FlightsService', () => {
           before: expect.objectContaining({ flight_hours: 1.5, user_id: 3 }),
         }),
       );
+    });
+
+    it('takes the hours of a deleted instruction flight back from the student, the instructor and the aircraft', async () => {
+      repo.findOne.mockResolvedValue({ ...closed(), instructor: { id: 8 } });
+
+      await service.removeFlight(9, {
+        ...admin,
+        role: { role_name: 'Administrateur' },
+      });
+
+      expect(manager.increment.mock.calls).toEqual([
+        [User, { id: 3 }, 'total_flight_hours', -1.5],
+        [User, { id: 8 }, 'total_flight_hours', -1.5],
+        [Aircraft, { id: 12 }, 'total_flight_hours', -1.5],
+      ]);
     });
 
     it('refuses to delete a flight an incident refers to', async () => {

@@ -5,6 +5,7 @@ import { PaymentsService } from '../payments.service';
 import { CreatePaymentInput } from '../dto/create-payment.input';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
 
 const admin = {
   id: 1,
@@ -22,6 +23,8 @@ describe('PaymentsResolver', () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let service: PaymentsService;
 
+  const trace = { record: jest.fn() };
+
   const mockService = {
     create: jest.fn(),
     findAll: jest.fn(),
@@ -38,6 +41,7 @@ describe('PaymentsResolver', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        { provide: AdminActionsService, useValue: trace },
         PaymentsResolver,
         {
           provide: PaymentsService,
@@ -407,6 +411,95 @@ describe('PaymentsResolver', () => {
         input,
         administrator,
       );
+    });
+  });
+
+  describe('trace of administrator actions', () => {
+    const administrator = {
+      id: 1,
+      email: 'admin@club.fr',
+      role: 'Administrateur',
+    };
+
+    it('records a manual entry with its amount, direction, method and reason', async () => {
+      mockService.adjustBalance.mockResolvedValue({
+        id: 44,
+        user: { id: 3, first_name: 'Jean', last_name: 'Dupont' },
+      });
+
+      await resolver.adjustMemberBalance(
+        {
+          user_id: 3,
+          amount: 250,
+          credit: false,
+          payment_method: 'correction',
+          reason: 'Erreur de saisie',
+        },
+        administrator,
+      );
+
+      expect(trace.record).toHaveBeenCalledWith(
+        administrator,
+        'balance.adjusted',
+        { type: 'member', id: 3, label: 'Jean Dupont' },
+        {
+          paymentId: 44,
+          direction: 'debit',
+          amount: 250,
+          method: 'correction',
+          reason: 'Erreur de saisie',
+        },
+      );
+    });
+
+    it('records nothing when the entry is refused', async () => {
+      mockService.adjustBalance.mockRejectedValue(new Error('refused'));
+
+      await expect(
+        resolver.adjustMemberBalance({ user_id: 3 } as any, administrator),
+      ).rejects.toThrow('refused');
+      expect(trace.record).not.toHaveBeenCalled();
+    });
+
+    it('records a payment status set by hand and a refund recorded by hand', async () => {
+      mockService.updatePaymentStatus.mockResolvedValue({
+        id: 9,
+        payment_status: 'cancelled',
+        amount: 50,
+        user: { id: 3 },
+      });
+      mockService.processRefund.mockResolvedValue({
+        id: 9,
+        refunded_amount: 20,
+        user: { id: 3 },
+      });
+
+      await resolver.updatePaymentStatus('pi_1', 'cancelled', administrator);
+      await resolver.processRefund('pi_1', 20, administrator);
+
+      expect(
+        trace.record.mock.calls.map(([, action, target, summary]) => [
+          action,
+          target,
+          summary,
+        ]),
+      ).toEqual([
+        [
+          'payment.status_changed',
+          { type: 'payment', id: 9 },
+          {
+            requested: 'cancelled',
+            status: 'cancelled',
+            memberId: 3,
+            amount: 50,
+          },
+        ],
+        [
+          'payment.refund_recorded',
+          { type: 'payment', id: 9 },
+          { amount: 20, refundedInTotal: 20, memberId: 3 },
+        ],
+      ]);
     });
   });
 });

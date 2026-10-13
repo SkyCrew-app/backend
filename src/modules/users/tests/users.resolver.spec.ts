@@ -19,6 +19,7 @@ const adminUser = {
 describe('UsersResolver', () => {
   let resolver: UsersResolver;
   let usersService: Partial<UsersService>;
+  let adminActions: { record: jest.Mock };
 
   beforeEach(() => {
     // Créer un faux service UsersService avec des méthodes simulées
@@ -34,12 +35,111 @@ describe('UsersResolver', () => {
       confirmEmailAndSetPassword: jest.fn(),
       getUserPreferences: jest.fn(),
       updateUserPreferences: jest.fn(),
+      setActive: jest.fn(),
+      remove: jest.fn(),
+      resendInvitation: jest.fn(),
     };
-    resolver = new UsersResolver(usersService as UsersService);
+    adminActions = { record: jest.fn() };
+    resolver = new UsersResolver(
+      usersService as UsersService,
+      adminActions as any,
+    );
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  describe('trace of administrator actions', () => {
+    const member = {
+      id: 7,
+      first_name: 'Jean',
+      last_name: 'Dupont',
+      email: 'jean@club.fr',
+    };
+    const target = { type: 'member', id: 7, label: 'Jean Dupont' };
+
+    it('records a deactivation and a reactivation', async () => {
+      (usersService.setActive as jest.Mock).mockResolvedValue(member);
+
+      await resolver.setUserActive(7, false, adminUser);
+      await resolver.setUserActive(7, true, adminUser);
+
+      expect(adminActions.record.mock.calls).toEqual([
+        [adminUser, 'member.deactivated', target],
+        [adminUser, 'member.reactivated', target],
+      ]);
+    });
+
+    it('records a deletion with the name the member had', async () => {
+      (usersService.findOneById as jest.Mock).mockResolvedValue(member);
+      (usersService.remove as jest.Mock).mockResolvedValue(true);
+
+      await expect(resolver.deleteUser(7, adminUser)).resolves.toBe(true);
+
+      expect(adminActions.record).toHaveBeenCalledWith(
+        adminUser,
+        'member.deleted',
+        target,
+        { email: 'jean@club.fr' },
+      );
+    });
+
+    it('records nothing when the deletion is refused', async () => {
+      (usersService.findOneById as jest.Mock).mockResolvedValue(member);
+      (usersService.remove as jest.Mock).mockRejectedValue(
+        new Error('history'),
+      );
+
+      await expect(resolver.deleteUser(7, adminUser)).rejects.toThrow(
+        'history',
+      );
+      expect(adminActions.record).not.toHaveBeenCalled();
+    });
+
+    it('records an invitation sent again', async () => {
+      (usersService.resendInvitation as jest.Mock).mockResolvedValue(true);
+      (usersService.findOneById as jest.Mock).mockResolvedValue(member);
+
+      await resolver.resendInvitation(7, adminUser);
+
+      expect(adminActions.record).toHaveBeenCalledWith(
+        adminUser,
+        'member.invitation_resent',
+        target,
+      );
+    });
+
+    it('records a role change with the role before and after, and nothing for a profile change', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        ...member,
+        role: { role_name: 'Pilote' },
+      });
+      (usersService.updateUser as jest.Mock).mockResolvedValue({
+        ...member,
+        role: { role_name: 'Instructeur' },
+      });
+
+      await resolver.updateUser(
+        { email: 'jean@club.fr', roleId: 3 } as any,
+        undefined,
+        adminUser,
+      );
+      expect(adminActions.record).toHaveBeenCalledWith(
+        adminUser,
+        'member.role_changed',
+        target,
+        { from: 'Pilote', to: 'Instructeur' },
+      );
+
+      adminActions.record.mockClear();
+      await resolver.updateUser(
+        { email: 'jean@club.fr', first_name: 'Jeannot' } as any,
+        undefined,
+        adminUser,
+      );
+      expect(adminActions.record).not.toHaveBeenCalled();
+    });
   });
 
   it('getUsers devrait retourner la liste des utilisateurs en appelant UsersService.findAll', async () => {

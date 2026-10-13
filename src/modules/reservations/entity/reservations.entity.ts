@@ -66,6 +66,12 @@ export class Reservation {
   @ManyToOne(() => User, (user) => user.reservations, { eager: true })
   user: User;
 
+  // The instructor on board, for an instruction flight. Their agenda is
+  // blocked like the pilot's and their licence is the one that must be valid.
+  @Field(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true, eager: true })
+  instructor: User | null;
+
   @Field(() => [Flight], { nullable: true })
   @OneToMany(() => Flight, (flight) => flight.reservation, {
     nullable: true,

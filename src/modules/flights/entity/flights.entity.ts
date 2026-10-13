@@ -3,6 +3,7 @@ import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { Incident } from '../../incidents/entity/incidents.entity';
+import { LogbookRole } from '../logbook-role';
 
 @ObjectType()
 @Entity('flights')
@@ -31,6 +32,12 @@ export class Flight {
     nullable: false,
   })
   user: User;
+
+  // The instructor on board, taken from the booking: the pilot's hours are
+  // then dual instruction time and the instructor's instruction given.
+  @Field(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true })
+  instructor?: User | null;
 
   @Field(() => Float)
   @Column('float')
@@ -104,6 +111,11 @@ export class Flight {
   @Field({ nullable: true })
   @Column({ type: 'timestamptz', nullable: true })
   closed_at?: Date;
+
+  // Set on the entries of a logbook only: the part its owner took in the
+  // flight. Not stored.
+  @Field(() => LogbookRole, { nullable: true })
+  logbook_role?: LogbookRole;
 
   @Field(() => String, { nullable: true })
   departure_airport_info?: string;

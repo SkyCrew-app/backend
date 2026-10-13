@@ -175,6 +175,8 @@ describe('notifications in the language of their recipient', () => {
         findOne: jest.fn(),
         create: jest.fn().mockImplementation((course) => course),
         save: jest.fn().mockImplementation(async (course) => course),
+        // No aircraft booking in the way.
+        manager: { find: jest.fn().mockResolvedValue([]) },
       };
       competencyRepository = {
         findOne: jest.fn(),

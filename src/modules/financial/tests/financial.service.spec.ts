@@ -11,6 +11,8 @@ import {
 } from '../../reservations/entity/reservations.entity';
 import { Administration } from '../../administration/entity/admin.entity';
 import { NotFoundException } from '@nestjs/common';
+import { Payment } from '../../payments/entity/payments.entity';
+import { cashFlowOf } from '../financial.service';
 
 describe('FinancialService', () => {
   let service: FinancialService;
@@ -21,6 +23,7 @@ describe('FinancialService', () => {
     Record<keyof Repository<Reservation>, jest.Mock>
   >;
   let adminRepo: Partial<Record<keyof Repository<Administration>, jest.Mock>>;
+  let paymentRepo: { find: jest.Mock };
 
   beforeEach(async () => {
     reportRepo = {
@@ -43,6 +46,7 @@ describe('FinancialService', () => {
     aircraftRepo = { findOne: jest.fn() };
     reservationRepo = { find: jest.fn() };
     adminRepo = { findOne: jest.fn() };
+    paymentRepo = { find: jest.fn().mockResolvedValue([]) };
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       providers: [
@@ -52,6 +56,7 @@ describe('FinancialService', () => {
         { provide: getRepositoryToken(Aircraft), useValue: aircraftRepo },
         { provide: getRepositoryToken(Reservation), useValue: reservationRepo },
         { provide: getRepositoryToken(Administration), useValue: adminRepo },
+        { provide: getRepositoryToken(Payment), useValue: paymentRepo },
       ],
     }).compile();
 
@@ -191,7 +196,10 @@ describe('FinancialService', () => {
       expect(await service.aggregateRevenuesForPeriod(start, end)).toBe(759.99);
     });
 
-    it('aggregateExpensesForPeriod sums recorded and fuel', async () => {
+    // This test used to expect an invented fuel cost on top of the
+    // recorded expenses: 50 L per estimated flight hour at the club's fuel
+    // price (20 + 1 x 50 x 10 = 520).
+    it('aggregateExpensesForPeriod is what was recorded, with no estimated fuel', async () => {
       const admin = { id: 1, fuelPrice: 10 } as any;
       const qb: any = {
         select: jest.fn().mockReturnThis(),
@@ -203,8 +211,8 @@ describe('FinancialService', () => {
       reservationRepo.find.mockResolvedValue([
         { estimated_flight_hours: 1, status: ReservationStatus.CONFIRMED },
       ] as any);
-      const total = await service.aggregateExpensesForPeriod(start, end);
-      expect(total).toBeCloseTo(20 + 1 * 50 * 10);
+
+      expect(await service.aggregateExpensesForPeriod(start, end)).toBe(20);
     });
 
     it('generateBudgetForecast returns correct forecast', async () => {
@@ -223,13 +231,95 @@ describe('FinancialService', () => {
         getRawOne: jest.fn().mockResolvedValue({ sum: '6' }),
       };
       expenseRepo.createQueryBuilder.mockReturnValue(qb);
+      paymentRepo.find.mockResolvedValue([
+        {
+          kind: 'top_up',
+          amount: '500.00',
+          payment_status: 'completed',
+          payment_method: 'stripe',
+        },
+        {
+          kind: 'provider_refund',
+          amount: '20.00',
+          payment_status: 'completed',
+          payment_method: 'stripe',
+        },
+      ]);
 
-      const { revenueForecast, expenseForecast, netForecast } =
-        await service.generateBudgetForecast(start, end);
+      const forecast = await service.generateBudgetForecast(start, end);
       // What was charged, not 3 h x the club rate.
-      expect(revenueForecast).toBe(420);
-      expect(expenseForecast).toBeCloseTo(6 + 3 * 50 * 5);
-      expect(netForecast).toBe(revenueForecast - expenseForecast);
+      expect(forecast.revenueForecast).toBe(420);
+      // Recorded expenses only (it used to add 3 x 50 x 5 of fuel).
+      expect(forecast.expenseForecast).toBe(6);
+      expect(forecast.netForecast).toBe(414);
+      // Cash received is shown next to revenue, not mixed with it.
+      expect(forecast.cashReceived).toBe(500);
+      expect(forecast.cashRefunded).toBe(20);
+    });
+  });
+
+  describe('cash received', () => {
+    const line = (
+      kind: string,
+      amount: string,
+      status = 'completed',
+      method = 'stripe',
+    ) => ({
+      kind,
+      amount: amount as unknown as number,
+      payment_status: status,
+      payment_method: method,
+    });
+
+    it('counts the money members paid in, not what moved inside their accounts', () => {
+      expect(
+        cashFlowOf([
+          line('top_up', '100.00'),
+          // Still counted once refunded: the refund is its own line.
+          line('top_up', '50.10', 'refunded'),
+          // Never paid.
+          line('top_up', '999.00', 'pending'),
+          line('top_up', '999.00', 'failed'),
+          line('manual_credit', '30.00', 'completed', 'cash'),
+          line('manual_credit', '40.00', 'completed', 'cheque'),
+          line('manual_credit', '10.20', 'completed', 'transfer'),
+          // A correction brings no money in.
+          line('manual_credit', '500.00', 'completed', 'correction'),
+          // Flights and their refunds move the balance, not the bank account.
+          line('booking', '150.00', 'completed', 'account_balance'),
+          line('booking_refund', '150.00', 'completed', 'account_balance'),
+          line('manual_debit', '20.00', 'completed', 'correction'),
+        ]),
+      ).toEqual({ cashReceived: 230.3, cashRefunded: 0 });
+    });
+
+    it('counts what the provider gave back, less the chargebacks the club won', () => {
+      expect(
+        cashFlowOf([
+          line('provider_refund', '20.00'),
+          line('provider_refund', '100.00'),
+          line('dispute_won', '100.00'),
+        ]),
+      ).toEqual({ cashReceived: 0, cashRefunded: 20 });
+    });
+
+    it('reads the lines of the period from the payments table', async () => {
+      paymentRepo.find.mockResolvedValue([line('top_up', '75.00')]);
+      const from = new Date('2026-09-01');
+      const to = new Date('2026-09-30');
+
+      await expect(service.cashFlowForPeriod(from, to)).resolves.toEqual({
+        cashReceived: 75,
+        cashRefunded: 0,
+      });
+      const { where } = paymentRepo.find.mock.calls[0][0];
+      expect(where.payment_date.value).toEqual([from, to]);
+      expect(where.kind.value).toEqual([
+        'top_up',
+        'manual_credit',
+        'provider_refund',
+        'dispute_won',
+      ]);
     });
   });
 

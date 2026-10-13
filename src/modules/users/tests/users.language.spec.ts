@@ -220,7 +220,12 @@ describe('member language', () => {
         updateLanguage: jest.fn().mockResolvedValue({ id: 3, language: 'en' }),
         create: jest.fn(),
       };
-      resolver = new UsersResolver(usersService as any);
+      resolver = new UsersResolver(
+        usersService as any,
+        {
+          record: jest.fn(),
+        } as any,
+      );
     });
 
     it('lets the signed-in member change their own language', async () => {
