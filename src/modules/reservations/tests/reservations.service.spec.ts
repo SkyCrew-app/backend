@@ -472,7 +472,7 @@ describe('ReservationsService', () => {
         'reservation',
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledTimes(2);
-      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledTimes(2);
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledTimes(3);
       expect(result).toEqual([{ id: 1 }]);
     });
 
