@@ -7,6 +7,11 @@ import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { FileUpload, ReadStream, WriteStream } from 'graphql-upload-ts';
 import { Readable } from 'stream';
+import { saveUploadToTmp } from '../../../common/uploads/save-upload';
+
+jest.mock('../../../common/uploads/save-upload', () => ({
+  saveUploadToTmp: jest.fn(),
+}));
 
 // Bypass guards
 jest.mock('@nestjs/common', () => {
@@ -43,6 +48,10 @@ describe('AircraftResolver', () => {
   };
 
   beforeEach(async () => {
+    (saveUploadToTmp as jest.Mock).mockReset();
+    (saveUploadToTmp as jest.Mock).mockImplementation(
+      async (_upload, kind) => `/tmp/${kind}`,
+    );
     service = {
       findAll: jest.fn().mockResolvedValue([sample]),
       create: jest.fn().mockResolvedValue(sample),
@@ -74,23 +83,42 @@ describe('AircraftResolver', () => {
 
   it('createAircraft devrait gérer upload de file et image', async () => {
     const res = await resolver.createAircraft({} as any, fakeFile, fakeFile);
+    expect(saveUploadToTmp).toHaveBeenCalledWith(fakeFile, 'document');
+    expect(saveUploadToTmp).toHaveBeenCalledWith(fakeFile, 'picture');
     expect(service.create).toHaveBeenCalledWith(
       {} as any,
-      expect.any(Array),
-      expect.any(String),
+      ['/tmp/document'],
+      '/tmp/picture',
     );
     expect(res).toEqual(sample);
   });
 
   it('updateAircraft devrait gérer upload et appeler service.update', async () => {
     const res = await resolver.updateAircraft(1, {} as any, fakeFile, fakeFile);
+    expect(saveUploadToTmp).toHaveBeenCalledWith(fakeFile, 'document');
+    expect(saveUploadToTmp).toHaveBeenCalledWith(fakeFile, 'picture');
     expect(service.update).toHaveBeenCalledWith(
       1,
       {} as any,
-      expect.any(Array),
-      expect.any(String),
+      ['/tmp/document'],
+      '/tmp/picture',
     );
     expect(res).toEqual(sample);
+  });
+
+  it('ne crée ni ne modifie rien quand un fichier est refusé', async () => {
+    (saveUploadToTmp as jest.Mock).mockRejectedValue(
+      new Error('Type de fichier non autorisé'),
+    );
+
+    await expect(
+      resolver.createAircraft({} as any, fakeFile, undefined),
+    ).rejects.toThrow('Type de fichier non autorisé');
+    await expect(
+      resolver.updateAircraft(1, {} as any, undefined, fakeFile),
+    ).rejects.toThrow('Type de fichier non autorisé');
+    expect(service.create).not.toHaveBeenCalled();
+    expect(service.update).not.toHaveBeenCalled();
   });
 
   it('getHistoryAircraft devrait appeler service.aircraftHistory', async () => {

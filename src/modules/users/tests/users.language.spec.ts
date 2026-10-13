@@ -36,7 +36,12 @@ describe('member language', () => {
       findOneOrFail: jest.fn(),
       save: jest.fn().mockImplementation(async (user) => user),
       create: jest.fn().mockImplementation((user) => user),
-    };
+      manager: {
+        getRepository: () => ({
+          findOne: jest.fn().mockResolvedValue({ id: 2, role_name: 'Pilote' }),
+        }),
+      },
+    } as any;
     mailer = { sendMail: jest.fn().mockResolvedValue(true) };
     notifications = { create: jest.fn() };
     service = new UsersService(
@@ -260,6 +265,7 @@ describe('member language', () => {
 
       expect(usersService.create).toHaveBeenCalledWith(
         expect.objectContaining({ email: 'ada@example.com', language: 'en' }),
+        undefined,
       );
     });
 
@@ -277,6 +283,7 @@ describe('member language', () => {
 
       expect(usersService.create).toHaveBeenCalledWith(
         expect.objectContaining({ language: 'fr' }),
+        undefined,
       );
     });
   });

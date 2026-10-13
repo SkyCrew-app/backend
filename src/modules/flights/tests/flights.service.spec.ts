@@ -32,6 +32,7 @@ describe('FlightsService', () => {
       findOne: jest.fn(),
       delete: jest.fn(),
       create: jest.fn(),
+      manager: { increment: jest.fn() } as any,
     };
     resRepo = { findOne: jest.fn(), find: jest.fn() };
     notif = { create: jest.fn() };
@@ -382,6 +383,13 @@ describe('FlightsService', () => {
 
       expect(res.closed_at).toBeInstanceOf(Date);
       expect(res).not.toHaveProperty('closed');
+      // The hours flown join the pilot's total when the flight is closed.
+      expect((repo as any).manager.increment).toHaveBeenCalledWith(
+        expect.anything(),
+        { id: 3 },
+        'total_flight_hours',
+        1.2,
+      );
     });
 
     it('leaves the flight open otherwise', async () => {
@@ -390,6 +398,7 @@ describe('FlightsService', () => {
       const res = await service.updateFlight(7, { id: 7 } as any, owner);
 
       expect(res.closed_at).toBeUndefined();
+      expect((repo as any).manager.increment).not.toHaveBeenCalled();
     });
 
     it('refuses a pilot who changes a flight already closed', async () => {
@@ -404,7 +413,11 @@ describe('FlightsService', () => {
 
     it('lets an administrator amend a closed flight without reopening it', async () => {
       const closedAt = new Date('2026-10-01T10:00:00Z');
-      repo.findOne.mockResolvedValue({ ...stored(), closed_at: closedAt });
+      repo.findOne.mockResolvedValue({
+        ...stored(),
+        flight_hours: 1.5,
+        closed_at: closedAt,
+      });
 
       const res = await service.updateFlight(
         7,
@@ -413,6 +426,13 @@ describe('FlightsService', () => {
       );
 
       expect(res).toMatchObject({ flight_hours: 2, closed_at: closedAt });
+      // Only the difference with what was already counted.
+      expect((repo as any).manager.increment).toHaveBeenCalledWith(
+        expect.anything(),
+        { id: 3 },
+        'total_flight_hours',
+        0.5,
+      );
     });
 
     it('throws if not found', async () => {

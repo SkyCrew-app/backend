@@ -22,6 +22,7 @@ import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { WeatherResponse } from './interfaces/weather.interface';
 import { isAdmin, SessionUser } from '../../common/auth/access';
+import { User } from '../users/entity/users.entity';
 import { buildFlightRecapPdf } from './flight-recap-pdf';
 import { DEFAULT_LANGUAGE, Language } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
@@ -329,11 +330,32 @@ export class FlightsService {
       (changes as any).waypoints = JSON.stringify(changes.waypoints);
     }
 
+    const wasClosed = !!flight.closed_at;
+    const hoursBefore = Number(flight.flight_hours) || 0;
+
     Object.assign(flight, changes);
     if (closed && !flight.closed_at) {
       flight.closed_at = new Date();
     }
-    return this.flightsRepository.save(flight);
+    const saved = await this.flightsRepository.save(flight);
+
+    // The member's total follows their closed flights: the whole flight when
+    // it is closed, the difference when a closed flight is amended.
+    const hoursAfter = Number(saved.flight_hours) || 0;
+    const delta = wasClosed
+      ? hoursAfter - hoursBefore
+      : saved.closed_at
+        ? hoursAfter
+        : 0;
+    if (delta !== 0 && flight.user?.id) {
+      await this.flightsRepository.manager.increment(
+        User,
+        { id: flight.user.id },
+        'total_flight_hours',
+        delta,
+      );
+    }
+    return saved;
   }
 
   async removeFlight(id: number, requestingUserId: number): Promise<boolean> {

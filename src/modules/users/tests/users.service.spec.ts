@@ -151,8 +151,22 @@ describe('UsersService', () => {
         validation_token: 'validation-token-uuid',
       });
       userRepository.save.mockResolvedValue(savedUser);
+      const roleLookup = jest
+        .fn()
+        .mockResolvedValue({ id: 2, role_name: 'Pilote' });
+      (userRepository as any).manager = {
+        getRepository: () => ({ findOne: roleLookup }),
+      };
 
       const result = await service.create(newUserData);
+
+      // A new member is never an administrator by default.
+      expect(roleLookup).toHaveBeenCalledWith({
+        where: { role_name: 'Pilote' },
+      });
+      expect(userRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ role: { id: 2, role_name: 'Pilote' } }),
+      );
 
       expect(bcrypt.hash).toHaveBeenCalledWith(expect.any(String), 10);
       expect(userRepository.create).toHaveBeenCalledWith(
@@ -160,7 +174,7 @@ describe('UsersService', () => {
           first_name: 'John',
           last_name: 'Doe',
           email: 'john.doe@example.com',
-          role: { id: 1 },
+          role: { id: 2, role_name: 'Pilote' },
           validation_token: 'validation-token-uuid',
         }),
       );
@@ -277,33 +291,6 @@ describe('UsersService', () => {
       );
       expect(userRepository.save).not.toHaveBeenCalled();
       expect(mailerService.sendMail).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('setPassword', () => {
-    it("devrait lever une erreur si l'utilisateur n'existe pas (email inconnu)", async () => {
-      userRepository.findOne.mockResolvedValue(undefined);
-
-      await expect(
-        service.setPassword('noexist@example.com', 'newPass'),
-      ).rejects.toThrow('User not found');
-      expect(userRepository.findOne).toHaveBeenCalledWith({
-        where: { email: 'noexist@example.com' },
-      });
-    });
-
-    it("devrait mettre à jour le mot de passe de l'utilisateur s'il existe", async () => {
-      const user = {
-        id: 7,
-        email: 'exists@example.com',
-        password: 'oldpass',
-      } as User;
-      userRepository.findOne.mockResolvedValue(user);
-
-      await service.setPassword('exists@example.com', 'newPassword123');
-
-      expect(user.password).toBe('newPassword123');
-      expect(userRepository.save).toHaveBeenCalledWith(user);
     });
   });
 
@@ -721,6 +708,51 @@ describe('UsersService', () => {
       expect(userRepository.save).toHaveBeenCalledWith(user);
       expect(result.isEmailConfirmed).toBe(true);
       expect(result.validation_token).toBeNull();
+    });
+
+    it('closes the sessions opened before the activation', async () => {
+      const user = {
+        id: 41,
+        validation_token: 'valid-token',
+        sessionVersion: 2,
+      } as User;
+      userRepository.findOne.mockResolvedValue(user);
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('hashedNewPass' as never);
+      userRepository.save.mockImplementation(async (saved: User) => saved);
+
+      const result = await service.confirmEmailAndSetPassword(
+        'valid-token',
+        'NewPass!',
+      );
+
+      expect(result.sessionVersion).toBe(3);
+      expect(result.password).toBe('hashedNewPass');
+    });
+
+    it('starts the session version when the account never had one', async () => {
+      const user = { id: 42, validation_token: 'valid-token' } as User;
+      userRepository.findOne.mockResolvedValue(user);
+      userRepository.save.mockImplementation(async (saved: User) => saved);
+
+      await service.confirmEmailAndSetPassword('valid-token', 'NewPass!');
+
+      expect(user.sessionVersion).toBe(1);
+    });
+
+    it('never looks an empty token up', async () => {
+      userRepository.findOne.mockClear();
+
+      await expect(
+        service.confirmEmailAndSetPassword('', 'NewPass!'),
+      ).rejects.toThrow('User not found');
+      await expect(
+        service.confirmEmailAndSetPassword(undefined, 'NewPass!'),
+      ).rejects.toThrow('User not found');
+      expect(userRepository.findOne).not.toHaveBeenCalled();
+    });
+
+    it('offers no way to store a password that is not hashed', () => {
+      expect((service as any).setPassword).toBeUndefined();
     });
   });
 

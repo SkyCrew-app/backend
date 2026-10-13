@@ -1,5 +1,6 @@
 import { InputType, Field, Float, Int } from '@nestjs/graphql';
 import { Taxonomies } from '../types/taxonomies';
+import { IsPhoneNumberField } from '../../../common/validation/phone-number';
 
 @InputType()
 export class CreateAdministrationInput {
@@ -10,6 +11,7 @@ export class CreateAdministrationInput {
   contactEmail: string;
 
   @Field()
+  @IsPhoneNumberField()
   contactPhone: string;
 
   @Field()

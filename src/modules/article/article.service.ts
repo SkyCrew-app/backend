@@ -5,8 +5,7 @@ import { Article } from './entity/article.entity';
 import { CreateArticleInput } from './dto/create-article.input';
 import { UpdateArticleInput } from './dto/update-article.input';
 import { FileUpload } from 'graphql-upload-ts';
-import * as path from 'path';
-import * as fs from 'fs';
+import { saveUploadTo, UploadKind } from '../../common/uploads/save-upload';
 import { sanitizeRichText } from '../../common/html/sanitize-rich-text';
 
 @Injectable()
@@ -73,24 +72,13 @@ export class ArticlesService {
     return this.articlesRepository.save(article);
   }
 
-  async uploadFile(file?: FileUpload): Promise<string | null> {
+  // Article pictures and documents are served from /uploads/tmp.
+  async uploadFile(
+    file?: FileUpload,
+    kind: UploadKind = 'document',
+  ): Promise<string | null> {
     if (!file) return null;
-
-    const { createReadStream, filename } = await file;
-    const uploadDir = path.join(__dirname, '../../uploads/tmp');
-    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-    const filePath = path.join(uploadDir, filename);
-    const stream = createReadStream();
-
-    await new Promise<void>((resolve, reject) => {
-      const writeStream = fs.createWriteStream(filePath);
-      stream.pipe(writeStream);
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
-
-    return `/uploads/tmp/${filename}`;
+    return saveUploadTo(file, kind, 'tmp');
   }
 
   async uploadFiles(files?: FileUpload[]): Promise<string[] | null> {
@@ -98,7 +86,7 @@ export class ArticlesService {
 
     const paths = [];
     for (const file of files) {
-      const path = await this.uploadFile(file);
+      const path = await this.uploadFile(file, 'document');
       if (path) paths.push(path);
     }
     return paths;

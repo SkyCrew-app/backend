@@ -22,4 +22,7 @@ export class Aerodrome {
 
   @Field(() => Float, { nullable: true })
   longitude?: number;
+
+  @Field({ nullable: true, description: 'IANA time zone, e.g. Europe/Paris' })
+  timezone?: string;
 }

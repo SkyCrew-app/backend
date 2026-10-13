@@ -122,6 +122,7 @@ describe('notifications in the language of their recipient', () => {
       });
       userRepository.findOne.mockResolvedValue({
         id: 4,
+        language: 'en',
         user_account_balance: 100,
       });
 

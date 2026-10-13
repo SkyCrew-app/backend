@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { Socket, Server } from 'socket.io';
 import { User } from '../users/entity/users.entity';
 import { userOfSessionToken } from '../../common/auth/session';
+import { corsOrigin } from '../../config/cors.config';
 
 const sessionTokenFrom = (cookieHeader?: string): string | null => {
   const cookie = (cookieHeader ?? '')
@@ -30,12 +31,7 @@ const sessionTokenFrom = (cookieHeader?: string): string | null => {
 
 @WebSocketGateway({
   cors: {
-    origin: [
-      'https://staging.skycrew.fr',
-      'https://skycrew.fr',
-      'http://localhost:5173',
-      'http://localhost:3000',
-    ],
+    origin: corsOrigin,
     credentials: true,
   },
 })

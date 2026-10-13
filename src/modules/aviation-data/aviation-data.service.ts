@@ -25,6 +25,25 @@ const numberOf = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+// The provider gives the wind in metres per second; the application shows
+// kilometres per hour.
+const kmhFromMetresPerSecond = (value: number | undefined) =>
+  value === undefined ? undefined : Math.round(value * 3.6 * 10) / 10;
+
+// An IANA name the browser can format a time with ("Europe/Paris").
+const timeZoneOf = (value: unknown): string | undefined => {
+  const name = text(value);
+  if (!name) {
+    return undefined;
+  }
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: name });
+    return name;
+  } catch {
+    return undefined;
+  }
+};
+
 // Aerodrome directory and weather, read from API Ninjas. The key stays on
 // the server: the browser only ever talks to this API. The service is
 // optional: without API_NINJAS_KEY the lookups answer "nothing found".
@@ -112,6 +131,7 @@ export class AviationDataService {
       humidity: numberOf(data.humidity),
       cloudCover: numberOf(data.cloud_pct),
       windSpeed: numberOf(data.wind_speed),
+      windSpeedKmh: kmhFromMetresPerSecond(numberOf(data.wind_speed)),
       windDegrees: numberOf(data.wind_degrees),
       sunrise: numberOf(data.sunrise),
       sunset: numberOf(data.sunset),
@@ -145,6 +165,7 @@ export class AviationDataService {
         country: text(entry.country),
         latitude: numberOf(entry.latitude),
         longitude: numberOf(entry.longitude),
+        timezone: timeZoneOf(entry.timezone),
       }));
   }
 

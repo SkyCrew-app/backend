@@ -378,32 +378,42 @@ export class PaymentsService {
     throw new Error('Payment not found');
   }
 
-  async refund(user_id: number, amount: number): Promise<Payment> {
+  // Gives back to a member what a cancelled booking had taken from their
+  // balance, and marks the matching withdrawal as refunded when it is found.
+  async refund(user_id: number, amount: number): Promise<Payment | null> {
+    const value = Math.round(Number(amount) * 100) / 100;
+    if (!Number.isFinite(value) || value <= 0) return null;
+
     const payment = await this.paymentsRepository.findOne({
-      where: { user: { id: user_id }, amount: amount },
+      where: {
+        user: { id: user_id },
+        amount: value,
+        payment_method: 'account_balance',
+        payment_status: 'completed',
+      },
+      order: { payment_date: 'DESC' },
       relations: ['user'],
     });
 
     if (payment) {
       payment.payment_status = 'refunded';
       await this.paymentsRepository.save(payment);
-
-      await this.updateUserBalance(payment.user.id, -amount);
-
-      await this.NotificationsService.create({
-        user_id: payment.user.id,
-        notification_type: 'PAYMENT_REFUNDED',
-        notification_date: new Date(),
-        message: translate(
-          languageOf(payment.user),
-          'notification.paymentRefunded',
-          { amount },
-        ),
-        is_read: false,
-      });
-
-      return payment;
     }
-    throw new Error('Payment not found');
+
+    const member = await this.updateUserBalance(user_id, value);
+
+    await this.NotificationsService.create({
+      user_id,
+      notification_type: 'PAYMENT_REFUNDED',
+      notification_date: new Date(),
+      message: translate(
+        languageOf(member ?? payment?.user),
+        'notification.paymentRefunded',
+        { amount: value },
+      ),
+      is_read: false,
+    });
+
+    return payment ?? null;
   }
 }
