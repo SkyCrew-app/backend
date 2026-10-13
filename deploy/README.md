@@ -64,6 +64,33 @@ docker compose up -d
 The API is updated before the web application, and database changes are
 applied when the API starts. Back up before updating.
 
+### In one command, from a workstation
+
+When the server cannot reach the registry, `release-to-server.sh` builds the
+images from the version tags, copies them over SSH and switches the versions:
+
+```bash
+deploy/release-to-server.sh my-server --backend 2.13.0 --frontend 2.10.0
+```
+
+It runs the backup first, waits for the API and the web application to report
+healthy, and puts the previous versions back by itself when they do not. Give
+only `--backend` or only `--frontend` to update one of them.
+
+## Knowing when the site is down
+
+`skycrew-watch.sh` checks the health address and posts a message to a chat
+webhook (Slack, Discord…) or sends an e-mail when the site stops answering,
+and again when it is back. Install it and call it from cron every two minutes:
+
+```bash
+sudo install -m 755 deploy/skycrew-watch.sh /usr/local/sbin/skycrew-watch
+echo '*/2 * * * * root ALERT_WEBHOOK_URL=https://… /usr/local/sbin/skycrew-watch' | sudo tee /etc/cron.d/skycrew-watch
+```
+
+Run it from another machine as well if you can: a watcher on the server itself
+says nothing when the whole server is down.
+
 ## Backups
 
 Two things hold the data of the club: the database and the uploaded files.
