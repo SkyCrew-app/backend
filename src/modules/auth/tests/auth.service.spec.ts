@@ -21,6 +21,7 @@ describe('AuthService', () => {
       findOneByEmail: jest.fn(),
       set2FASecret: jest.fn(),
       activate2FA: jest.fn(),
+      update2FAStatus: jest.fn(),
     };
     jwtService = {
       sign: jest.fn(),
@@ -233,6 +234,52 @@ describe('AuthService', () => {
         false,
       );
       expect(usersService.activate2FA).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('isTwoFactorEnabled', () => {
+    it('follows the confirmed secret, not a pending one', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        twoFactorAuthSecret: 'ACTIVE',
+      });
+      await expect(service.isTwoFactorEnabled('a@example.com')).resolves.toBe(
+        true,
+      );
+
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        twoFactorAuthSecret: null,
+        twoFactorAuthPendingSecret: 'PENDING',
+      });
+      await expect(service.isTwoFactorEnabled('a@example.com')).resolves.toBe(
+        false,
+      );
+    });
+  });
+
+  describe('disable2FA', () => {
+    const user = { email: 'a@example.com', password: 'hashed' } as User;
+
+    it('turns two-factor off when the password is right', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(user);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(service.disable2FA('a@example.com', 'pass')).resolves.toBe(
+        true,
+      );
+      expect(usersService.update2FAStatus).toHaveBeenCalledWith(
+        'a@example.com',
+        false,
+      );
+    });
+
+    it('changes nothing when the password is wrong', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(user);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.disable2FA('a@example.com', 'bad')).resolves.toBe(
+        false,
+      );
+      expect(usersService.update2FAStatus).not.toHaveBeenCalled();
     });
   });
 

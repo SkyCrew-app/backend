@@ -19,6 +19,8 @@ describe('AuthResolver', () => {
       verify2FACode: jest.fn(),
       verify2FAAndLogin: jest.fn(),
       confirm2FA: jest.fn(),
+      isTwoFactorEnabled: jest.fn(),
+      disable2FA: jest.fn(),
       createTwoFactorChallenge: jest.fn().mockReturnValue('challenge-token'),
       isValidTwoFactorChallenge: jest.fn(),
     };
@@ -145,6 +147,40 @@ describe('AuthResolver', () => {
       (authService.confirm2FA as jest.Mock).mockResolvedValue(false);
 
       await expect(resolver.confirm2FA(req, '000000')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
+  describe('twoFactorEnabled', () => {
+    it('answers for the authenticated user only', async () => {
+      const req = { user: { email: 'me@example.com' } } as any;
+      (authService.isTwoFactorEnabled as jest.Mock).mockResolvedValue(true);
+
+      await expect(resolver.twoFactorEnabled(req)).resolves.toBe(true);
+      expect(authService.isTwoFactorEnabled).toHaveBeenCalledWith(
+        'me@example.com',
+      );
+    });
+  });
+
+  describe('disable2FA', () => {
+    const req = { user: { email: 'me@example.com' } } as any;
+
+    it('disables two-factor for the authenticated user', async () => {
+      (authService.disable2FA as jest.Mock).mockResolvedValue(true);
+
+      await expect(resolver.disable2FA(req, 'secret')).resolves.toBe(true);
+      expect(authService.disable2FA).toHaveBeenCalledWith(
+        'me@example.com',
+        'secret',
+      );
+    });
+
+    it('refuses a wrong password', async () => {
+      (authService.disable2FA as jest.Mock).mockResolvedValue(false);
+
+      await expect(resolver.disable2FA(req, 'wrong')).rejects.toThrow(
         BadRequestException,
       );
     });

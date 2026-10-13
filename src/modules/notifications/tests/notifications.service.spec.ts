@@ -212,4 +212,23 @@ describe('NotificationsService', () => {
       expect(result).toBe(true);
     });
   });
+
+  describe('bulk actions', () => {
+    it('marks every unread notification of the user as read at once', async () => {
+      mockRepository.update.mockResolvedValue({ affected: 4 });
+
+      await expect(service.markAllRead(3)).resolves.toBe(4);
+      expect(mockRepository.update).toHaveBeenCalledWith(
+        { user: { id: 3 }, is_read: false },
+        { is_read: true },
+      );
+    });
+
+    it('deletes only the notifications of the user', async () => {
+      mockRepository.delete.mockResolvedValue({ affected: 12 });
+
+      await expect(service.removeAllForUser(3)).resolves.toBe(12);
+      expect(mockRepository.delete).toHaveBeenCalledWith({ user: { id: 3 } });
+    });
+  });
 });

@@ -189,6 +189,14 @@ describe('UsersResolver', () => {
     });
   });
 
+  it('toggle2FA refuse de désactiver la double authentification sans mot de passe', () => {
+    const context = { req: { user: { email: 'me@mail.com' } } };
+    expect(() => resolver.toggle2FA(context, false)).toThrow(
+      'confirmez votre mot de passe',
+    );
+    expect(usersService.update2FAStatus).not.toHaveBeenCalled();
+  });
+
   it('toggle2FA devrait mettre à jour le statut 2FA via UsersService.update2FAStatus', async () => {
     const user = { id: 3, is2FAEnabled: true };
     (usersService.update2FAStatus as jest.Mock).mockResolvedValue(user);

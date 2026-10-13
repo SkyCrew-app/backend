@@ -90,4 +90,20 @@ export class NotificationsService {
     await this.notificationRepository.update(id, { is_read: true });
     return true;
   }
+
+  // Marks every unread notification of the user as read, in one statement.
+  async markAllRead(userId: number): Promise<number> {
+    const result = await this.notificationRepository.update(
+      { user: { id: userId }, is_read: false },
+      { is_read: true },
+    );
+    return result.affected ?? 0;
+  }
+
+  async removeAllForUser(userId: number): Promise<number> {
+    const result = await this.notificationRepository.delete({
+      user: { id: userId },
+    });
+    return result.affected ?? 0;
+  }
 }
