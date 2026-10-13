@@ -1,8 +1,9 @@
 import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
 import { ChecklistsService } from './checklists.service';
 import { Language } from '../../common/i18n/languages';
 import { RequestLanguage } from '../../common/i18n/request-language';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 import { ChecklistTemplate } from './entity/checklist-template.entity';
 import { ChecklistItem } from './entity/checklist-item.entity';
 import {
@@ -30,6 +31,7 @@ import {
 } from '../../common/auth/access';
 
 @Resolver()
+@UseFilters(LocalizedExceptionFilter)
 export class ChecklistsResolver {
   constructor(private readonly checklistsService: ChecklistsService) {}
 

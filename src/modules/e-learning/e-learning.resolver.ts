@@ -26,6 +26,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
   assertSelfOrRole,
+  hasRole,
   ROLE_INSTRUCTOR,
   SessionUser,
 } from '../../common/auth/access';
@@ -53,9 +54,18 @@ export class CourseResolver {
     @Args('userId', { nullable: true }) userId?: number,
     @CurrentUser() currentUser?: SessionUser,
   ): Promise<Course> {
-    // The optional user id adds that user's progress to the course.
+    // The optional user id adds that user's progress to the course: read by
+    // the member, administrators, and an instructor for their own students.
     if (userId) {
-      assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
+      const isOwnStudent =
+        hasRole(currentUser, ROLE_INSTRUCTOR) &&
+        (await this.userProgressService.isInstructorOf(
+          Number(currentUser.id),
+          Number(userId),
+        ));
+      if (!isOwnStudent) {
+        assertSelfOrRole(currentUser, userId);
+      }
     }
     return this.eLearningService.getCourseById(id, userId);
   }

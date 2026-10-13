@@ -44,13 +44,15 @@ describe('UsersService password reset', () => {
   describe('requesting a reset', () => {
     it('e-mails a one-time link and only stores the hash of its token', async () => {
       const user = member();
-      users.findOne.mockResolvedValue(user);
+      // Typed in another case: no exact match, found once case is ignored.
+      users.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(user);
 
-      await service.requestPasswordReset(' pilot@example.com ');
+      await service.requestPasswordReset(' Pilot@Example.com ');
 
-      expect(users.findOne).toHaveBeenCalledWith({
-        where: { email: 'pilot@example.com' },
-      });
+      // Looked up whatever the case and the spaces around the address.
+      expect(
+        users.findOne.mock.calls.at(-1)[0].where.email.objectLiteralParameters,
+      ).toEqual({ email: 'pilot@example.com' });
       const [to, , , template, variables] = mailer.sendMail.mock.calls[0];
       const token = new URL(variables.resetUrl).searchParams.get('token');
 

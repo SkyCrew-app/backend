@@ -1,5 +1,5 @@
 import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
-import { ForbiddenException, UseGuards } from '@nestjs/common';
+import { ForbiddenException, UseFilters, UseGuards } from '@nestjs/common';
 import { InstructionCourse } from './entity/instruction-courses.entity';
 import { InstructionCoursesService } from './instruction-courses.service';
 import { CreateCourseInstructionInput } from './dto/create-course.input';
@@ -19,6 +19,7 @@ import {
   ROLE_INSTRUCTOR,
   SessionUser,
 } from '../../common/auth/access';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 const isSameUser = (
   user: SessionUser | undefined,
@@ -32,6 +33,7 @@ const forbidden = () =>
 // A student sees and rates their own courses. An administrator sees all.
 @Resolver(() => InstructionCourse)
 @UseGuards(JwtAuthGuard)
+@UseFilters(LocalizedExceptionFilter)
 export class InstructionCoursesResolver {
   constructor(private readonly courseService: InstructionCoursesService) {}
 
@@ -165,7 +167,7 @@ export class InstructionCoursesResolver {
       currentUser,
       await this.courseService.findOne(input.id),
     );
-    return this.courseService.updateCourse(input.id, input);
+    return this.courseService.updateCourse(input.id, input, currentUser);
   }
 
   // Supprimer un cours

@@ -2,7 +2,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AircraftResolver } from '../aircraft.resolver';
 import { AircraftService } from '../aircraft.service';
-import { Aircraft } from '../entity/aircraft.entity';
+import { Aircraft, AvailabilityStatus } from '../entity/aircraft.entity';
+import { Reflector } from '@nestjs/core';
+import { ROLES_KEY } from '../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { FileUpload, ReadStream, WriteStream } from 'graphql-upload-ts';
@@ -131,5 +133,22 @@ describe('AircraftResolver', () => {
     const res = await resolver.deleteAircraft(1);
     expect(service.remove).toHaveBeenCalledWith(1);
     expect(res).toBe(true);
+  });
+
+  it('setAircraftAvailability is for administrators and technicians', async () => {
+    const roles = new Reflector().get<string[]>(
+      ROLES_KEY,
+      AircraftResolver.prototype.setAircraftAvailability,
+    );
+    expect(roles).toEqual(['Administrateur', 'Technicien']);
+
+    service.updateStatus = jest.fn().mockResolvedValue(sample);
+    await expect(
+      resolver.setAircraftAvailability(1, AvailabilityStatus.AVAILABLE),
+    ).resolves.toEqual(sample);
+    expect(service.updateStatus).toHaveBeenCalledWith(
+      1,
+      AvailabilityStatus.AVAILABLE,
+    );
   });
 });

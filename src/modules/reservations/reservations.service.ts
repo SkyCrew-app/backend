@@ -1,6 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan, MoreThan, Between } from 'typeorm';
+import {
+  Repository,
+  LessThan,
+  MoreThan,
+  Between,
+  EntityManager,
+  Not,
+} from 'typeorm';
 import { Reservation, ReservationStatus } from './entity/reservations.entity';
 import { ReservationTemplate } from './entity/reservation-template.entity';
 import { CreateReservationInput } from './dto/create-reservation.input';
@@ -9,29 +16,67 @@ import { CreateReservationTemplateInput } from './dto/create-reservation-templat
 import { UpdateReservationTemplateInput } from './dto/update-reservation-template.input';
 import { MailerService } from '../mail/mailer.service';
 import { User } from '../users/entity/users.entity';
-import { Aircraft } from '../aircraft/entity/aircraft.entity';
-import { format } from 'date-fns';
-import { enGB, fr } from 'date-fns/locale';
+import {
+  Aircraft,
+  AvailabilityStatus,
+} from '../aircraft/entity/aircraft.entity';
+import { Maintenance } from '../maintenance/entity/maintenance.entity';
+import {
+  maintenanceWindow,
+  occupiesAircraft,
+} from '../maintenance/maintenance-rules';
+import { InstructionCourse } from '../instruction-courses/entity/instruction-courses.entity';
+import { CourseStatus } from '../instruction-courses/enum/course-status.enum';
 import { AdministrationService } from '../administration/administration.service';
 import {
   BadRequestException,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { languageOf } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
 import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { fromCents, lockRow, toCents } from '../payments/money';
+import {
+  assertAllowedToFly,
+  assertCancellable,
+  assertChangeable,
+  assertClubOpen,
+  assertValidSlot,
+  BookingActor,
+  clubMoment,
+  hasValidLicence,
+  mailDate,
+  priceCents,
+} from './booking-rules';
 
-// A date as written in an e-mail, in the member's language.
-const mailDate = (date: Date | string, language: string) =>
-  format(new Date(date), 'd MMMM yyyy, HH:mm', {
-    locale: language === 'en' ? enGB : fr,
-  });
+const DAY = 24 * 60 * 60 * 1000;
+
+// Postgres codes of the two database guards on reservations.
+const EXCLUSION_VIOLATION = '23P01';
+const CHECK_VIOLATION = '23514';
+const databaseErrorCode = (error: any): string | undefined =>
+  error?.driverError?.code ?? error?.code;
+
+const MEMBER: BookingActor = { isAdmin: false };
+
+interface Slot {
+  aircraftId: number;
+  userId: number;
+  start: Date;
+  end: Date;
+  flightCategory: string;
+  // The booking being changed, which does not conflict with itself.
+  excludeReservationId?: number;
+}
 
 @Injectable()
 export class ReservationsService {
+  private readonly logger = new Logger(ReservationsService.name);
+
   constructor(
     @InjectRepository(Reservation)
     private reservationRepository: Repository<Reservation>,
@@ -47,257 +92,518 @@ export class ReservationsService {
     private readonly notificationService: NotificationsService,
   ) {}
 
-  async create(
-    createReservationInput: CreateReservationInput,
-  ): Promise<Reservation> {
-    const { aircraft_id, start_time, end_time, user_id } =
-      createReservationInput;
+  // A booking and the money that goes with it change in one transaction.
+  private async inTransaction<T>(
+    work: (manager: EntityManager) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await this.reservationRepository.manager.transaction(work);
+    } catch (error) {
+      // The database refused what the checks let through: two requests for
+      // the same slot at the same moment.
+      if (databaseErrorCode(error) === EXCLUSION_VIOLATION) {
+        throw localized(
+          ConflictException,
+          'error.reservation.aircraftAlreadyBooked',
+        );
+      }
+      if (databaseErrorCode(error) === CHECK_VIOLATION) {
+        throw localized(
+          BadRequestException,
+          'error.reservation.endBeforeStart',
+        );
+      }
+      throw error;
+    }
+  }
 
-    const aircraft = await this.aircraftRepository.findOne({
-      where: { id: aircraft_id },
-    });
+  // Every rule a booking must satisfy, for a new booking and for a changed
+  // one alike. The rows of the aircraft and of the pilot are locked first, so
+  // two bookings of the same aircraft, or by the same pilot, are checked one
+  // after the other.
+  private async assertBookable(
+    manager: EntityManager,
+    slot: Slot,
+    now: Date,
+  ): Promise<{ aircraft: Aircraft; user: User }> {
+    assertValidSlot(slot.start, slot.end, now);
+
+    const aircraft = (await lockRow(manager, 'aircraft', slot.aircraftId))
+      ? await manager.findOne(Aircraft, { where: { id: slot.aircraftId } })
+      : null;
     if (!aircraft) {
       throw localized(NotFoundException, 'error.reservation.aircraftNotFound', {
-        aircraftId: aircraft_id,
+        aircraftId: slot.aircraftId,
       });
     }
 
-    const conflictingReservations = await this.reservationRepository.find({
-      where: {
-        aircraft: { id: aircraft_id },
-        start_time: LessThan(end_time),
-        end_time: MoreThan(start_time),
-      },
-    });
+    const user = (await lockRow(manager, 'users', slot.userId))
+      ? await manager.findOne(User, {
+          where: { id: slot.userId },
+          relations: ['licenses'],
+        })
+      : null;
+    if (!user) {
+      throw localized(NotFoundException, 'error.reservation.userNotFound', {
+        userId: slot.userId,
+      });
+    }
+    // A deactivated account is not booked for, by anyone.
+    if (user.is_active === false) {
+      throw localized(ForbiddenException, 'error.reservation.memberInactive');
+    }
 
-    if (conflictingReservations.length > 0) {
+    if (aircraft.availability_status === AvailabilityStatus.UNAVAILABLE) {
+      throw localized(
+        ConflictException,
+        'error.reservation.aircraftUnavailable',
+      );
+    }
+
+    const overlapping = {
+      start_time: LessThan(slot.end),
+      end_time: MoreThan(slot.start),
+      status: Not(ReservationStatus.CANCELLED),
+    };
+    const isAnotherBooking = (reservation: Reservation) =>
+      reservation.id !== slot.excludeReservationId;
+
+    const onAircraft = await manager.find(Reservation, {
+      where: { aircraft: { id: aircraft.id }, ...overlapping },
+    });
+    if (onAircraft.some(isAnotherBooking)) {
       throw localized(
         ConflictException,
         'error.reservation.aircraftAlreadyBooked',
       );
     }
 
-    const user = await this.userRepository.findOne({
-      where: { id: user_id },
-      relations: ['licenses'],
+    // The period a maintenance holds the aircraft (its last day included)
+    // is defined once, with the maintenance rules.
+    const maintenances = await manager.find(Maintenance, {
+      where: {
+        aircraft: { id: aircraft.id },
+        start_date: LessThan(slot.end),
+      },
     });
-
-    if (!user) {
-      throw localized(NotFoundException, 'error.reservation.userNotFound', {
-        userId: user_id,
-      });
-    }
-
-    const administration = await this.administrationService.findAll();
-    if (!administration) {
-      throw localized(NotFoundException, 'error.reservation.noClubSettings');
-    }
-
-    const authorizedLicenses = administration[0].pilotLicenses;
-
-    const userLicenses = user.licenses.map((license) => license.license_type);
-
-    const hasLicense = authorizedLicenses.some((license) =>
-      userLicenses.includes(license),
-    );
-
-    if (!hasLicense) {
-      throw localized(BadRequestException, 'error.reservation.noValidLicence');
-    }
-
-    if (user.licenses.length == 0) {
-      throw localized(BadRequestException, 'error.reservation.noValidLicence');
-    }
-
-    const startTime = new Date(start_time);
-    const endTime = new Date(end_time);
-    const hoursReserved =
-      (endTime.getTime() - startTime.getTime()) / 1000 / 60 / 60;
-    const totalCost = hoursReserved * aircraft.hourly_cost;
-
-    if (user.user_account_balance < totalCost) {
+    const heldByMaintenance = maintenances.some((maintenance) => {
+      const window = maintenanceWindow(maintenance);
+      return (
+        occupiesAircraft(maintenance) &&
+        window !== null &&
+        window.start.getTime() < slot.end.getTime() &&
+        slot.start.getTime() < window.end.getTime()
+      );
+    });
+    if (heldByMaintenance) {
       throw localized(
-        BadRequestException,
-        'error.reservation.insufficientBalance',
+        ConflictException,
+        'error.reservation.aircraftInMaintenance',
       );
     }
 
-    const reservation = this.reservationRepository.create({
-      aircraft,
-      user,
-      ...createReservationInput,
-      status: ReservationStatus.CONFIRMED,
+    const byPilot = await manager.find(Reservation, {
+      where: { user: { id: user.id }, ...overlapping },
     });
+    if (byPilot.some(isAnotherBooking)) {
+      throw localized(
+        ConflictException,
+        'error.reservation.pilotAlreadyBooked',
+      );
+    }
+
+    const settings = (await this.administrationService.findAll())?.[0];
+    if (!settings) {
+      throw localized(NotFoundException, 'error.reservation.noClubSettings');
+    }
+    assertClubOpen(settings, slot.start, slot.end);
+
+    const licensed = hasValidLicence(
+      user.licenses,
+      settings.pilotLicenses,
+      slot.end,
+    );
+    assertAllowedToFly({
+      licences: user.licenses,
+      acceptedTypes: settings.pilotLicenses,
+      flightCategory: slot.flightCategory,
+      flightEnd: slot.end,
+      hasLessonThatDay:
+        !licensed &&
+        (await this.hasLessonThatDay(manager, user.id, slot.start)),
+    });
+
+    return { aircraft, user };
+  }
+
+  // An instructor has scheduled a lesson with this student on the club day
+  // of the flight.
+  private async hasLessonThatDay(
+    manager: EntityManager,
+    studentId: number,
+    start: Date,
+  ): Promise<boolean> {
+    const courses = await manager.find(InstructionCourse, {
+      where: {
+        student: { id: studentId },
+        status: Not(CourseStatus.CANCELED),
+        startTime: Between(
+          new Date(start.getTime() - DAY),
+          new Date(start.getTime() + DAY),
+        ),
+      },
+      loadEagerRelations: false,
+    });
+    const day = clubMoment(start).day;
+    return courses.some(
+      (course) => clubMoment(new Date(course.startTime)).day === day,
+    );
+  }
+
+  // E-mails and notifications leave once the transaction is committed: they
+  // never announce something that did not happen, nor undo what did.
+  private async announce(
+    what: string,
+    send: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await send();
+    } catch (error) {
+      this.logger.warn(`${what} not sent: ${error.message}`);
+    }
+  }
+
+  async create(
+    createReservationInput: CreateReservationInput,
+    now: Date = new Date(),
+  ): Promise<Reservation> {
+    const { aircraft_id, user_id } = createReservationInput;
+    const start = new Date(createReservationInput.start_time);
+    const end = new Date(createReservationInput.end_time);
+
+    const { reservation, aircraft, user, cents } = await this.inTransaction(
+      async (manager) => {
+        const { aircraft, user } = await this.assertBookable(
+          manager,
+          {
+            aircraftId: aircraft_id,
+            userId: user_id,
+            start,
+            end,
+            flightCategory: createReservationInput.flight_category,
+          },
+          now,
+        );
+        const cents = priceCents(aircraft.hourly_cost, start, end);
+
+        const reservation = await manager.save(
+          Reservation,
+          manager.create(Reservation, {
+            aircraft,
+            user,
+            reservation_date: createReservationInput.reservation_date,
+            start_time: start,
+            end_time: end,
+            purpose: createReservationInput.purpose,
+            flight_category: createReservationInput.flight_category,
+            estimated_flight_hours:
+              createReservationInput.estimated_flight_hours,
+            notes: createReservationInput.notes,
+            status: ReservationStatus.CONFIRMED,
+            // The price is fixed here: later refunds give back exactly this.
+            charged_amount: fromCents(cents),
+          }),
+        );
+
+        // Flight hours are counted when the flight is closed, not when it
+        // is booked.
+        if (cents > 0) {
+          await this.paymentService.chargeBooking(manager, {
+            userId: user.id,
+            cents,
+            reservationId: reservation.id,
+          });
+        }
+        return { reservation, aircraft, user, cents };
+      },
+    );
 
     // The confirmation is written to the member the reservation is for.
     const language = languageOf(user);
-    const locale = language === 'en' ? enGB : fr;
-    const formattedStartDate = format(
-      new Date(start_time),
-      'd MMMM yyyy, HH:mm',
-      { locale },
-    );
-    const formattedEndDate = format(new Date(end_time), 'd MMMM yyyy, HH:mm', {
-      locale,
-    });
-
-    await this.mailerService.sendMail(
-      user.email,
-      translate(language, 'mail.reservationConfirmed.subject'),
-      translate(language, 'mail.reservationConfirmed.text', {
-        registration: aircraft.registration_number,
-      }),
-      'reservation-confirmation',
-      {
-        name: user.first_name,
-        aircraft_registration: aircraft.registration_number,
-        start_time: formattedStartDate,
-        end_time: formattedEndDate,
-      },
-      language,
-    );
-
-    await this.notificationService.create({
-      user_id: user.id,
-      notification_type: 'RESERVATION_CONFIRMED',
-      notification_date: new Date(),
-      message: translate(language, 'notification.reservationConfirmed', {
-        registration: aircraft.registration_number,
-      }),
-      is_read: false,
-    });
-
-    const savedReservation = await this.reservationRepository.save(reservation);
-
-    // Flight hours are counted when the flight is closed, not when it is booked.
-    await this.paymentService.createWithdrawal({
-      user_id: user.id,
-      amount: totalCost,
-      payment_method: 'account_balance',
-    });
-
-    return savedReservation;
-  }
-
-  async update(
-    updateReservationInput: UpdateReservationInput,
-  ): Promise<Reservation> {
-    const reservation = await this.reservationRepository.findOne({
-      where: { id: updateReservationInput.id },
-    });
-    if (!reservation) {
-      throw new Error('Réservation introuvable');
-    }
-
-    const aircraft = await this.aircraftRepository.findOne({
-      where: { id: updateReservationInput.aircraft_id },
-    });
-
-    const previousStartTime = reservation.start_time;
-    const previousEndTime = reservation.end_time;
-
-    Object.assign(reservation, updateReservationInput);
-    const updatedReservation =
-      await this.reservationRepository.save(reservation);
-
-    const user = await this.userRepository.findOne({
-      where: { id: reservation.user.id },
-    });
-    if (user) {
-      const language = languageOf(user);
-      await this.mailerService.sendMail(
+    await this.announce('Booking confirmation e-mail', () =>
+      this.mailerService.sendMail(
         user.email,
-        translate(language, 'mail.reservationModified.subject'),
-        translate(language, 'mail.reservationModified.text', {
+        translate(language, 'mail.reservationConfirmed.subject'),
+        translate(language, 'mail.reservationConfirmed.text', {
           registration: aircraft.registration_number,
         }),
-        'reservation-modification',
+        'reservation-confirmation',
         {
           name: user.first_name,
           aircraft_registration: aircraft.registration_number,
-          previous_start_time: mailDate(previousStartTime, language),
-          previous_end_time: mailDate(previousEndTime, language),
-          new_start_time: mailDate(updatedReservation.start_time, language),
-          new_end_time: mailDate(updatedReservation.end_time, language),
+          start_time: mailDate(start, language),
+          end_time: mailDate(end, language),
         },
         language,
+      ),
+    );
+    await this.announce('Booking confirmation notification', () =>
+      this.notificationService.create({
+        user_id: user.id,
+        notification_type: 'RESERVATION_CONFIRMED',
+        notification_date: new Date(),
+        message: translate(language, 'notification.reservationConfirmed', {
+          registration: aircraft.registration_number,
+        }),
+        is_read: false,
+      }),
+    );
+    if (cents > 0) {
+      await this.paymentService.notifyMovement(
+        user,
+        'WITHDRAWAL',
+        fromCents(cents),
       );
+    }
 
-      await this.notificationService.create({
+    return reservation;
+  }
+
+  // A booking is changed by its holder or an administrator (checked by the
+  // resolver), before it starts, through the same rules as a new one. A new
+  // slot or aircraft is priced again and the difference charged or refunded.
+  async update(
+    updateReservationInput: UpdateReservationInput,
+    now: Date = new Date(),
+  ): Promise<Reservation> {
+    const id = updateReservationInput.id;
+
+    const changed = await this.inTransaction(async (manager) => {
+      const reservation = (await lockRow(manager, 'reservations', id))
+        ? await manager.findOne(Reservation, { where: { id } })
+        : null;
+      if (!reservation) {
+        throw localized(NotFoundException, 'error.reservation.notFound');
+      }
+      assertChangeable(reservation, now);
+
+      if (
+        updateReservationInput.user_id != null &&
+        Number(updateReservationInput.user_id) !== Number(reservation.user.id)
+      ) {
+        throw localized(
+          BadRequestException,
+          'error.reservation.holderCannotChange',
+        );
+      }
+
+      const previous = {
+        start: new Date(reservation.start_time),
+        end: new Date(reservation.end_time),
+      };
+      const start = updateReservationInput.start_time
+        ? new Date(updateReservationInput.start_time)
+        : previous.start;
+      const end = updateReservationInput.end_time
+        ? new Date(updateReservationInput.end_time)
+        : previous.end;
+      const aircraftId = Number(
+        updateReservationInput.aircraft_id ?? reservation.aircraft.id,
+      );
+      const flightCategory =
+        updateReservationInput.flight_category ?? reservation.flight_category;
+
+      const slotChanged =
+        start.getTime() !== previous.start.getTime() ||
+        end.getTime() !== previous.end.getTime() ||
+        aircraftId !== Number(reservation.aircraft.id);
+
+      let aircraft = reservation.aircraft;
+      let movedCents = 0;
+      if (slotChanged || flightCategory !== reservation.flight_category) {
+        ({ aircraft } = await this.assertBookable(
+          manager,
+          {
+            aircraftId,
+            userId: reservation.user.id,
+            start,
+            end,
+            flightCategory,
+            excludeReservationId: reservation.id,
+          },
+          now,
+        ));
+      }
+
+      if (slotChanged) {
+        if (reservation.charged_amount == null) {
+          throw localized(
+            BadRequestException,
+            'error.reservation.priceUnknown',
+          );
+        }
+        const newCents = priceCents(aircraft.hourly_cost, start, end);
+        movedCents = newCents - toCents(reservation.charged_amount);
+        if (movedCents > 0) {
+          await this.paymentService.chargeBooking(manager, {
+            userId: reservation.user.id,
+            cents: movedCents,
+            reservationId: reservation.id,
+          });
+        } else if (movedCents < 0) {
+          await this.paymentService.refundBooking(manager, {
+            userId: reservation.user.id,
+            cents: -movedCents,
+            reservationId: reservation.id,
+          });
+        }
+        reservation.charged_amount = fromCents(newCents);
+        reservation.aircraft = aircraft;
+        reservation.start_time = start;
+        reservation.end_time = end;
+      }
+
+      reservation.flight_category =
+        flightCategory as Reservation['flight_category'];
+      for (const field of [
+        'purpose',
+        'notes',
+        'estimated_flight_hours',
+        'reservation_date',
+      ] as const) {
+        if (updateReservationInput[field] !== undefined) {
+          (reservation as any)[field] = updateReservationInput[field];
+        }
+      }
+
+      const saved = await manager.save(Reservation, reservation);
+      return { saved, previous, movedCents };
+    });
+
+    const { saved, previous, movedCents } = changed;
+    const user = saved.user;
+    // The aircraft named is the one of the booking as it now stands.
+    const registration = saved.aircraft.registration_number;
+    const language = languageOf(user);
+
+    await this.announce('Booking change e-mail', () =>
+      this.mailerService.sendMail(
+        user.email,
+        translate(language, 'mail.reservationModified.subject'),
+        translate(language, 'mail.reservationModified.text', { registration }),
+        'reservation-modification',
+        {
+          name: user.first_name,
+          aircraft_registration: registration,
+          previous_start_time: mailDate(previous.start, language),
+          previous_end_time: mailDate(previous.end, language),
+          new_start_time: mailDate(saved.start_time, language),
+          new_end_time: mailDate(saved.end_time, language),
+        },
+        language,
+      ),
+    );
+    await this.announce('Booking change notification', () =>
+      this.notificationService.create({
         user_id: user.id,
         notification_type: 'RESERVATION_MODIFIED',
         notification_date: new Date(),
         message: translate(language, 'notification.reservationModified', {
-          registration: aircraft.registration_number,
+          registration,
         }),
         is_read: false,
-      });
-    }
-
-    return updatedReservation;
-  }
-
-  async delete(id: number): Promise<void> {
-    const reservation = await this.reservationRepository.findOne({
-      where: { id },
-      relations: ['flights'],
-    });
-    if (!reservation) {
-      throw new Error('Réservation introuvable');
-    }
-    // A closed flight is in the logbook and has been charged: its booking stays.
-    if ((reservation.flights ?? []).some((flight) => flight.closed_at)) {
-      throw new ConflictException(
-        'Le vol de cette réservation est clôturé : elle ne peut plus être annulée.',
+      }),
+    );
+    if (movedCents !== 0) {
+      await this.paymentService.notifyMovement(
+        user,
+        movedCents > 0 ? 'WITHDRAWAL' : 'PAYMENT_REFUNDED',
+        fromCents(Math.abs(movedCents)),
       );
     }
 
-    const aircraft = await this.aircraftRepository.findOne({
-      where: { id: reservation.aircraft.id },
+    return saved;
+  }
+
+  // Cancels a booking and gives back what was charged for it, once: both
+  // happen in one transaction, on a row locked for its duration.
+  async delete(
+    id: number,
+    actor: BookingActor = MEMBER,
+    now: Date = new Date(),
+  ): Promise<void> {
+    const { reservation, cents } = await this.inTransaction(async (manager) => {
+      const reservation = (await lockRow(manager, 'reservations', id))
+        ? await manager.findOne(Reservation, {
+            where: { id },
+            relations: ['flights'],
+          })
+        : null;
+      if (!reservation) {
+        throw localized(NotFoundException, 'error.reservation.notFound');
+      }
+      assertCancellable(reservation, actor, now);
+
+      // Exactly what was charged; nothing when nothing was.
+      const cents = toCents(reservation.charged_amount ?? 0);
+      if (cents > 0) {
+        await this.paymentService.refundBooking(manager, {
+          userId: reservation.user.id,
+          cents,
+          reservationId: reservation.id,
+        });
+      }
+
+      // A checklist filled for this booking is kept, without its booking:
+      // its foreign key would otherwise refuse the deletion.
+      await manager.query(
+        `UPDATE "checklist_submissions" SET "reservationId" = NULL WHERE "reservationId" = $1`,
+        [id],
+      );
+      const removed = await manager.delete(Reservation, { id });
+      if (!removed.affected) {
+        throw localized(NotFoundException, 'error.reservation.notFound');
+      }
+      return { reservation, cents };
     });
 
-    const user = await this.userRepository.findOne({
-      where: { id: reservation.user.id },
-    });
-    if (user) {
-      const language = languageOf(user);
-      await this.mailerService.sendMail(
+    const user = reservation.user;
+    const registration = reservation.aircraft.registration_number;
+    const language = languageOf(user);
+
+    await this.announce('Booking cancellation e-mail', () =>
+      this.mailerService.sendMail(
         user.email,
         translate(language, 'mail.reservationCancelled.subject'),
-        translate(language, 'mail.reservationCancelled.text', {
-          registration: aircraft.registration_number,
-        }),
+        translate(language, 'mail.reservationCancelled.text', { registration }),
         'reservation-cancellation',
         {
           name: user.first_name,
-          aircraft_registration: aircraft.registration_number,
+          aircraft_registration: registration,
           start_time: mailDate(reservation.start_time, language),
           end_time: mailDate(reservation.end_time, language),
         },
         language,
+      ),
+    );
+    if (cents > 0) {
+      await this.paymentService.notifyMovement(
+        user,
+        'PAYMENT_REFUNDED',
+        fromCents(cents),
       );
-
-      const startTime = new Date(reservation.start_time);
-      const endTime = new Date(reservation.end_time);
-      const hoursReserved =
-        (endTime.getTime() - startTime.getTime()) / 1000 / 60 / 60;
-
-      const totalCost = hoursReserved * aircraft.hourly_cost;
-
-      await this.paymentService.refund(user.id, totalCost);
-
-      await this.notificationService.create({
+    }
+    await this.announce('Booking cancellation notification', () =>
+      this.notificationService.create({
         user_id: user.id,
         notification_type: 'RESERVATION_CANCELLED',
         notification_date: new Date(),
         message: translate(language, 'notification.reservationCancelled', {
-          registration: aircraft.registration_number,
+          registration,
         }),
         is_read: false,
-      });
-    }
-
-    await this.reservationRepository.remove(reservation);
+      }),
+    );
   }
 
   async findAll(): Promise<Reservation[]> {
@@ -326,14 +632,16 @@ export class ReservationsService {
     const queryBuilder =
       this.reservationRepository.createQueryBuilder('reservation');
 
+    // Every booking that touches the period, including one that crosses
+    // its bounds: the schedule must not show as free a slot the API refuses.
     if (startDate) {
-      queryBuilder.andWhere('reservation.start_time >= :startDate', {
+      queryBuilder.andWhere('reservation.end_time > :startDate', {
         startDate,
       });
     }
 
     if (endDate) {
-      queryBuilder.andWhere('reservation.end_time <= :endDate', { endDate });
+      queryBuilder.andWhere('reservation.start_time < :endDate', { endDate });
     }
 
     queryBuilder.leftJoinAndSelect('reservation.aircraft', 'aircraft');

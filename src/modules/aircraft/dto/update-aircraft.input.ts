@@ -1,4 +1,5 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
+import { IsNumber, IsOptional, Min } from 'class-validator';
 import { AvailabilityStatus } from '../entity/aircraft.entity';
 
 @InputType()
@@ -19,7 +20,18 @@ export class UpdateAircraftInput {
   maintenance_status?: string;
 
   @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   hourly_cost?: number;
+
+  // Hours on the airframe: closed flights add to it, an administrator sets
+  // the starting value.
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  total_flight_hours?: number;
 
   @Field({ nullable: true })
   image_url?: string;

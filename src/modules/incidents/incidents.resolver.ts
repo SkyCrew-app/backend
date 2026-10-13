@@ -4,20 +4,16 @@ import { IncidentsService } from './incidents.service';
 import { Incident } from './entity/incidents.entity';
 import { UpdateIncidentInput } from './dto/update-incident.input';
 import { CreateIncidentInput } from './dto/create-incident.input';
-import { NotFoundException, UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import {
-  assertSelfOrRole,
-  hasRole,
-  isAdmin,
-  ROLE_TECHNICIAN,
-  SessionUser,
-} from '../../common/auth/access';
+import { SessionUser } from '../../common/auth/access';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver()
+@UseFilters(LocalizedExceptionFilter)
 export class IncidentsResolver {
   constructor(private readonly incidentService: IncidentsService) {}
 
@@ -64,15 +60,9 @@ export class IncidentsResolver {
     @Args('incident') incident: CreateIncidentInput,
     @CurrentUser() currentUser?: SessionUser,
   ) {
-    // A member reports in their own name. Technicians and administrators
-    // may record an incident on behalf of someone else.
-    const reportsForOthers =
-      isAdmin(currentUser) || hasRole(currentUser, ROLE_TECHNICIAN);
-
-    return this.incidentService.createIncident({
-      ...incident,
-      user_id: reportsForOthers ? incident.user_id : currentUser.id,
-    });
+    // A member reports in their own name, on their own flight. Technicians
+    // and administrators may record an incident on behalf of someone else.
+    return this.incidentService.createIncident(incident, currentUser);
   }
 
   @Mutation(() => Incident, { name: 'updateIncident' })
@@ -82,14 +72,9 @@ export class IncidentsResolver {
     @Args('incident') incident: UpdateIncidentInput,
     @CurrentUser() currentUser?: SessionUser,
   ) {
-    // Its author, technicians and administrators may update an incident.
-    const existing = await this.incidentService.getIncident(id);
-    if (!existing) {
-      throw new NotFoundException('Incident not found');
-    }
-    assertSelfOrRole(currentUser, existing.user?.id, ROLE_TECHNICIAN);
-
-    return this.incidentService.updateIncident(id, incident);
+    // Its author corrects what they reported; the follow-up (status,
+    // attribution) belongs to technicians and administrators.
+    return this.incidentService.updateIncident(id, incident, currentUser);
   }
 
   // Following an incident up (status and resolution note) is the job of

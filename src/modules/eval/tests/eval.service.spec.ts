@@ -91,6 +91,43 @@ describe('EvalService', () => {
       );
     });
 
+    it('counts a question once, however many times it is answered', async () => {
+      evalRepo.findOne.mockResolvedValue({
+        id: 1,
+        questions: [
+          { id: 10, correct_answer: 'A' },
+          { id: 11, correct_answer: 'B' },
+          { id: 12, correct_answer: 'C' },
+          { id: 13, correct_answer: 'D' },
+        ],
+        pass_score: 70,
+      });
+
+      // The one known answer, sent four times: one question out of four.
+      const result = await service.validateAnswers(
+        1,
+        5,
+        Array.from({ length: 4 }, () => ({ questionId: 10, answer: 'A' })),
+      );
+
+      expect(result).toEqual({ score: 25, passed: false });
+    });
+
+    it('keeps the last answer given to a question', async () => {
+      evalRepo.findOne.mockResolvedValue({
+        id: 1,
+        questions: [{ id: 10, correct_answer: 'A' }],
+        pass_score: 50,
+      });
+
+      const result = await service.validateAnswers(1, 5, [
+        { questionId: 10, answer: 'A' },
+        { questionId: 10, answer: 'B' },
+      ]);
+
+      expect(result).toEqual({ score: 0, passed: false });
+    });
+
     it('throws if evaluation not found', async () => {
       evalRepo.findOne.mockResolvedValue(undefined);
       await expect(service.validateAnswers(99, 5, [])).rejects.toThrow(

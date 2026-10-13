@@ -26,6 +26,7 @@ describe('CronService', () => {
     };
     notificationsService = {
       create: jest.fn(),
+      alreadySent: jest.fn().mockResolvedValue(false),
     };
     reservationsService = {
       findReservationsBetween: jest.fn(),
@@ -35,6 +36,8 @@ describe('CronService', () => {
       aggregateRevenuesForPeriod: jest.fn(),
       aggregateExpensesForPeriod: jest.fn(),
       createFinancialReport: jest.fn(),
+      updateFinancialReport: jest.fn(),
+      findAllFinancialReports: jest.fn().mockResolvedValue([]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -66,11 +69,36 @@ describe('CronService', () => {
         1,
         'COMPLETED',
       );
+      // The student and the instructor are both told.
+      for (const userId of [10, 20]) {
+        expect(notificationsService.create as jest.Mock).toHaveBeenCalledWith(
+          expect.objectContaining({
+            user_id: userId,
+            notification_type: 'COURSE_COMPLETED',
+            message: `Votre cours 1 est terminé.`,
+          }),
+        );
+      }
+    });
+
+    it('goes on with the other courses when one fails', async () => {
+      (courseService.findExpiredCourses as jest.Mock).mockResolvedValue([
+        // No participants loaded: nobody to notify, not a reason to stop.
+        { id: 1 },
+        { id: 2, student: { id: 10 }, instructor: { id: 20 } },
+        { id: 3, student: { id: 11 }, instructor: { id: 20 } },
+      ]);
+      (courseService.updateCourseStatus as jest.Mock).mockImplementation(
+        async (id) => {
+          if (id === 2) throw new Error('boom');
+        },
+      );
+
+      await service.handleCourseStatusUpdate();
+
+      expect(courseService.updateCourseStatus).toHaveBeenCalledTimes(3);
       expect(notificationsService.create as jest.Mock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          notification_type: 'COURSE_COMPLETED',
-          message: `Votre cours 1 est terminé.`,
-        }),
+        expect.objectContaining({ user_id: 11 }),
       );
     });
   });
@@ -92,9 +120,11 @@ describe('CronService', () => {
 
       await service.handleLicenseExpiration();
 
+      // An expired licence is no longer valid either.
       expect(licensesService.update as jest.Mock).toHaveBeenCalledWith({
         id: 2,
         status: 'expired',
+        is_valid: false,
       });
       expect(notificationsService.create as jest.Mock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -132,6 +162,32 @@ describe('CronService', () => {
     });
   });
 
+  describe('handleLicenseExpiration, night after night', () => {
+    it('reminds once for an expiry date, not every night', async () => {
+      const futureDate = new Date(Date.now() + 5 * 24 * 3_600_000);
+      (licensesService.findExpiringLicenses as jest.Mock).mockResolvedValue([
+        {
+          id: 3,
+          user: { id: 40 },
+          expiration_date: futureDate,
+          license_type: 'CPL',
+        },
+      ]);
+      (notificationsService.alreadySent as jest.Mock).mockResolvedValue(true);
+
+      await service.handleLicenseExpiration();
+
+      expect(notificationsService.alreadySent).toHaveBeenCalledWith(
+        40,
+        'LICENSE_EXPIRING_SOON',
+        expect.arrayContaining([
+          expect.stringContaining('Votre licence CPL expirera bientôt'),
+        ]),
+      );
+      expect(notificationsService.create as jest.Mock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleReservationNotifications', () => {
     it('should notify pending reservations', async () => {
       const reservations = [
@@ -156,7 +212,10 @@ describe('CronService', () => {
       );
     });
 
-    it('should notify missing flight plan and passenger count', async () => {
+    // This test used to expect a MISSING_PASSENGER_COUNT reminder: the
+    // number of passengers cannot be entered when booking, so every member
+    // was asked for it every night.
+    it('should notify an incomplete flight plan, and nothing about passengers', async () => {
       const reservation = {
         id: 6,
         user: { id: 60 },
@@ -170,28 +229,110 @@ describe('CronService', () => {
 
       await service.handleReservationNotifications();
 
+      expect(notificationsService.create as jest.Mock).toHaveBeenCalledTimes(1);
       expect(notificationsService.create as jest.Mock).toHaveBeenCalledWith(
         expect.objectContaining({
           notification_type: 'INCOMPLETE_FLIGHT_PLAN',
         }),
       );
-      expect(notificationsService.create as jest.Mock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          notification_type: 'MISSING_PASSENGER_COUNT',
-        }),
+    });
+
+    it('does not repeat a flight plan reminder already sent for the booking', async () => {
+      (
+        reservationsService.findReservationsBetween as jest.Mock
+      ).mockResolvedValue([
+        {
+          id: 6,
+          user: { id: 60 },
+          status: ReservationStatus.CONFIRMED,
+          flights: [],
+        },
+      ]);
+      (notificationsService.alreadySent as jest.Mock).mockResolvedValue(true);
+
+      await service.handleReservationNotifications();
+
+      expect(notificationsService.alreadySent).toHaveBeenCalledWith(
+        60,
+        'MISSING_FLIGHT_PLAN',
+        expect.arrayContaining([expect.stringContaining('réservation N°6')]),
+      );
+      expect(notificationsService.create as jest.Mock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deactivated members', () => {
+    const gone = { id: 90, is_active: false };
+
+    it('are not reminded of anything, and their data is left alone', async () => {
+      (courseService.findExpiredCourses as jest.Mock).mockResolvedValue([
+        { id: 1, student: gone, instructor: { id: 20 } },
+      ]);
+      (licensesService.findExpiringLicenses as jest.Mock).mockResolvedValue([
+        {
+          id: 2,
+          user: gone,
+          license_type: 'PPL',
+          status: 'active',
+          expiration_date: new Date(Date.now() - 86_400_000),
+        },
+        {
+          id: 3,
+          user: gone,
+          license_type: 'LAPL',
+          status: 'active',
+          expiration_date: new Date(Date.now() + 86_400_000),
+        },
+      ]);
+      (
+        reservationsService.findReservationsBetween as jest.Mock
+      ).mockResolvedValue([
+        { id: 5, user: gone, status: ReservationStatus.PENDING, flights: [] },
+        { id: 6, user: gone, status: ReservationStatus.CONFIRMED, flights: [] },
+      ]);
+      (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mockResolvedValue([
+        {
+          id: 7,
+          user: gone,
+          end_time: new Date(Date.now() - 3_600_000),
+          flights: [{ id: 1 }],
+        },
+      ]);
+
+      await service.handleCourseStatusUpdate();
+      await service.handleLicenseExpiration();
+      await service.handleReservationNotifications();
+      await service.notificationFinishReservation();
+
+      const told = (notificationsService.create as jest.Mock).mock.calls.map(
+        ([notification]) => notification.user_id,
+      );
+      // Only the instructor of the finished course, who is still a member.
+      expect(told).toEqual([20]);
+      // The course is still completed and the licence still marked expired.
+      expect(courseService.updateCourseStatus).toHaveBeenCalledWith(
+        1,
+        'COMPLETED',
+      );
+      expect(licensesService.update).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 2, status: 'expired' }),
       );
     });
   });
 
   describe('generateMonthlyFinancialReport', () => {
-    it('should aggregate and create report', async () => {
+    beforeEach(() => {
       (
         financialService.aggregateRevenuesForPeriod as jest.Mock
       ).mockResolvedValue(1000);
       (
         financialService.aggregateExpensesForPeriod as jest.Mock
       ).mockResolvedValue(400);
+    });
 
+    it('should aggregate and create report', async () => {
       await service.generateMonthlyFinancialReport();
 
       expect(
@@ -204,11 +345,66 @@ describe('CronService', () => {
         }),
       );
     });
+
+    it('reports the month that just ended, to its last instant', async () => {
+      // Run on the 1st of November, shortly after midnight.
+      await service.generateMonthlyFinancialReport(new Date(2026, 10, 1, 0, 0));
+
+      const start = new Date(2026, 9, 1);
+      const end = new Date(new Date(2026, 10, 1).getTime() - 1);
+      expect(financialService.aggregateRevenuesForPeriod).toHaveBeenCalledWith(
+        start,
+        end,
+      );
+      expect(financialService.aggregateExpensesForPeriod).toHaveBeenCalledWith(
+        start,
+        end,
+      );
+      // The 31st is inside the period.
+      expect(end.getDate()).toBe(31);
+      expect(financialService.createFinancialReport).toHaveBeenCalledWith(
+        expect.objectContaining({ report_date: start }),
+      );
+    });
+
+    it('goes back to December when run in January', async () => {
+      await service.generateMonthlyFinancialReport(new Date(2027, 0, 1));
+
+      expect(financialService.createFinancialReport).toHaveBeenCalledWith(
+        expect.objectContaining({ report_date: new Date(2026, 11, 1) }),
+      );
+    });
+
+    it('refreshes the report of a month instead of adding a second one', async () => {
+      (financialService.findAllFinancialReports as jest.Mock).mockResolvedValue(
+        [
+          { id: 3, report_date: new Date(2026, 8, 1) },
+          { id: 4, report_date: new Date(2026, 9, 1) },
+        ],
+      );
+
+      await service.generateMonthlyFinancialReport(new Date(2026, 10, 1));
+
+      expect(financialService.createFinancialReport).not.toHaveBeenCalled();
+      expect(financialService.updateFinancialReport).toHaveBeenCalledWith({
+        id: 4,
+        total_revenue: 1000,
+        total_expense: 400,
+        net_profit: 600,
+      });
+    });
   });
 
   describe('notificationFinishReservation', () => {
+    // Ended an hour ago, with a flight plan that is still open.
     const finished = (overrides: object = {}) =>
-      ({ id: 7, user: { id: 70 }, flights: [], ...overrides }) as any;
+      ({
+        id: 7,
+        user: { id: 70 },
+        end_time: new Date(Date.now() - 3_600_000),
+        flights: [{ id: 1 }],
+        ...overrides,
+      }) as any;
 
     beforeEach(() => {
       (notificationsService.create as jest.Mock).mockClear();
@@ -237,6 +433,28 @@ describe('CronService', () => {
         reservationsService.findFinishedReservations as jest.Mock
       ).mockResolvedValue([finished()]);
       (notificationsService as any).alreadySent.mockResolvedValue(true);
+
+      await service.notificationFinishReservation();
+
+      expect(notificationsService.create as jest.Mock).not.toHaveBeenCalled();
+    });
+
+    it('asks nothing for a booking that never had a flight plan', async () => {
+      (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mockResolvedValue([finished({ flights: [] })]);
+
+      await service.notificationFinishReservation();
+
+      expect(notificationsService.create as jest.Mock).not.toHaveBeenCalled();
+    });
+
+    it('does not bring back bookings that ended long ago', async () => {
+      (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mockResolvedValue([
+        finished({ end_time: new Date(Date.now() - 30 * 24 * 3_600_000) }),
+      ]);
 
       await service.notificationFinishReservation();
 

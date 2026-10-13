@@ -5,13 +5,15 @@ import { CreateAdministrationInput } from './dto/create-admin.input';
 import { UpdateAdministrationInput } from './dto/update-admin.input';
 import { AdminDashboardStats } from 'src/types/administration.types';
 import { adminStatus } from './dto/adminStatus.input';
-import { UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver(() => Administration)
+@UseFilters(LocalizedExceptionFilter)
 export class AdministrationResolver {
   constructor(private readonly administrationService: AdministrationService) {}
 

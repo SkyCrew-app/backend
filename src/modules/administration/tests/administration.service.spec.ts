@@ -26,6 +26,7 @@ describe('AdministrationService', () => {
       find: jest.fn().mockResolvedValue([{ id: 1 }] as Administration[]),
       findOne: jest.fn(),
       remove: jest.fn().mockResolvedValue(undefined),
+      count: jest.fn().mockResolvedValue(0),
     };
     userRepo = { count: jest.fn().mockResolvedValue(2) };
     aircraftRepo = { count: jest.fn().mockResolvedValue(3) };
@@ -82,10 +83,32 @@ describe('AdministrationService', () => {
     expect(adminRepo.save).toHaveBeenCalled();
   });
 
-  it('remove devrait supprimer et renvoyer true', async () => {
+  it('create refuse une deuxième ligne de réglages', async () => {
+    (adminRepo.count as jest.Mock).mockResolvedValue(1);
+    await expect(service.create({ clubName: 'Autre' } as any)).rejects.toThrow(
+      'Les réglages du club existent déjà',
+    );
+    expect(adminRepo.save).not.toHaveBeenCalled();
+  });
+
+  // Rewritten: the settings row used to be deletable, which took the whole
+  // site down (the public status query then failed).
+  it('remove refuse toujours: les réglages ne se suppriment pas', async () => {
     (adminRepo.findOne as jest.Mock).mockResolvedValue({ id: 1 } as any);
-    await expect(service.remove(1)).resolves.toBe(true);
-    expect(adminRepo.remove).toHaveBeenCalled();
+    await expect(service.remove(1)).rejects.toThrow(
+      'Les réglages du club ne peuvent pas être supprimés',
+    );
+    expect(adminRepo.remove).not.toHaveBeenCalled();
+  });
+
+  it("getMaintenance répond non quand il n'y a pas encore de réglages", async () => {
+    (adminRepo.findOne as jest.Mock).mockResolvedValue(null);
+    await expect(service.getMaintenance()).resolves.toBe(false);
+  });
+
+  it('setMaintenance répond introuvable sans réglages', async () => {
+    (adminRepo.findOne as jest.Mock).mockResolvedValue(null);
+    await expect(service.setMaintenance()).rejects.toThrow(NotFoundException);
   });
 
   it('getMaintenance devrait retourner le status', async () => {

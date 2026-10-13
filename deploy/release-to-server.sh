@@ -10,7 +10,7 @@
 #   FRONTEND_DIR   checkout of the frontend repository   (default ../frontend)
 #   FRONTEND_ENV   file holding the NEXT_PUBLIC_* keys    (default $FRONTEND_DIR/.env)
 #   DEPLOY_DIR     folder of the deployment on the server (default /opt/skycrew)
-#   BACKUP_CMD     backup run on the server first         (default /usr/local/sbin/skycrew-backup, skipped if absent)
+#   BACKUP_CMD     backup run on the server first         (default /usr/local/sbin/skycrew-backup; set to `none` to go without)
 #   PLATFORM       platform of the server                 (default linux/amd64)
 set -eu
 
@@ -69,7 +69,12 @@ build() { # <name> <repository> <version> [docker build arguments]
 
 say "Backing up on $HOST"
 # shellcheck disable=SC2029
-ssh "$HOST" "if [ -x '$BACKUP_CMD' ]; then sudo '$BACKUP_CMD'; else echo 'no backup command, skipped'; fi"
+# The backup command belongs to root: its presence is checked as root too.
+if [ "$BACKUP_CMD" = none ]; then
+  echo "skipped on request"
+else
+  ssh "$HOST" "if sudo test -x '$BACKUP_CMD'; then sudo '$BACKUP_CMD' && echo 'backup done'; else echo 'no backup command at $BACKUP_CMD: stopping' >&2; exit 1; fi"
+fi
 
 for image in ${BACKEND_VERSION:+backend:$BACKEND_VERSION} ${FRONTEND_VERSION:+frontend:$FRONTEND_VERSION}; do
   say "Copying $image"

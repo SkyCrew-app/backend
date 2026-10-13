@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuditResolver } from '../audit.resolver';
 import { AuditService } from '../audit.service';
+import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Audit } from '../entity/audit.entity';
 import { AuditItem } from '../entity/audit-item.entity';
 import { AuditTemplate } from '../entity/audit-template.entity';
@@ -185,5 +186,33 @@ describe('AuditResolver', () => {
     expect(resolver.getCriticalityLevels()).toEqual(
       Object.values(CriticalityLevel),
     );
+  });
+
+  // Audits are an administration tool: the three reads below were open to
+  // every member.
+  it.each(['findAuditById', 'getUpcomingAudits', 'getOverdueAudits'])(
+    '%s is for administrators only',
+    (method) => {
+      expect(
+        Reflect.getMetadata('roles', AuditResolver.prototype[method]),
+      ).toEqual(['Administrateur']);
+      expect(
+        Reflect.getMetadata('__guards__', AuditResolver.prototype[method]),
+      ).toContain(RolesGuard);
+    },
+  );
+
+  it('has no operation without a role', () => {
+    const operations = Object.getOwnPropertyNames(
+      AuditResolver.prototype,
+    ).filter((name) => name !== 'constructor');
+
+    expect(operations.length).toBeGreaterThan(10);
+    for (const name of operations) {
+      expect([
+        name,
+        Reflect.getMetadata('roles', AuditResolver.prototype[name]),
+      ]).toEqual([name, ['Administrateur']]);
+    }
   });
 });

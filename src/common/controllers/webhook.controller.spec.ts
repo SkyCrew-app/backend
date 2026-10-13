@@ -14,7 +14,11 @@ import {
   resetStripeClient,
   stripeClient,
 } from '../../modules/payments/libs/stripe.client';
-import { HttpException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  NotFoundException,
+} from '@nestjs/common';
 
 describe('WebhookController', () => {
   let controller: WebhookController;
@@ -35,7 +39,8 @@ describe('WebhookController', () => {
       settlePayment: jest.fn(),
       markPaymentFailed: jest.fn(),
       updateUserBalance: jest.fn(),
-      processRefund: jest.fn(),
+      applyProviderRefund: jest.fn(),
+      applyDispute: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -98,7 +103,7 @@ describe('WebhookController', () => {
       expect(result).toEqual({ received: true });
     });
 
-    it('records a refund', async () => {
+    it('passes on the total refunded so far, as the provider announces it', async () => {
       stripeConstructEvent.mockReturnValue(
         mockEvent('charge.refunded', {
           payment_intent: 'pi_123',
@@ -108,21 +113,64 @@ describe('WebhookController', () => {
 
       const result = await controller.handleStripeWebhook(request, 'sig');
 
-      expect(paymentsService.processRefund).toHaveBeenCalledWith('pi_123', 5);
+      expect(paymentsService.applyProviderRefund).toHaveBeenCalledWith(
+        'pi_123',
+        5,
+      );
       expect(result).toEqual({ received: true });
     });
 
-    it('acknowledges an event about a payment it does not know', async () => {
+    it('records a chargeback', async () => {
+      stripeConstructEvent.mockReturnValue(
+        mockEvent('charge.dispute.created', {
+          id: 'dp_1',
+          payment_intent: 'pi_123',
+          amount: 50000,
+        }),
+      );
+
+      await controller.handleStripeWebhook(request, 'sig');
+
+      expect(paymentsService.applyDispute).toHaveBeenCalledWith(
+        'pi_123',
+        'dp_1',
+        500,
+      );
+    });
+
+    it.each([
+      [
+        'a payment it does not know',
+        new NotFoundException('Payment not found'),
+      ],
+      ['a payment that refuses it', new BadRequestException('Not confirmable')],
+    ])('acknowledges an event about %s', async (_case, refusal) => {
       stripeConstructEvent.mockReturnValue(
         mockEvent('payment_intent.succeeded', { id: 'pi_unknown' }),
       );
-      (paymentsService.settlePayment as jest.Mock).mockRejectedValue(
-        new Error('Payment not found'),
-      );
+      (paymentsService.settlePayment as jest.Mock).mockRejectedValue(refusal);
 
       await expect(
         controller.handleStripeWebhook(request, 'sig'),
       ).resolves.toEqual({ received: true });
+    });
+
+    // Answering 200 here would tell the provider not to retry: a top-up paid
+    // while the database was unreachable would never be credited.
+    it('answers 500 when crediting fails, so the provider retries', async () => {
+      stripeConstructEvent.mockReturnValue(
+        mockEvent('payment_intent.succeeded', { id: 'pi_1' }),
+      );
+      (paymentsService.settlePayment as jest.Mock).mockRejectedValue(
+        new Error('connection terminated'),
+      );
+
+      const error = await controller
+        .handleStripeWebhook(request, 'sig')
+        .catch((caught) => caught);
+
+      expect(error).toBeInstanceOf(HttpException);
+      expect(error.getStatus()).toBe(500);
     });
 
     it('answers 400 when the signature is invalid', async () => {

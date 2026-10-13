@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ChecklistTemplate } from './entity/checklist-template.entity';
@@ -17,6 +22,11 @@ import { User } from '../users/entity/users.entity';
 import { ChecklistTemplateRemoval } from './dto/checklist-template-removal.type';
 import { DEFAULT_LANGUAGE, Language } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
+import { localized } from '../../common/i18n/localized-exception';
+import {
+  Reservation,
+  ReservationStatus,
+} from '../reservations/entity/reservations.entity';
 
 @Injectable()
 export class ChecklistsService {
@@ -27,6 +37,8 @@ export class ChecklistsService {
     private readonly itemRepository: Repository<ChecklistItem>,
     @InjectRepository(ChecklistSubmission)
     private readonly submissionRepository: Repository<ChecklistSubmission>,
+    @InjectRepository(Reservation)
+    private readonly reservationRepository: Repository<Reservation>,
   ) {}
 
   // ── Templates ──────────────────────────────────────────────
@@ -199,6 +211,29 @@ export class ChecklistsService {
     pilot: User,
   ): Promise<ChecklistSubmission> {
     const template = await this.findOneTemplate(input.templateId);
+    if (!template.is_active) {
+      throw localized(ConflictException, 'error.checklist.templateInactive');
+    }
+
+    // A pre-flight checklist is filled in by the pilot of the booking.
+    if (input.reservationId) {
+      const reservation = await this.reservationRepository.findOne({
+        where: { id: input.reservationId },
+        relations: ['user'],
+      });
+      if (!reservation) {
+        throw new NotFoundException(
+          `Reservation with ID ${input.reservationId} not found`,
+        );
+      }
+      if (Number(reservation.user?.id) !== Number(pilot?.id)) {
+        throw localized(ForbiddenException, 'error.checklist.notOwnBooking');
+      }
+      if (reservation.status === ReservationStatus.CANCELLED) {
+        throw localized(ConflictException, 'error.checklist.bookingCancelled');
+      }
+    }
+
     const submission = this.submissionRepository.create({
       template,
       pilot,
@@ -221,6 +256,7 @@ export class ChecklistsService {
       responses: input.responses,
     };
     if (input.completed) {
+      await this.assertRequiredItemsChecked(input.id, input.responses);
       changes.status = ChecklistSubmissionStatus.COMPLETED;
       changes.completed_at = new Date();
     }
@@ -228,7 +264,33 @@ export class ChecklistsService {
     return this.writeSubmission(input.id, changes);
   }
 
+  // A checklist is complete once every required item is checked.
+  private async assertRequiredItemsChecked(
+    id: number,
+    responses?: { itemId: number; checked: boolean }[],
+  ): Promise<void> {
+    const submission = await this.findOneSubmission(id);
+    const checked = new Set(
+      (responses ?? submission.responses ?? [])
+        .filter((response) => response.checked)
+        .map((response) => Number(response.itemId)),
+    );
+    const missing = (submission.template?.items ?? []).filter(
+      (item) => item.is_required && !checked.has(Number(item.id)),
+    );
+    if (missing.length > 0) {
+      throw localized(
+        ConflictException,
+        'error.checklist.requiredItemsMissing',
+        {
+          count: missing.length,
+        },
+      );
+    }
+  }
+
   async completeSubmission(id: number): Promise<ChecklistSubmission> {
+    await this.assertRequiredItemsChecked(id);
     return this.writeSubmission(id, {
       status: ChecklistSubmissionStatus.COMPLETED,
       completed_at: new Date(),
@@ -239,11 +301,16 @@ export class ChecklistsService {
     id: number,
     changes: Partial<ChecklistSubmission>,
   ): Promise<ChecklistSubmission> {
-    const result = await this.submissionRepository.update(id, changes as any);
+    // A completed checklist is a record: it is written while it is in
+    // progress and never afterwards.
+    const result = await this.submissionRepository.update(
+      { id, status: ChecklistSubmissionStatus.IN_PROGRESS },
+      changes as any,
+    );
     if (!result.affected) {
-      throw new NotFoundException(
-        `Checklist submission with ID ${id} not found`,
-      );
+      // Not found, or no longer in progress.
+      await this.findOneSubmission(id);
+      throw localized(ConflictException, 'error.checklist.alreadyCompleted');
     }
     return this.findOneSubmission(id);
   }

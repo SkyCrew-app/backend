@@ -24,8 +24,10 @@ export class HealthController {
   check() {
     return this.health.check([
       () => this.db.pingCheck('database'),
-      () => this.memory.checkHeap('memory_heap', 200 * 1024 * 1024),
-      () => this.memory.checkRSS('memory_rss', 300 * 1024 * 1024),
+      // The container is given 1 GiB and the navigation data alone takes
+      // about 150 MB: the alarm rings well before the limit, not at rest.
+      () => this.memory.checkHeap('memory_heap', 600 * 1024 * 1024),
+      () => this.memory.checkRSS('memory_rss', 800 * 1024 * 1024),
       () =>
         this.disk.checkStorage('disk', {
           path: '/',

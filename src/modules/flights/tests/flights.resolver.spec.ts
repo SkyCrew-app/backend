@@ -4,6 +4,9 @@ import { FlightsService } from '../flights.service';
 import { AirportsService } from '../airports.service';
 import { MetarService } from '../metar.service';
 import { Flight } from '../entity/flights.entity';
+import { ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ROLES_KEY } from '../../../common/decorators/roles.decorator';
 
 describe('FlightsResolver', () => {
   let resolver: FlightsResolver;
@@ -11,18 +14,24 @@ describe('FlightsResolver', () => {
   let airports: any;
   let metar: any;
 
-  const mockContext = {
-    req: { user: { id: 1, role: 'Pilote' } },
+  const pilot = {
+    id: 1,
+    email: 'p@example.com',
+    role: { role_name: 'Pilote' },
   };
 
-  const adminContext = {
-    req: { user: { id: 99, role: 'Administrateur' } },
+  const administrator = {
+    id: 99,
+    email: 'a@example.com',
+    role: { role_name: 'Administrateur' },
   };
 
   beforeEach(async () => {
     service = {
       findAll: jest.fn(),
       findOne: jest.fn(),
+      findOneFor: jest.fn(),
+      assertCanReadFlightsOf: jest.fn().mockResolvedValue(undefined),
       getFlightsByUser: jest.fn(),
       createFlightByUser: jest.fn(),
       createFlightByAI: jest.fn(),
@@ -140,7 +149,7 @@ describe('FlightsResolver', () => {
     expect(parsed.weather.temp).toBeNull();
   });
 
-  it('createFlight uses authenticated user id', async () => {
+  it('createFlight passes the caller, who must hold the booking', async () => {
     const input = {
       user_id: 999,
       flight_hours: 1,
@@ -151,11 +160,8 @@ describe('FlightsResolver', () => {
       waypoints: [],
     };
     service.createFlightByUser.mockResolvedValue({ id: 2 });
-    await resolver.createFlight(input as any, mockContext);
-    expect(service.createFlightByUser).toHaveBeenCalledWith(
-      expect.objectContaining({ user_id: 1 }),
-      'fr',
-    );
+    await resolver.createFlight(input as any, pilot);
+    expect(service.createFlightByUser).toHaveBeenCalledWith(input, pilot, 'fr');
   });
 
   it('generateFlightPlan extracts user_id from context and passes options', async () => {
@@ -167,7 +173,7 @@ describe('FlightsResolver', () => {
       preferred_runway_dep: '09L',
       cruise_altitude_ft: 25000,
     };
-    await resolver.generateFlightPlan(input as any, mockContext);
+    await resolver.generateFlightPlan(input as any, pilot);
     expect(service.createFlightByAI).toHaveBeenCalledWith(
       'A',
       'B',
@@ -176,6 +182,7 @@ describe('FlightsResolver', () => {
       expect.objectContaining({
         preferred_runway_dep: '09L',
         cruise_altitude_ft: 25000,
+        requester: pilot,
       }),
     );
   });
@@ -187,7 +194,7 @@ describe('FlightsResolver', () => {
       destination_icao: 'B',
       reservation_id: 4,
     };
-    await resolver.generateFlightPlan(input as any, mockContext);
+    await resolver.generateFlightPlan(input as any, pilot);
     expect(service.createFlightByAI).toHaveBeenCalledWith(
       'A',
       'B',
@@ -197,10 +204,10 @@ describe('FlightsResolver', () => {
     );
   });
 
-  it('removeFlight passes user id for ownership check', async () => {
+  it('removeFlight passes the caller for the ownership check', async () => {
     service.removeFlight.mockResolvedValue(true);
-    await resolver.removeFlight(5, mockContext);
-    expect(service.removeFlight).toHaveBeenCalledWith(5, 1);
+    await resolver.removeFlight(5, pilot);
+    expect(service.removeFlight).toHaveBeenCalledWith(5, pilot);
   });
 
   it('updateFlight passes the caller for the ownership check', async () => {
@@ -214,25 +221,48 @@ describe('FlightsResolver', () => {
     expect(service.updateFlight).toHaveBeenCalledWith(9, input, caller);
   });
 
+  it('getFlightById reads the flight for the caller', async () => {
+    service.findOneFor.mockResolvedValue({ id: 5 });
+    await expect(resolver.getFlightById(5, pilot)).resolves.toEqual({ id: 5 });
+    expect(service.findOneFor).toHaveBeenCalledWith(5, pilot);
+  });
+
   it('getFlightsByUser defaults to authenticated user', async () => {
     service.getFlightsByUser.mockResolvedValue([]);
-    await resolver.getFlightsByUser(undefined as any, mockContext);
+    await resolver.getFlightsByUser(undefined as any, pilot);
+    expect(service.assertCanReadFlightsOf).toHaveBeenCalledWith(1, pilot);
     expect(service.getFlightsByUser).toHaveBeenCalledWith(1);
   });
 
+  // The role of the session user is an object: comparing it with the role
+  // name always failed, so administrators were refused.
   it('getFlightsByUser allows admin to query other users', async () => {
     service.getFlightsByUser.mockResolvedValue([]);
-    await resolver.getFlightsByUser(5, adminContext);
+    await resolver.getFlightsByUser(5, administrator);
+    expect(service.assertCanReadFlightsOf).toHaveBeenCalledWith(
+      5,
+      administrator,
+    );
     expect(service.getFlightsByUser).toHaveBeenCalledWith(5);
   });
 
-  it('getFlightsByUser throws for non-admin querying other user', () => {
-    expect(() => resolver.getFlightsByUser(999, mockContext)).toThrow(
-      "Vous ne pouvez pas accéder aux vols d'un autre utilisateur",
+  it('getFlightsByUser throws for non-admin querying other user', async () => {
+    service.assertCanReadFlightsOf.mockRejectedValue(
+      new ForbiddenException('Vous ne pouvez consulter que vos propres vols'),
     );
+    await expect(resolver.getFlightsByUser(999, pilot)).rejects.toThrow(
+      'Vous ne pouvez consulter que vos propres vols',
+    );
+    expect(service.getFlightsByUser).not.toHaveBeenCalled();
   });
 
-  it('getRecentFlights calls service', async () => {
+  it('recentFlights is reserved to administrators', async () => {
+    const roles = new Reflector().get<string[]>(
+      ROLES_KEY,
+      FlightsResolver.prototype.getRecentFlights,
+    );
+    expect(roles).toEqual(['Administrateur']);
+
     service.getRecentFlights.mockResolvedValue([{ id: 6 }]);
     expect(await resolver.getRecentFlights(1)).toEqual([{ id: 6 }]);
   });

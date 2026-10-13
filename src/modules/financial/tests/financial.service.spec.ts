@@ -176,14 +176,19 @@ describe('FinancialService', () => {
   describe('Aggregations & Forecast', () => {
     const start = new Date(0),
       end = new Date();
-    it('aggregateRevenuesForPeriod calculates revenue', async () => {
+    it('aggregateRevenuesForPeriod sums what the members were charged', async () => {
       const admin = { id: 1, flightHourRate: 50 } as any;
+      // Postgres returns the stored amounts as text.
       const reservations = [
-        { estimated_flight_hours: 2, status: ReservationStatus.CONFIRMED },
+        { estimated_flight_hours: 2, charged_amount: '560.00' },
+        { charged_amount: '199.99' },
+        // An old booking whose charge is unknown counts for nothing.
+        { estimated_flight_hours: 3, charged_amount: null },
       ];
       adminRepo.findOne.mockResolvedValue(admin);
       reservationRepo.find.mockResolvedValue(reservations as any);
-      expect(await service.aggregateRevenuesForPeriod(start, end)).toBe(100);
+      // Not estimated hours x the club rate (2 x 50 + 3 x 50).
+      expect(await service.aggregateRevenuesForPeriod(start, end)).toBe(759.99);
     });
 
     it('aggregateExpensesForPeriod sums recorded and fuel', async () => {
@@ -206,7 +211,11 @@ describe('FinancialService', () => {
       const admin = { id: 1, flightHourRate: 2, fuelPrice: 5 } as any;
       adminRepo.findOne.mockResolvedValue(admin);
       reservationRepo.find.mockResolvedValue([
-        { estimated_flight_hours: 3, status: ReservationStatus.CONFIRMED },
+        {
+          estimated_flight_hours: 3,
+          charged_amount: 420,
+          status: ReservationStatus.CONFIRMED,
+        },
       ] as any);
       const qb: any = {
         select: jest.fn().mockReturnThis(),
@@ -217,9 +226,43 @@ describe('FinancialService', () => {
 
       const { revenueForecast, expenseForecast, netForecast } =
         await service.generateBudgetForecast(start, end);
-      expect(revenueForecast).toBe(6); // 3*2
+      // What was charged, not 3 h x the club rate.
+      expect(revenueForecast).toBe(420);
       expect(expenseForecast).toBeCloseTo(6 + 3 * 50 * 5);
       expect(netForecast).toBe(revenueForecast - expenseForecast);
+    });
+  });
+
+  describe('PDF export', () => {
+    it('prints expenses whose amount comes back from the database as text', async () => {
+      adminRepo.findOne.mockResolvedValue({ id: 1, fuelPrice: 2 } as any);
+      reservationRepo.find.mockResolvedValue([
+        { id: 4, estimated_flight_hours: 1, charged_amount: '150.00' },
+      ] as any);
+      expenseRepo.createQueryBuilder.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        getRawOne: jest.fn().mockResolvedValue({ sum: '80.50' }),
+      } as any);
+      expenseRepo.find.mockResolvedValue([
+        {
+          id: 1,
+          category: 'Carburant',
+          amount: '80.50',
+          expense_date: new Date('2026-01-10'),
+        },
+      ] as any);
+      const written = jest
+        .spyOn(service as any, 'writeExport')
+        .mockImplementation(() => undefined);
+
+      const url = await service.generateFinancialReportByPeriodPDF(
+        new Date('2026-01-01'),
+        new Date('2026-01-31'),
+      );
+
+      expect(url).toMatch(/^\/uploads\/exports\/financial-report-.*\.pdf$/);
+      expect(written).toHaveBeenCalledTimes(1);
     });
   });
 });

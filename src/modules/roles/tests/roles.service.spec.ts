@@ -18,7 +18,9 @@ describe('RolesService', () => {
     find: jest.fn(),
     findOne: jest.fn(),
     delete: jest.fn(),
+    manager: { getRepository: jest.fn() },
   };
+  const membersHolding = jest.fn();
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -35,8 +37,16 @@ describe('RolesService', () => {
     repository = module.get<Repository<Role>>(getRepositoryToken(Role));
   });
 
+  beforeEach(() => {
+    mockRepository.find.mockResolvedValue([]);
+    membersHolding.mockResolvedValue(0);
+    mockRepository.manager.getRepository.mockReturnValue({
+      count: membersHolding,
+    });
+  });
+
   afterEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   it('should be defined', () => {
@@ -59,6 +69,22 @@ describe('RolesService', () => {
       expect(mockRepository.create).toHaveBeenCalledWith(createRoleInput);
       expect(mockRepository.save).toHaveBeenCalledWith(expectedRole);
       expect(result).toEqual(expectedRole);
+    });
+
+    it('refuses an empty name', async () => {
+      await expect(service.createRole({ role_name: '   ' })).rejects.toThrow(
+        'Le nom du rôle est requis',
+      );
+      expect(mockRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses a name already carried by a role, whatever the case', async () => {
+      mockRepository.find.mockResolvedValue([{ id: 1, role_name: 'Pilote' }]);
+
+      await expect(
+        service.createRole({ role_name: ' pilote ' }),
+      ).rejects.toThrow('Un rôle porte déjà ce nom');
+      expect(mockRepository.save).not.toHaveBeenCalled();
     });
   });
 
@@ -132,6 +158,35 @@ describe('RolesService', () => {
       expect(result).toEqual(updatedRole);
     });
 
+    it.each(['Administrateur', 'Pilote', 'Instructeur', 'Technicien'])(
+      'refuses to rename the built-in role %s',
+      async (name) => {
+        const role = { id: 1, role_name: name, users: [] };
+        jest.spyOn(service, 'findOne').mockResolvedValue(role);
+
+        await expect(
+          service.updateRole({ id: 1, role_name: 'Chef' }),
+        ).rejects.toThrow(`Le rôle « ${name} » est nécessaire`);
+        expect(role.role_name).toBe(name);
+        expect(mockRepository.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('refuses to give a role the name of another one', async () => {
+      jest
+        .spyOn(service, 'findOne')
+        .mockResolvedValue({ id: 5, role_name: 'Bénévole', users: [] });
+      mockRepository.find.mockResolvedValue([
+        { id: 5, role_name: 'Bénévole' },
+        { id: 6, role_name: 'Trésorier' },
+      ]);
+
+      await expect(
+        service.updateRole({ id: 5, role_name: 'trésorier' }),
+      ).rejects.toThrow('Un rôle porte déjà ce nom');
+      expect(mockRepository.save).not.toHaveBeenCalled();
+    });
+
     it('should throw NotFoundException when role to update not found', async () => {
       const updateRoleInput: UpdateRoleInput = {
         id: 999,
@@ -150,22 +205,52 @@ describe('RolesService', () => {
 
   describe('deleteRole', () => {
     it('should delete role and return true when successful', async () => {
-      const id = 1;
-      mockRepository.delete.mockResolvedValue({ affected: 1 });
+      mockRepository.findOne.mockResolvedValue({
+        id: 9,
+        role_name: 'Bénévole',
+      });
 
-      const result = await service.deleteRole(id);
+      const result = await service.deleteRole(9);
 
-      expect(mockRepository.delete).toHaveBeenCalledWith(id);
+      expect(mockRepository.delete).toHaveBeenCalledWith(9);
       expect(result).toBe(true);
     });
 
     it('should throw NotFoundException when role to delete not found', async () => {
       const id = 999;
-      mockRepository.delete.mockResolvedValue({ affected: 0 });
+      mockRepository.findOne.mockResolvedValue(null);
 
       await expect(service.deleteRole(id)).rejects.toThrow(
         new NotFoundException(`Role with ID ${id} not found`),
       );
+    });
+
+    it.each(['Administrateur', 'Pilote', 'Instructeur', 'Technicien'])(
+      'refuses to delete the built-in role %s',
+      async (name) => {
+        mockRepository.findOne.mockResolvedValue({ id: 1, role_name: name });
+
+        await expect(service.deleteRole(1)).rejects.toThrow(
+          'il ne peut être ni renommé ni supprimé',
+        );
+        expect(mockRepository.delete).not.toHaveBeenCalled();
+      },
+    );
+
+    it('refuses to delete a role some members hold', async () => {
+      mockRepository.findOne.mockResolvedValue({
+        id: 9,
+        role_name: 'Bénévole',
+      });
+      membersHolding.mockResolvedValue(3);
+
+      await expect(service.deleteRole(9)).rejects.toThrow(
+        'Ce rôle est attribué à 3 membre(s)',
+      );
+      expect(membersHolding).toHaveBeenCalledWith({
+        where: { role: { id: 9 } },
+      });
+      expect(mockRepository.delete).not.toHaveBeenCalled();
     });
   });
 });

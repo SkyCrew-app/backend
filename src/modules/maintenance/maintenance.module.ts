@@ -6,11 +6,12 @@ import { Maintenance } from './entity/maintenance.entity';
 import { AircraftModule } from '../aircraft/aircraft.module';
 import { User } from '../users/entity/users.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
+import { Reservation } from '../reservations/entity/reservations.entity';
 
 @Module({
   imports: [
     AircraftModule,
-    TypeOrmModule.forFeature([Maintenance, Aircraft, User]),
+    TypeOrmModule.forFeature([Maintenance, Aircraft, User, Reservation]),
   ],
   providers: [MaintenanceService, MaintenanceResolver],
   exports: [MaintenanceService],

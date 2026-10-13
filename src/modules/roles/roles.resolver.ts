@@ -3,12 +3,14 @@ import { RolesService } from './roles.service';
 import { Role } from './entity/roles.entity';
 import { CreateRoleInput } from './dto/create-role.input';
 import { UpdateRoleInput } from './dto/update-role.input';
-import { UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver(() => Role)
+@UseFilters(LocalizedExceptionFilter)
 export class RolesResolver {
   constructor(private readonly rolesService: RolesService) {}
 

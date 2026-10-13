@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Administration } from './entity/admin.entity';
@@ -16,6 +22,7 @@ import {
 import { Flight } from '../flights/entity/flights.entity';
 import { Incident } from '../incidents/entity/incidents.entity';
 import { AdminDashboardStats } from 'src/types/administration.types';
+import { localized } from '../../common/i18n/localized-exception';
 @Injectable()
 export class AdministrationService {
   constructor(
@@ -36,6 +43,10 @@ export class AdministrationService {
   async create(
     createAdministrationInput: CreateAdministrationInput,
   ): Promise<Administration> {
+    // The club has one settings row, read as such everywhere.
+    if ((await this.administrationRepository.count()) > 0) {
+      throw localized(ConflictException, 'error.settings.alreadyExist');
+    }
     const administration = this.administrationRepository.create(
       createAdministrationInput,
     );
@@ -65,18 +76,20 @@ export class AdministrationService {
     return this.administrationRepository.save(administration);
   }
 
-  async remove(id: number): Promise<boolean> {
-    const administration = await this.findOne(id);
-    await this.administrationRepository.remove(administration);
-    return true;
+  // Bookings, the planning and the maintenance page all read the settings:
+  // they are edited, never deleted.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async remove(_id: number): Promise<boolean> {
+    throw localized(ForbiddenException, 'error.settings.cannotDelete');
   }
 
   async getMaintenance(): Promise<boolean> {
-    const isMaintenanceActive = this.administrationRepository.findOne({
+    const administration = await this.administrationRepository.findOne({
       where: { id: 1 },
     });
 
-    return (await isMaintenanceActive).isMaintenanceActive;
+    // No settings yet is not a site under maintenance.
+    return administration?.isMaintenanceActive ?? false;
   }
 
   async getMaintenanceDetails(): Promise<{
@@ -99,6 +112,9 @@ export class AdministrationService {
     const administration = await this.administrationRepository.findOne({
       where: { id: 1 },
     });
+    if (!administration) {
+      throw new NotFoundException('Administration with ID 1 not found');
+    }
     administration.isMaintenanceActive = !administration.isMaintenanceActive;
     await this.administrationRepository.save(administration);
     return administration.isMaintenanceActive;
@@ -162,7 +178,10 @@ export class AdministrationService {
         })),
       };
     } catch (error) {
-      new Logger(AdministrationService.name).error('Error fetching admin dashboard stats', error);
+      new Logger(AdministrationService.name).error(
+        'Error fetching admin dashboard stats',
+        error,
+      );
       throw new Error(`Error while fetching admin dashboard stats: ${error}`);
     }
   }
