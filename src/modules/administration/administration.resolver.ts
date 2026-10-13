@@ -11,11 +11,21 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { SessionUser } from '../../common/auth/access';
+import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
+import {
+  ADMIN_ACTION,
+  changedFields,
+} from '../../common/admin-actions/admin-actions';
 
 @Resolver(() => Administration)
 @UseFilters(LocalizedExceptionFilter)
 export class AdministrationResolver {
-  constructor(private readonly administrationService: AdministrationService) {}
+  constructor(
+    private readonly administrationService: AdministrationService,
+    private readonly adminActions: AdminActionsService,
+  ) {}
 
   // Opening hours, closure days, rates and rules: every member needs them,
   // starting with the reservation schedule. Changing them stays
@@ -29,24 +39,57 @@ export class AdministrationResolver {
   @Mutation(() => Administration, { name: 'createAdministration' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  create(
+  async create(
     @Args('createAdministrationInput')
     createAdministrationInput: CreateAdministrationInput,
+    @CurrentUser() currentUser?: SessionUser,
   ): Promise<Administration> {
-    return this.administrationService.create(createAdministrationInput);
+    const created = await this.administrationService.create(
+      createAdministrationInput,
+    );
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.SETTINGS_CHANGED,
+      { type: 'settings', id: created?.id },
+      { created: true },
+    );
+    return created;
   }
 
   @Mutation(() => Administration, { name: 'updateAdministration' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  update(
+  async update(
     @Args('updateAdministrationInput')
     updateAdministrationInput: UpdateAdministrationInput,
+    @CurrentUser() currentUser?: SessionUser,
   ) {
-    return this.administrationService.update(
+    // A copy of the settings as they were, to trace what changed.
+    const before = {
+      ...(await this.administrationService.findOne(
+        updateAdministrationInput.id,
+      )),
+    } as Record<string, unknown>;
+    const updated = await this.administrationService.update(
       updateAdministrationInput.id,
       updateAdministrationInput,
     );
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id, ...sent } = updateAdministrationInput as unknown as Record<
+      string,
+      unknown
+    >;
+    const changes = changedFields(before, sent);
+    if (Object.keys(changes).length > 0) {
+      await this.adminActions.record(
+        currentUser,
+        ADMIN_ACTION.SETTINGS_CHANGED,
+        { type: 'settings', id: updateAdministrationInput.id },
+        { changes },
+      );
+    }
+    return updated;
   }
 
   @Mutation(() => Boolean, { name: 'deleteAdministration' })
@@ -73,8 +116,15 @@ export class AdministrationResolver {
   @Mutation(() => Boolean, { name: 'setSiteStatus' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  setSiteStatus() {
-    return this.administrationService.setMaintenance();
+  async setSiteStatus(@CurrentUser() currentUser?: SessionUser) {
+    const active = await this.administrationService.setMaintenance();
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.SITE_MAINTENANCE_TOGGLED,
+      { type: 'settings', id: 1 },
+      { maintenanceActive: active },
+    );
+    return active;
   }
 
   @Query(() => adminStatus, { name: 'adminDashboardStats' })

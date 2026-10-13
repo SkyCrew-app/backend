@@ -11,6 +11,9 @@ import { AircraftService } from '../../aircraft/aircraft.service';
 import { UsersService } from '../../users/users.service';
 import { AuditResultType } from '../enums/audit-result.enum';
 import { AuditFrequencyType } from '../enums/audit-frequency.enum';
+import { IncidentsService } from '../../incidents/incidents.service';
+import { AvailabilityStatus } from '../../aircraft/entity/aircraft.entity';
+import { GROUNDING_AUDIT_RESULTS } from '../audit-rules';
 
 // Utility to create repository mocks
 const createRepositoryMock = <T = any>(): Partial<
@@ -33,14 +36,16 @@ describe('AuditService', () => {
   >;
   let aircraftService: Partial<Record<keyof AircraftService, jest.Mock>>;
   let usersService: Partial<Record<keyof UsersService, jest.Mock>>;
+  let incidentsService: { announceGrounding: jest.Mock };
 
   beforeEach(async () => {
     auditRepo = createRepositoryMock<Audit>();
     auditItemRepo = createRepositoryMock<AuditItem>();
     templateRepo = createRepositoryMock<AuditTemplate>();
     templateItemRepo = createRepositoryMock<AuditTemplateItem>();
-    aircraftService = { findOne: jest.fn() };
+    aircraftService = { findOne: jest.fn(), updateStatus: jest.fn() };
     usersService = { findOneById: jest.fn() };
+    incidentsService = { announceGrounding: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -54,6 +59,7 @@ describe('AuditService', () => {
         },
         { provide: AircraftService, useValue: aircraftService },
         { provide: UsersService, useValue: usersService },
+        { provide: IncidentsService, useValue: incidentsService },
       ],
     }).compile();
 
@@ -157,6 +163,93 @@ describe('AuditService', () => {
       await expect(
         service.updateAudit(1, { is_closed: false } as any),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // A non-conforming audit used to leave the aircraft bookable.
+  describe('grounding the aircraft', () => {
+    const record = (result: AuditResultType, aircraft: any) => {
+      const dto = {
+        aircraftId: aircraft.id,
+        auditorId: 2,
+        audit_date: new Date(),
+        audit_result: result,
+        audit_frequency: AuditFrequencyType.ANNUEL,
+      } as any;
+      aircraftService.findOne.mockResolvedValue(aircraft);
+      usersService.findOneById.mockResolvedValue({ id: 2 });
+      auditRepo.create.mockReturnValue({ ...dto, aircraft });
+      auditRepo.save.mockResolvedValue({ id: 10 } as Audit);
+      return service.createAudit(dto);
+    };
+
+    it('grounds on a non-conforming result only', () => {
+      expect(GROUNDING_AUDIT_RESULTS).toEqual([AuditResultType.NON_CONFORME]);
+    });
+
+    it('takes the aircraft out of service when the audit is recorded non-conforming, and tells people', async () => {
+      const aircraft = {
+        id: 1,
+        registration_number: 'F-GABC',
+        availability_status: AvailabilityStatus.AVAILABLE,
+      };
+
+      await record(AuditResultType.NON_CONFORME, aircraft);
+
+      expect(aircraftService.updateStatus).toHaveBeenCalledWith(
+        1,
+        AvailabilityStatus.UNAVAILABLE,
+      );
+      expect(incidentsService.announceGrounding).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1 }),
+        { kind: 'audit', id: 10 },
+      );
+    });
+
+    it.each([
+      AuditResultType.CONFORME,
+      AuditResultType.CONFORME_AVEC_REMARQUES,
+      AuditResultType.NON_APPLICABLE,
+    ])('leaves the aircraft alone for a %s audit', async (result) => {
+      await record(result, {
+        id: 1,
+        availability_status: AvailabilityStatus.AVAILABLE,
+      });
+
+      expect(aircraftService.updateStatus).not.toHaveBeenCalled();
+      expect(incidentsService.announceGrounding).not.toHaveBeenCalled();
+    });
+
+    it('grounds when an audit becomes non-conforming, once', async () => {
+      const audit = {
+        id: 4,
+        is_closed: false,
+        audit_result: AuditResultType.CONFORME,
+        aircraft: { id: 1, availability_status: AvailabilityStatus.AVAILABLE },
+      } as any;
+      jest.spyOn(service, 'findAuditById').mockResolvedValue(audit);
+      auditRepo.save.mockImplementation(async (saved) => saved);
+
+      await service.updateAudit(4, {
+        audit_result: AuditResultType.NON_CONFORME,
+      } as any);
+      expect(aircraftService.updateStatus).toHaveBeenCalledWith(
+        1,
+        AvailabilityStatus.UNAVAILABLE,
+      );
+      expect(incidentsService.announceGrounding).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 1 }),
+        { kind: 'audit', id: 4 },
+      );
+
+      // Editing the notes of an audit already non-conforming says nothing
+      // again, and does not ground an aircraft put back in service since.
+      aircraftService.updateStatus.mockClear();
+      incidentsService.announceGrounding.mockClear();
+      audit.aircraft.availability_status = AvailabilityStatus.AVAILABLE;
+      await service.updateAudit(4, { audit_notes: 'suite' } as any);
+      expect(aircraftService.updateStatus).not.toHaveBeenCalled();
+      expect(incidentsService.announceGrounding).not.toHaveBeenCalled();
     });
   });
 

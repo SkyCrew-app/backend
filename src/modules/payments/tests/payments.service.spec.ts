@@ -12,6 +12,7 @@ import {
   toCents,
 } from '../money';
 import { PaymentsService } from '../payments.service';
+import { balanceSign } from '../entity/payments.entity';
 
 const refusal = async (promise: Promise<unknown>) => {
   const error = await promise.then(
@@ -152,6 +153,141 @@ describe('PaymentsService', () => {
       ]);
       expect(balance()).toBe(0);
       expect(lines()).toEqual(['booking:100.00:completed']);
+    });
+  });
+
+  // Invoices used to be created without a number.
+  describe('invoice numbers', () => {
+    const year = new Date().getFullYear();
+    const numbers = () =>
+      database.rows(tables.Invoice).map((invoice) => invoice.invoice_number);
+
+    it('numbers the invoices of bookings and top-ups in one sequence, in order', async () => {
+      await database.manager.transaction((manager) =>
+        service.chargeBooking(manager, { userId: member.id, cents: 1000 }),
+      );
+      topUp();
+      await service.settlePayment('pi_1');
+      await database.manager.transaction((manager) =>
+        service.chargeBooking(manager, { userId: member.id, cents: 500 }),
+      );
+
+      expect(numbers()).toHaveLength(3);
+      expect(numbers().map((number) => number.slice(-5))).toEqual([
+        '00001',
+        '00002',
+        '00003',
+      ]);
+      expect(numbers().every((number) => /^\d{4}-\d{5}$/.test(number))).toBe(
+        true,
+      );
+      expect(
+        Math.abs(Number(numbers()[0].slice(0, 4)) - year),
+      ).toBeLessThanOrEqual(1);
+    });
+
+    it('leaves no gap when the charge is undone', async () => {
+      // More than the balance: the booking is refused, nothing is written.
+      await expect(
+        database.manager.transaction((manager) =>
+          service.chargeBooking(manager, { userId: member.id, cents: 999900 }),
+        ),
+      ).rejects.toBeDefined();
+      // The payment line cannot be written: the invoice and its number are
+      // rolled back with the debit.
+      database.failNextSaveOf = tables.Payment;
+      await expect(
+        database.manager.transaction((manager) =>
+          service.chargeBooking(manager, { userId: member.id, cents: 1000 }),
+        ),
+      ).rejects.toBeDefined();
+
+      await database.manager.transaction((manager) =>
+        service.chargeBooking(manager, { userId: member.id, cents: 1000 }),
+      );
+
+      expect(numbers().map((number) => number.slice(-5))).toEqual(['00001']);
+      expect(balance()).toBe(90);
+    });
+
+    it('settles a top-up once: a second confirmation takes no number', async () => {
+      topUp();
+      await service.settlePayment('pi_1');
+      await service.settlePayment('pi_1');
+
+      expect(numbers()).toHaveLength(1);
+    });
+
+    it('stores what the invoice is for', async () => {
+      const aircraft = database.insert(tables.Aircraft, {
+        registration_number: 'F-GABC',
+      });
+      const reservation = database.insert(tables.Reservation, {
+        aircraft: { id: aircraft.id },
+        user: { id: member.id },
+        start_time: new Date('2026-11-02T09:00:00Z'),
+        end_time: new Date('2026-11-02T10:00:00Z'),
+      });
+
+      await database.manager.transaction((manager) =>
+        service.chargeBooking(manager, {
+          userId: member.id,
+          cents: 1500,
+          reservationId: reservation.id,
+        }),
+      );
+      topUp();
+      await service.settlePayment('pi_1');
+
+      const [booking, topUpInvoice] = database
+        .rows(tables.Invoice)
+        .map((invoice) => JSON.parse(invoice.invoice_items));
+      expect(booking).toEqual([
+        {
+          kind: 'booking',
+          amount: 15,
+          reservationId: reservation.id,
+          registration: 'F-GABC',
+          start: '2026-11-02T09:00:00.000Z',
+          end: '2026-11-02T10:00:00.000Z',
+          instructor: null,
+        },
+      ]);
+      expect(topUpInvoice).toEqual([
+        { kind: 'top_up', amount: 50, method: 'stripe' },
+      ]);
+    });
+
+    it('stores the instructor of an instruction flight on its invoice', async () => {
+      const instructor = database.insert(tables.User, {
+        first_name: 'Claire',
+        last_name: 'Morel',
+      });
+      const aircraft = database.insert(tables.Aircraft, {
+        registration_number: 'F-GABC',
+      });
+      const reservation = database.insert(tables.Reservation, {
+        aircraft: { id: aircraft.id },
+        user: { id: member.id },
+        instructor: { id: instructor.id },
+        start_time: new Date('2026-11-02T09:00:00Z'),
+        end_time: new Date('2026-11-02T10:00:00Z'),
+      });
+
+      await database.manager.transaction((manager) =>
+        service.chargeBooking(manager, {
+          userId: member.id,
+          cents: 1500,
+          reservationId: reservation.id,
+        }),
+      );
+
+      const [line] = JSON.parse(database.rows(tables.Invoice)[0].invoice_items);
+      expect(line).toMatchObject({
+        kind: 'booking',
+        registration: 'F-GABC',
+        instructor: 'Claire Morel',
+      });
     });
   });
 
@@ -595,6 +731,56 @@ describe('PaymentsService', () => {
       await expect(
         service.applyDispute('pi_unknown', 'dp_2', 100),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    // A chargeback the club won used to leave the member debited for good.
+    describe('a dispute the club wins', () => {
+      it('gives back what the dispute had taken, once', async () => {
+        await service.applyDispute('pi_1', 'dp_1', 100);
+        expect(balance()).toBe(100);
+        notifications.create.mockClear();
+
+        const line = await service.applyDisputeWon('dp_1');
+        // The provider announces it more than once.
+        await expect(service.applyDisputeWon('dp_1')).resolves.toBeNull();
+
+        expect(line).toMatchObject({ kind: 'dispute_won', amount: 100 });
+        expect(balance()).toBe(200);
+        expect(lines()).toEqual([
+          'top_up:100.00:completed',
+          'provider_refund:100.00:completed',
+          'dispute_won:100.00:completed',
+        ]);
+        expect(database.locks).toContain(
+          `payments:${database.rows(tables.Payment)[1].id}`,
+        );
+        expect(
+          notifications.create.mock.calls.map(
+            ([notification]) => notification.notification_type,
+          ),
+        ).toEqual(['PAYMENT_RECEIVED']);
+      });
+
+      it('gives back the part that was taken when the dispute was capped to the top-up', async () => {
+        await service.applyDispute('pi_1', 'dp_1', 500);
+        await service.applyDisputeWon('dp_1');
+
+        expect(balance()).toBe(200);
+      });
+
+      it('credits nothing for a dispute that never debited the account', async () => {
+        await expect(service.applyDisputeWon('dp_unknown')).resolves.toBeNull();
+        // A refund is not a dispute: its line is not given back.
+        await service.applyProviderRefund('pi_1', 40);
+        await expect(service.applyDisputeWon('pi_1')).resolves.toBeNull();
+
+        expect(balance()).toBe(160);
+      });
+
+      it('counts as a credit in the account history', () => {
+        expect(balanceSign('dispute_won')).toBe(1);
+        expect(balanceSign('provider_refund')).toBe(-1);
+      });
     });
 
     describe('recorded by an administrator', () => {

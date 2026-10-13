@@ -6,6 +6,7 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { ReservationsService } from '../../reservations/reservations.service';
 import { FinancialService } from '../../financial/financial.service';
 import { ReservationStatus } from '../../reservations/entity/reservations.entity';
+import { LicenceRemindersService } from '../../licenses/licence-reminders.service';
 
 describe('CronService', () => {
   let service: CronService;
@@ -14,6 +15,10 @@ describe('CronService', () => {
   let notificationsService: Partial<NotificationsService>;
   let reservationsService: Partial<ReservationsService>;
   let financialService: Partial<FinancialService>;
+  let licenceReminders: {
+    sendExpiryReminders: jest.Mock;
+    sendAdminDigest: jest.Mock;
+  };
 
   beforeEach(async () => {
     courseService = {
@@ -40,9 +45,15 @@ describe('CronService', () => {
       findAllFinancialReports: jest.fn().mockResolvedValue([]),
     };
 
+    licenceReminders = {
+      sendExpiryReminders: jest.fn().mockResolvedValue(0),
+      sendAdminDigest: jest.fn().mockResolvedValue(0),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CronService,
+        { provide: LicenceRemindersService, useValue: licenceReminders },
         { provide: InstructionCoursesService, useValue: courseService },
         { provide: LicensesService, useValue: licensesService },
         { provide: NotificationsService, useValue: notificationsService },
@@ -134,57 +145,84 @@ describe('CronService', () => {
       );
     });
 
-    it('should notify licenses expiring soon', async () => {
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 5);
-      const licenses = [
-        {
-          id: 3,
-          user: { id: 40 },
-          expiration_date: futureDate,
-          license_type: 'CPL',
-        } as any,
-      ];
-      (licensesService.findExpiringLicenses as jest.Mock).mockResolvedValue(
-        licenses,
-      );
+    // The two tests that stood here expected one in-app reminder, 7 days
+    // before expiry, recognised by its text. Reminders are now sent at 60,
+    // 30 and 7 days, by e-mail too, and recorded on the licence: see
+    // licenses/tests/licence-reminders.spec.ts.
+    it('sends the expiry reminders every night, after marking the expired licences', async () => {
+      const now = new Date('2026-10-13T00:00:00Z');
+      (licensesService.findExpiringLicenses as jest.Mock).mockResolvedValue([]);
 
-      await service.handleLicenseExpiration();
+      await service.handleLicenseExpiration(now);
 
-      expect(notificationsService.create as jest.Mock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          notification_type: 'LICENSE_EXPIRING_SOON',
-          message: expect.stringContaining(
-            'Votre licence CPL expirera bientôt',
-          ),
-        }),
-      );
+      // Only licences whose date has passed are marked: 0 days ahead.
+      expect(licensesService.findExpiringLicenses).toHaveBeenCalledWith(0, now);
+      expect(licenceReminders.sendExpiryReminders).toHaveBeenCalledWith(now);
     });
-  });
 
-  describe('handleLicenseExpiration, night after night', () => {
-    it('reminds once for an expiry date, not every night', async () => {
-      const futureDate = new Date(Date.now() + 5 * 24 * 3_600_000);
+    it('does not write a reminder itself for a licence that is only expiring', async () => {
       (licensesService.findExpiringLicenses as jest.Mock).mockResolvedValue([
         {
           id: 3,
           user: { id: 40 },
-          expiration_date: futureDate,
+          status: 'active',
+          expiration_date: new Date(Date.now() + 5 * 24 * 3_600_000),
           license_type: 'CPL',
         },
       ]);
-      (notificationsService.alreadySent as jest.Mock).mockResolvedValue(true);
 
       await service.handleLicenseExpiration();
 
-      expect(notificationsService.alreadySent).toHaveBeenCalledWith(
-        40,
-        'LICENSE_EXPIRING_SOON',
-        expect.arrayContaining([
-          expect.stringContaining('Votre licence CPL expirera bientôt'),
-        ]),
-      );
+      expect(licensesService.update).not.toHaveBeenCalled();
       expect(notificationsService.create as jest.Mock).not.toHaveBeenCalled();
+    });
+
+    it('still sends the reminders when marking the expired licences failed', async () => {
+      (licensesService.findExpiringLicenses as jest.Mock).mockRejectedValue(
+        new Error('down'),
+      );
+
+      await service.handleLicenseExpiration();
+
+      expect(licenceReminders.sendExpiryReminders).toHaveBeenCalled();
+    });
+
+    it('marks a pending licence whose date has passed, like an active one', async () => {
+      (licensesService.findExpiringLicenses as jest.Mock).mockResolvedValue([
+        {
+          id: 9,
+          user: { id: 30 },
+          expiration_date: new Date(0),
+          status: 'pending',
+          license_type: 'LAPL',
+        },
+      ]);
+
+      await service.handleLicenseExpiration();
+
+      expect(licensesService.update).toHaveBeenCalledWith({
+        id: 9,
+        status: 'expired',
+        is_valid: false,
+      });
+    });
+  });
+
+  describe('sendLicenceDigest', () => {
+    it('sends the monthly digest to the administrators', async () => {
+      const now = new Date('2026-11-01T08:00:00Z');
+
+      await service.sendLicenceDigest(now);
+
+      expect(licenceReminders.sendAdminDigest).toHaveBeenCalledWith(now);
+    });
+
+    it('runs on the 1st of each month', () => {
+      const schedule = Reflect.getMetadata(
+        'SCHEDULE_CRON_OPTIONS',
+        CronService.prototype.sendLicenceDigest,
+      );
+      expect(schedule?.cronTime).toBe('0 8 1 * *');
     });
   });
 

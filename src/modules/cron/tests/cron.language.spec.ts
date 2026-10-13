@@ -34,6 +34,7 @@ describe('CronService reminders in the language of the member', () => {
       notifications as any,
       reservations as any,
       {} as any,
+      { sendExpiryReminders: jest.fn().mockResolvedValue(0) } as any,
     );
   });
 
@@ -103,7 +104,10 @@ describe('CronService reminders in the language of the member', () => {
     ]);
   });
 
-  it('writes licence reminders in the language of each holder', async () => {
+  // The reminders before expiry used to be checked here too; they are now
+  // sent by LicenceRemindersService (licence-reminders.spec.ts checks their
+  // language). The nightly job itself still announces an expired licence.
+  it('tells the holder of an expired licence in their language', async () => {
     const soon = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
     const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
     licences.findExpiringLicenses.mockResolvedValue([
@@ -112,6 +116,7 @@ describe('CronService reminders in the language of the member', () => {
         user: { id: 1, language: 'en' },
         license_type: 'PPL',
         expiration_date: soon,
+        status: 'active',
       },
       {
         id: 2,
@@ -124,22 +129,16 @@ describe('CronService reminders in the language of the member', () => {
         id: 3,
         user: { id: 3, language: 'fr' },
         license_type: 'PPL',
-        expiration_date: soon,
+        expiration_date: past,
+        status: 'active',
       },
     ]);
 
     await service.handleLicenseExpiration();
 
     expect(messages()).toEqual([
-      [
-        'LICENSE_EXPIRING_SOON',
-        `Your PPL licence expires soon, on ${soon.toLocaleDateString('en-GB')}. Please take the necessary steps.`,
-      ],
       ['LICENSE_EXPIRED', 'Your CPL licence has expired.'],
-      [
-        'LICENSE_EXPIRING_SOON',
-        `Votre licence PPL expirera bientôt, le ${soon.toLocaleDateString('fr-FR')}. Veuillez prendre les mesures nécessaires.`,
-      ],
+      ['LICENSE_EXPIRED', 'Votre licence PPL est expirée.'],
     ]);
   });
 

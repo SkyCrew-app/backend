@@ -125,8 +125,8 @@ describe('ReservationsService languages', () => {
       (world: ReturnType<typeof bookingWorld>) =>
         (world.database.rows(tables.User)[0].licenses = []),
       BadRequestException,
-      "Vous n'avez pas de licence valide pour réserver cet avion",
-      'error.reservation.noValidLicence',
+      "Sans licence valide, vous ne pouvez réserver qu'avec un instructeur : choisissez l'instructeur de ce vol",
+      'error.reservation.instructorRequired',
     ],
     [
       'insufficient balance',

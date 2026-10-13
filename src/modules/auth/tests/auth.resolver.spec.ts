@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthResolver } from '../auth.resolver';
-import { AuthService } from '../auth.service';
+import { AuthService, SESSION_LIFETIME_SECONDS } from '../auth.service';
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { Response, Request } from 'express';
 import { GqlThrottlerGuard } from '../../../common/guards/gql-throttler.guard';
@@ -50,6 +50,30 @@ describe('AuthResolver', () => {
           mockRes as Response,
         ),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    // The frontend no longer writes this cookie: the API alone gives it the
+    // life of the token it carries.
+    it('sets the session cookie for exactly the life of the token', async () => {
+      const user = { email: 'a@example.com' } as any;
+      (authService.validateSignIn as jest.Mock).mockResolvedValue(user);
+      (authService.login as jest.Mock).mockResolvedValue('jwt-token');
+
+      await resolver.login(
+        { email: 'a@example.com', password: 'pass' },
+        mockRes as Response,
+      );
+
+      expect(mockRes.cookie).toHaveBeenCalledWith(
+        'token',
+        'jwt-token',
+        expect.objectContaining({
+          httpOnly: true,
+          sameSite: 'strict',
+          path: '/',
+          maxAge: SESSION_LIFETIME_SECONDS * 1000,
+        }),
+      );
     });
 
     it('does not set auth token when 2FA is required', async () => {

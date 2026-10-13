@@ -41,6 +41,7 @@ describe('WebhookController', () => {
       updateUserBalance: jest.fn(),
       applyProviderRefund: jest.fn(),
       applyDispute: jest.fn(),
+      applyDisputeWon: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -137,6 +138,35 @@ describe('WebhookController', () => {
         500,
       );
     });
+
+    it('gives the money back when a chargeback is closed in favour of the club', async () => {
+      stripeConstructEvent.mockReturnValue(
+        mockEvent('charge.dispute.closed', {
+          id: 'dp_1',
+          payment_intent: 'pi_123',
+          amount: 50000,
+          status: 'won',
+        }),
+      );
+
+      await controller.handleStripeWebhook(request, 'sig');
+
+      expect(paymentsService.applyDisputeWon).toHaveBeenCalledWith('dp_1');
+    });
+
+    it.each(['lost', 'warning_closed', 'charge_refunded'])(
+      'gives nothing back when a chargeback is closed as %s',
+      async (status) => {
+        stripeConstructEvent.mockReturnValue(
+          mockEvent('charge.dispute.closed', { id: 'dp_1', status }),
+        );
+
+        await expect(
+          controller.handleStripeWebhook(request, 'sig'),
+        ).resolves.toEqual({ received: true });
+        expect(paymentsService.applyDisputeWon).not.toHaveBeenCalled();
+      },
+    );
 
     it.each([
       [

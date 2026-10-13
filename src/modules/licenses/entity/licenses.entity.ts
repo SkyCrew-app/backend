@@ -1,9 +1,20 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  Index,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+} from 'typeorm';
 import { User } from '../../users/entity/users.entity';
+
+// One licence number per licence type. Created by a migration, which skips
+// it when existing rows already collide.
+export const LICENCE_NUMBER_UNIQUE_INDEX = 'UQ_licenses_type_number';
 
 @ObjectType()
 @Entity('licenses')
+@Index(LICENCE_NUMBER_UNIQUE_INDEX, { synchronize: false })
 export class License {
   @Field(() => Int)
   @PrimaryGeneratedColumn()
@@ -44,4 +55,13 @@ export class License {
   @Field(() => [String], { nullable: true })
   @Column('simple-array', { nullable: true })
   documents_url?: string[];
+
+  // Expiry reminders already sent: the tightest step (in days) and the
+  // expiry date it was sent for. A renewed licence starts again. Never part
+  // of the API.
+  @Column({ type: 'int', nullable: true })
+  expiry_reminder_days: number | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  expiry_reminder_for: Date | null;
 }

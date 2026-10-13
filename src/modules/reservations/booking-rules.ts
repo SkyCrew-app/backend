@@ -5,6 +5,11 @@ import {
 } from '@nestjs/common';
 import { localized } from '../../common/i18n/localized-exception';
 import { Language } from '../../common/i18n/languages';
+import {
+  hasRole,
+  ROLE_INSTRUCTOR,
+  SessionUser,
+} from '../../common/auth/access';
 import { FlightCategory } from './entity/reservations.entity';
 
 // Every business choice about bookings lives in this file.
@@ -26,8 +31,14 @@ export const FLOWN_BOOKING_CANCELLABLE_BY_MEMBER = false;
 // administrator, who corrects the account by hand instead.
 export const CLOSED_FLIGHT_BOOKING_CANCELLABLE_BY_ADMIN = false;
 
-// The category a member without a licence may book: a dual flight.
-export const STUDENT_FLIGHT_CATEGORY = FlightCategory.INSTRUCTION;
+// A flight with an instructor on board is an instruction flight: the
+// booking takes this category whatever was sent.
+export const INSTRUCTION_FLIGHT_CATEGORY = FlightCategory.INSTRUCTION;
+
+// OWNER DECISION PENDING — what the instructor costs the student, in euros
+// per booked hour, on top of the aircraft. Zero: the student pays the
+// aircraft only. Every price of a booking goes through instructorFeeCents.
+export const INSTRUCTOR_FEE_PER_HOUR = 0;
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -209,26 +220,72 @@ export const hasValidLicence = (
   });
 
 // OWNER DECISION — who may fly.
-// A member with a valid licence books any flight. A member without one (a
-// student pilot) only books an instruction flight, and only on a day an
-// instructor has scheduled a lesson with them: never alone.
-export const assertAllowedToFly = (pilot: {
-  licences: PilotLicence[] | null | undefined;
+// Alone, the pilot needs a valid licence. With an instructor on board, the
+// licence that must be valid is the instructor's: a member without a licence
+// (a student pilot) therefore flies with an instructor, never alone.
+export const assertAllowedToFly = (crew: {
+  pilotLicences: PilotLicence[] | null | undefined;
+  // Null or undefined when nobody instructs.
+  instructorLicences?: PilotLicence[] | null;
+  withInstructor: boolean;
   acceptedTypes: string[] | null | undefined;
-  flightCategory: FlightCategory | string | undefined;
   flightEnd: Date;
-  hasLessonThatDay: boolean;
 }): void => {
-  if (hasValidLicence(pilot.licences, pilot.acceptedTypes, pilot.flightEnd)) {
+  if (crew.withInstructor) {
+    if (
+      !hasValidLicence(
+        crew.instructorLicences,
+        crew.acceptedTypes,
+        crew.flightEnd,
+      )
+    ) {
+      throw localized(
+        BadRequestException,
+        'error.reservation.instructorNoValidLicence',
+      );
+    }
     return;
   }
-  if (pilot.flightCategory !== STUDENT_FLIGHT_CATEGORY) {
-    throw localized(BadRequestException, 'error.reservation.noValidLicence');
-  }
-  if (!pilot.hasLessonThatDay) {
-    throw localized(BadRequestException, 'error.reservation.noLessonThatDay');
+  if (
+    !hasValidLicence(crew.pilotLicences, crew.acceptedTypes, crew.flightEnd)
+  ) {
+    throw localized(
+      BadRequestException,
+      'error.reservation.instructorRequired',
+    );
   }
 };
+
+// Who may instruct: an active member holding the instructor role, other
+// than the pilot.
+export const assertCanInstruct = (
+  instructor: Pick<SessionUser, 'id' | 'role'> & { is_active?: boolean | null },
+  pilotId: number,
+): void => {
+  if (Number(instructor.id) === Number(pilotId)) {
+    throw localized(BadRequestException, 'error.reservation.instructorIsPilot');
+  }
+  if (
+    !hasRole(instructor as SessionUser, ROLE_INSTRUCTOR) ||
+    instructor.is_active === false
+  ) {
+    throw localized(BadRequestException, 'error.reservation.notAnInstructor');
+  }
+};
+
+// What the instructor adds to the price of a slot, in cents.
+export const instructorFeeCents = (
+  withInstructor: boolean,
+  start: Date,
+  end: Date,
+): number =>
+  withInstructor
+    ? Math.round(
+        ((end.getTime() - start.getTime()) / HOUR) *
+          INSTRUCTOR_FEE_PER_HOUR *
+          100,
+      )
+    : 0;
 
 // Price of a slot in cents, rounded once.
 export const priceCents = (hourlyCost: number, start: Date, end: Date) => {
@@ -243,6 +300,9 @@ export const priceCents = (hourlyCost: number, start: Date, end: Date) => {
 
 export interface BookingActor {
   isAdmin: boolean;
+  // The member acting, when known: an instructor who cancels a booking they
+  // instruct declines it, under the same rules as its holder.
+  userId?: number;
 }
 
 interface BookedSlot {

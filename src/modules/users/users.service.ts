@@ -50,8 +50,10 @@ export const PASSWORD_RESET_VALIDITY_MINUTES = 60;
 // How long the link of an invitation works. An administrator can send a new
 // one at any time (resendInvitation).
 export const INVITATION_VALIDITY_DAYS = 7;
-// The one password rule, applied at activation, reset and change.
-export const PASSWORD_MIN_LENGTH = 8;
+// The one password rule, applied wherever a password is chosen: activation,
+// reset and change. Signing in never checks it, so a password chosen under
+// an earlier, shorter rule keeps working until its owner changes it.
+export const PASSWORD_MIN_LENGTH = 10;
 
 export const assertAcceptablePassword = (password: string): void => {
   if (!password || password.length < PASSWORD_MIN_LENGTH) {
@@ -61,8 +63,11 @@ export const assertAcceptablePassword = (password: string): void => {
   }
 };
 
-const hashResetToken = (token: string): string =>
+// Only the SHA-256 of a link's token is stored (password reset and
+// invitation alike): reading the database does not give a working link.
+export const hashLinkToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
+const hashResetToken = hashLinkToken;
 
 const invitationExpiry = (): Date =>
   new Date(Date.now() + INVITATION_VALIDITY_DAYS * 24 * 60 * 60_000);
@@ -154,9 +159,10 @@ export class UsersService {
     return role;
   }
 
-  private async sendInvitation(user: User): Promise<void> {
+  // `token` is the one put in the link; the account only keeps its hash.
+  private async sendInvitation(user: User, token: string): Promise<void> {
     const language = languageOf(user);
-    const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${user.validation_token}`;
+    const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${token}`;
     await this.emailService.sendMail(
       user.email,
       translate(language, 'mail.welcome.subject'),
@@ -180,7 +186,7 @@ export class UsersService {
     userData.email = email;
 
     const generatedPassword = uuidv4();
-    const token = uuidv4();
+    const token = randomBytes(32).toString('hex');
     const hashedPassword = await bcrypt.hash(generatedPassword, 10);
     userData.password = hashedPassword;
 
@@ -191,10 +197,10 @@ export class UsersService {
       ...userData,
       language,
       role: await this.roleOfNewMember(roleId),
-      validation_token: token,
+      validation_token: hashLinkToken(token),
       validationTokenExpiresAt: invitationExpiry(),
     });
-    await this.sendInvitation(newUser);
+    await this.sendInvitation(newUser, token);
     return this.usersRepository.save(newUser);
   }
 
@@ -209,10 +215,11 @@ export class UsersService {
       throw localized(BadRequestException, 'error.user.alreadyActivated');
     }
 
-    user.validation_token = uuidv4();
+    const token = randomBytes(32).toString('hex');
+    user.validation_token = hashLinkToken(token);
     user.validationTokenExpiresAt = invitationExpiry();
     await this.usersRepository.save(user);
-    await this.sendInvitation(user);
+    await this.sendInvitation(user, token);
     return true;
   }
 
@@ -240,6 +247,18 @@ export class UsersService {
     }
   }
 
+  // The administrators who can sign in: the ones the club writes to.
+  findActiveAdministrators(): Promise<User[]> {
+    return this.usersRepository.find({
+      where: {
+        is_active: true,
+        isEmailConfirmed: true,
+        role: { role_name: ROLE_ADMIN },
+      },
+      relations: ['role'],
+    });
+  }
+
   private async memberOrFail(id: number): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: { id },
@@ -247,6 +266,16 @@ export class UsersService {
     });
     if (!user) {
       throw localized(NotFoundException, 'error.user.notFound');
+    }
+    return user;
+  }
+
+  // What setActive(id, false) would refuse, asked before anything else is
+  // done on the member's behalf (see MemberDepartureService).
+  async assertMayDeactivate(id: number): Promise<User> {
+    const user = await this.memberOrFail(id);
+    if (user.is_active !== false) {
+      await this.assertNotLastAdministrator(user);
     }
     return user;
   }
@@ -457,6 +486,10 @@ export class UsersService {
 
     if (newRole) {
       user.role = newRole;
+      // The role travels in the session token, which the interface reads to
+      // decide which pages to show: the member signs in again and gets a
+      // token with the new role.
+      user.sessionVersion = (user.sessionVersion ?? 0) + 1;
     }
 
     const language = languageOf(user);
@@ -681,7 +714,7 @@ export class UsersService {
     // An empty token must never be looked up: it would match any account.
     const user = token
       ? await this.usersRepository.findOne({
-          where: { validation_token: token },
+          where: { validation_token: hashLinkToken(token) },
         })
       : null;
     // The same answer for an unknown, an already used and an expired link.

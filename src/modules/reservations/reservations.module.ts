@@ -11,15 +11,22 @@ import { AdministrationModule } from '../administration/administration.module';
 import { FlightsModule } from '../flights/flights.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AdminActionsModule } from '../../common/admin-actions/admin-actions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Reservation, ReservationTemplate, User, Aircraft]),
+    TypeOrmModule.forFeature([
+      Reservation,
+      ReservationTemplate,
+      User,
+      Aircraft,
+    ]),
     MailerModule,
     AdministrationModule,
     FlightsModule,
     PaymentsModule,
     NotificationsModule,
+    AdminActionsModule,
   ],
   providers: [ReservationsService, ReservationsResolver],
   exports: [ReservationsService],

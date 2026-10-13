@@ -10,6 +10,11 @@ import { normalizeEmail } from '../../common/validation/email';
 
 export const TWO_FACTOR_PURPOSE = '2fa';
 
+// How long a session lasts. The token and the cookie that carries it share
+// this one value: the cookie must neither outlive the token nor cut it short,
+// and nothing else (the frontend least of all) writes that cookie again.
+export const SESSION_LIFETIME_SECONDS = 2 * 60 * 60;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -48,7 +53,9 @@ export class AuthService {
       // change is no longer accepted.
       sv: user.sessionVersion ?? 0,
     };
-    return this.jwtService.sign(payload, { expiresIn: '2h' });
+    return this.jwtService.sign(payload, {
+      expiresIn: SESSION_LIFETIME_SECONDS,
+    });
   }
 
   // Replacing a secret that protects the account takes more than an open

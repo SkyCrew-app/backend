@@ -9,6 +9,8 @@ import { UpdateReservationInput } from '../dto/update-reservation.input';
 import { FlightCategory } from '../entity/reservations.entity';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../../common/admin-actions/admin-actions';
 
 const admin = {
   id: 1,
@@ -35,12 +37,18 @@ describe('ReservationsResolver', () => {
     update: jest.fn(),
     delete: jest.fn(),
     findOwnerId: jest.fn(),
+    findCrewIds: jest.fn(),
+    findInstructorReservations: jest.fn(),
+    findBookableInstructors: jest.fn(),
+    mayBookAlone: jest.fn(),
     findAll: jest.fn(),
     findOne: jest.fn(),
     findFilteredReservations: jest.fn(),
     findUserReservations: jest.fn(),
     findRecentReservations: jest.fn(),
   };
+
+  const trace = { record: jest.fn() };
 
   // The real rule of the flights service, with one course on record: the
   // instructor 20 teaches the holder.
@@ -69,6 +77,7 @@ describe('ReservationsResolver', () => {
           useValue: mockService,
         },
         { provide: FlightsService, useValue: flightsService },
+        { provide: AdminActionsService, useValue: trace },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -84,6 +93,8 @@ describe('ReservationsResolver', () => {
   beforeEach(() => {
     // By default the reservation exists and is held by user 3.
     mockService.findOwnerId.mockResolvedValue(3);
+    // Its instructor is user 20.
+    mockService.findCrewIds.mockResolvedValue({ ownerId: 3, instructorId: 20 });
   });
 
   afterEach(() => {
@@ -113,7 +124,11 @@ describe('ReservationsResolver', () => {
         admin,
       );
 
-      expect(mockService.create).toHaveBeenCalledWith(createReservationInput);
+      expect(mockService.create).toHaveBeenCalledWith(
+        createReservationInput,
+        expect.any(Date),
+        admin,
+      );
       expect(result).toEqual(expectedReservation);
     });
   });
@@ -146,7 +161,10 @@ describe('ReservationsResolver', () => {
 
       const result = await resolver.deleteReservation(id, admin);
 
-      expect(mockService.delete).toHaveBeenCalledWith(id, { isAdmin: true });
+      expect(mockService.delete).toHaveBeenCalledWith(id, {
+        isAdmin: true,
+        userId: admin.id,
+      });
       expect(result).toBe(true);
     });
   });
@@ -259,7 +277,11 @@ describe('ReservationsResolver', () => {
 
       await resolver.createReservation(input, stranger);
 
-      expect(mockService.create).toHaveBeenCalledWith({ ...input, user_id: 7 });
+      expect(mockService.create).toHaveBeenCalledWith(
+        { ...input, user_id: 7 },
+        expect.any(Date),
+        stranger,
+      );
     });
 
     it('lets an administrator book for another user', async () => {
@@ -267,7 +289,11 @@ describe('ReservationsResolver', () => {
 
       await resolver.createReservation(input, admin);
 
-      expect(mockService.create).toHaveBeenCalledWith(input);
+      expect(mockService.create).toHaveBeenCalledWith(
+        input,
+        expect.any(Date),
+        admin,
+      );
     });
 
     it('refuses a member changing a reservation they do not hold', async () => {
@@ -293,7 +319,70 @@ describe('ReservationsResolver', () => {
       expect(mockService.update).toHaveBeenCalledWith({ id: 10, purpose: 'x' });
       // The service is told the caller is not an administrator: it then
       // refuses a cancellation after the start time.
-      expect(mockService.delete).toHaveBeenCalledWith(10, { isAdmin: false });
+      expect(mockService.delete).toHaveBeenCalledWith(10, {
+        isAdmin: false,
+        userId: holder.id,
+      });
+    });
+
+    // The instructor of a booking declines it; changing it stays the
+    // holder's.
+    it('lets the instructor of a booking cancel it, not change it', async () => {
+      const itsInstructor = {
+        id: 20,
+        email: 'i@example.com',
+        role: { role_name: 'Instructeur' },
+      } as any;
+
+      await expect(resolver.deleteReservation(10, itsInstructor)).resolves.toBe(
+        true,
+      );
+      expect(mockService.delete).toHaveBeenCalledWith(10, {
+        isAdmin: false,
+        userId: 20,
+      });
+
+      await expect(
+        resolver.updateReservation(
+          { id: 10, purpose: 'x' } as any,
+          itsInstructor,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockService.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses another instructor cancelling the booking', async () => {
+      const another = {
+        id: 21,
+        email: 'j@example.com',
+        role: { role_name: 'Instructeur' },
+      } as any;
+
+      await expect(resolver.deleteReservation(10, another)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockService.delete).not.toHaveBeenCalled();
+    });
+
+    it('lists the bookings the caller instructs, never someone else’s', async () => {
+      mockService.findInstructorReservations.mockResolvedValue([{ id: 4 }]);
+
+      await expect(
+        resolver.getMyInstructionReservations(holder as any),
+      ).resolves.toEqual([{ id: 4 }]);
+      expect(mockService.findInstructorReservations).toHaveBeenCalledWith(
+        holder.id,
+      );
+    });
+
+    it('answers for the caller whether they may book without an instructor', async () => {
+      mockService.mayBookAlone.mockResolvedValue(false);
+      const until = new Date('2030-01-01T11:00:00Z');
+
+      await expect(
+        resolver.getMayBookWithoutInstructor(holder as any, until),
+      ).resolves.toBe(false);
+      expect(mockService.mayBookAlone).toHaveBeenCalledWith(holder.id, until);
     });
 
     it('does not let the holder hand the reservation to someone else', async () => {
@@ -305,7 +394,7 @@ describe('ReservationsResolver', () => {
     });
 
     it('answers not found for an unknown reservation', async () => {
-      mockService.findOwnerId.mockResolvedValue(null);
+      mockService.findCrewIds.mockResolvedValue(null);
 
       await expect(resolver.deleteReservation(99, holder)).rejects.toThrow(
         NotFoundException,
@@ -345,6 +434,32 @@ describe('ReservationsResolver', () => {
       );
     });
 
+    // The instructor of a booking was on board: they read its flights, even
+    // without any course with the pilot, and not those of the pilot's other
+    // bookings.
+    it('are read by the instructor of that booking only', async () => {
+      const onBoard = instructor(21);
+      const context = {};
+
+      await expect(
+        resolver.flights(
+          { ...booking(), instructor: { id: 21 } },
+          onBoard,
+          context,
+        ),
+      ).resolves.toBe(flights);
+      await expect(
+        resolver.flights({ ...booking(), id: 11 }, onBoard, context),
+      ).resolves.toEqual([]);
+      await expect(
+        resolver.flights(
+          { ...booking(), id: 12, instructor: { id: 22 } },
+          onBoard,
+          context,
+        ),
+      ).resolves.toEqual([]);
+    });
+
     it('asks once per pilot within a request', async () => {
       const context = {};
       const spy = jest.spyOn(flightsService, 'canReadFlightsOf');
@@ -355,6 +470,90 @@ describe('ReservationsResolver', () => {
 
       expect(spy).toHaveBeenCalledTimes(1);
       spy.mockRestore();
+    });
+  });
+
+  describe("administrators' action log", () => {
+    const booking = {
+      id: 10,
+      user: { id: 3, first_name: 'Jean', last_name: 'Dupont' },
+      aircraft: { registration_number: 'F-GABC' },
+      start_time: new Date('2026-11-02T09:00:00Z'),
+      end_time: new Date('2026-11-02T10:00:00Z'),
+      charged_amount: 150,
+    };
+
+    beforeEach(() => {
+      mockService.update.mockResolvedValue(booking);
+      mockService.findOne.mockResolvedValue(booking);
+      mockService.delete.mockResolvedValue(undefined);
+    });
+
+    it('records an administrator changing the booking of another member', async () => {
+      await resolver.updateReservation({ id: 10, purpose: 'x' } as any, admin);
+
+      expect(trace.record).toHaveBeenCalledWith(
+        admin,
+        ADMIN_ACTION.RESERVATION_CHANGED_FOR_MEMBER,
+        { type: 'reservation', id: 10, label: 'F-GABC, Jean Dupont' },
+        expect.objectContaining({ memberId: 3, start: booking.start_time }),
+      );
+    });
+
+    it('records an administrator cancelling the booking of another member, with what was given back', async () => {
+      await resolver.deleteReservation(10, admin);
+
+      expect(trace.record).toHaveBeenCalledWith(
+        admin,
+        ADMIN_ACTION.RESERVATION_CANCELLED_FOR_MEMBER,
+        { type: 'reservation', id: 10, label: 'F-GABC, Jean Dupont' },
+        expect.objectContaining({ memberId: 3, refundedAmount: 150 }),
+      );
+    });
+
+    it('records nothing for the holder, the instructor who declines, or an administrator on their own booking', async () => {
+      await resolver.updateReservation({ id: 10, purpose: 'x' } as any, holder);
+      await resolver.deleteReservation(10, holder);
+      await resolver.deleteReservation(10, {
+        id: 20,
+        role: { role_name: 'Instructeur' },
+      } as any);
+
+      mockService.findOwnerId.mockResolvedValue(admin.id);
+      mockService.findCrewIds.mockResolvedValue({
+        ownerId: admin.id,
+        instructorId: null,
+      });
+      await resolver.updateReservation({ id: 10, purpose: 'x' } as any, admin);
+      await resolver.deleteReservation(10, admin);
+
+      expect(trace.record).not.toHaveBeenCalled();
+    });
+
+    it('records nothing when the change or the cancellation is refused', async () => {
+      mockService.update.mockRejectedValue(new ForbiddenException('non'));
+      mockService.delete.mockRejectedValue(new ForbiddenException('non'));
+
+      await expect(
+        resolver.updateReservation({ id: 10 } as any, admin),
+      ).rejects.toThrow('non');
+      await expect(resolver.deleteReservation(10, admin)).rejects.toThrow(
+        'non',
+      );
+      expect(trace.record).not.toHaveBeenCalled();
+    });
+
+    it('still cancels when the booking cannot be read for the trace', async () => {
+      mockService.findOne.mockRejectedValue(new Error('lecture impossible'));
+
+      await expect(resolver.deleteReservation(10, admin)).resolves.toBe(true);
+      expect(mockService.delete).toHaveBeenCalled();
+      expect(trace.record).toHaveBeenCalledWith(
+        admin,
+        ADMIN_ACTION.RESERVATION_CANCELLED_FOR_MEMBER,
+        { type: 'reservation', id: 10, label: null },
+        expect.objectContaining({ memberId: 3 }),
+      );
     });
   });
 });

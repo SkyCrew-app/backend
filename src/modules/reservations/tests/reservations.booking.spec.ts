@@ -347,39 +347,27 @@ describe('Bookings and money', () => {
       const world = bookingWorld();
       Object.assign(world.database.rows(tables.User)[0].licenses[0], licence);
 
-      expect(await book(world)).toBe('error.reservation.noValidLicence');
+      // Alone, that is: with an instructor the licence is the instructor's.
+      expect(await book(world)).toBe('error.reservation.instructorRequired');
       expect(world.balance()).toBe(500);
     });
 
-    it('lets a student book an instruction flight only on a day with a lesson', async () => {
+    // The stop-gap rule ("a lesson scheduled that day") is gone: a member
+    // without a licence books with an instructor, see
+    // reservations.instruction.spec.ts.
+    it('no longer lets a student book alone on a day with a lesson', async () => {
       const world = bookingWorld();
       world.database.rows(tables.User)[0].licenses = [];
-      const instruction = { flight_category: FlightCategory.INSTRUCTION };
-
-      expect(await book(world)).toBe('error.reservation.noValidLicence');
-      expect(await book(world, instruction)).toBe(
-        'error.reservation.noLessonThatDay',
-      );
-
-      const lesson = world.database.insert(tables.InstructionCourse, {
+      world.database.insert(tables.InstructionCourse, {
         student: { id: world.member.id },
+        instructor: { id: 99 },
         startTime: new Date('2027-01-12T13:00:00Z'),
-        status: 'CANCELED',
+        status: 'SCHEDULED',
       });
-      expect(await book(world, instruction)).toBe(
-        'error.reservation.noLessonThatDay',
-      );
 
-      world.database.rows(tables.InstructionCourse)[0].status = 'SCHEDULED';
-      expect(lesson.id).toBeDefined();
-      expect(await book(world, instruction)).toBeNull();
-      // Still no solo flight that day.
       expect(
-        await book(world, {
-          start_time: new Date('2027-01-12T14:00:00Z'),
-          end_time: new Date('2027-01-12T15:00:00Z'),
-        }),
-      ).toBe('error.reservation.noValidLicence');
+        await book(world, { flight_category: FlightCategory.INSTRUCTION }),
+      ).toBe('error.reservation.instructorRequired');
     });
 
     it('answers a clear refusal when the club has no settings', async () => {
@@ -496,11 +484,13 @@ describe('Bookings and money', () => {
           }),
         ),
       ).toBe('error.reservation.clubClosedDay');
-      // With a licence that has since been withdrawn, for another category.
+      // With a licence that has since been withdrawn.
       world.database.rows(tables.User)[0].licenses[0].is_valid = false;
       expect(
-        await refusal(change({ flight_category: FlightCategory.TOURISM })),
-      ).toBe('error.reservation.noValidLicence');
+        await refusal(
+          change({ end_time: new Date(SLOT.end_time.getTime() + HOUR / 2) }),
+        ),
+      ).toBe('error.reservation.instructorRequired');
       expect(world.balance()).toBe(350);
     });
 

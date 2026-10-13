@@ -8,6 +8,7 @@ import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { Flight } from '../flights/entity/flights.entity';
 import { Incident } from '../incidents/entity/incidents.entity';
+import { AdminActionsModule } from '../../common/admin-actions/admin-actions.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { Incident } from '../incidents/entity/incidents.entity';
       Flight,
       Incident,
     ]),
+    AdminActionsModule,
   ],
   providers: [AdministrationResolver, AdministrationService],
   exports: [AdministrationService],

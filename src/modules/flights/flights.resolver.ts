@@ -20,7 +20,9 @@ import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { SessionUser } from '../../common/auth/access';
+import { isAdmin, SessionUser } from '../../common/auth/access';
+import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
 import { languageOf } from '../../common/i18n/languages';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
@@ -34,7 +36,50 @@ export class FlightsResolver {
     private readonly flightsService: FlightsService,
     private readonly airportsService: AirportsService,
     private readonly metarService: MetarService,
+    private readonly adminActions: AdminActionsService,
   ) {}
+
+  // The flight as it stands before an administrator touches it, for the
+  // trace only: a failed lookup never stops the action itself.
+  private async closedFlightBefore(
+    id: number,
+    currentUser?: SessionUser,
+  ): Promise<Flight | null> {
+    if (!isAdmin(currentUser)) {
+      return null;
+    }
+    try {
+      const flight = await this.flightsService.findOne(id);
+      return flight?.closed_at ? flight : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // An administrator amending or deleting a closed flight leaves a line in
+  // the administrators' log, on top of the flight's own amendment trail.
+  private traceClosedFlight(
+    currentUser: SessionUser | undefined,
+    action: string,
+    flight: Flight,
+  ): Promise<void> {
+    const pilot = [flight.user?.first_name, flight.user?.last_name]
+      .filter(Boolean)
+      .join(' ');
+    const route = [flight.origin_icao, flight.destination_icao]
+      .filter(Boolean)
+      .join(' → ');
+    return this.adminActions.record(
+      currentUser,
+      action,
+      {
+        type: 'flight',
+        id: flight.id,
+        label: [route, pilot].filter(Boolean).join(', ') || null,
+      },
+      { memberId: flight.user?.id ?? null },
+    );
+  }
 
   /**
    * Build a frontend-friendly airport info object from raw AirportData.
@@ -197,24 +242,45 @@ export class FlightsResolver {
   // A member closes their own flight; an administrator can amend any flight.
   @Mutation(() => Flight)
   @UseGuards(JwtAuthGuard)
-  updateFlight(
+  async updateFlight(
     @Args('updateFlightInput') updateFlightInput: UpdateFlightInput,
     @CurrentUser() currentUser?: SessionUser,
   ) {
-    return this.flightsService.updateFlight(
+    const closedBefore = await this.closedFlightBefore(
+      updateFlightInput.id,
+      currentUser,
+    );
+    const updated = await this.flightsService.updateFlight(
       updateFlightInput.id,
       updateFlightInput,
       currentUser,
     );
+    if (closedBefore) {
+      await this.traceClosedFlight(
+        currentUser,
+        ADMIN_ACTION.FLIGHT_RECORD_AMENDED,
+        closedBefore,
+      );
+    }
+    return updated;
   }
 
   @Mutation(() => Boolean)
   @UseGuards(JwtAuthGuard)
-  removeFlight(
+  async removeFlight(
     @Args('id', { type: () => Number }) id: number,
     @CurrentUser() currentUser?: SessionUser,
   ) {
-    return this.flightsService.removeFlight(id, currentUser);
+    const closedBefore = await this.closedFlightBefore(id, currentUser);
+    const removed = await this.flightsService.removeFlight(id, currentUser);
+    if (removed && closedBefore) {
+      await this.traceClosedFlight(
+        currentUser,
+        ADMIN_ACTION.FLIGHT_RECORD_DELETED,
+        closedBefore,
+      );
+    }
+    return removed;
   }
 
   // Every member's latest flights: for the administration dashboard.

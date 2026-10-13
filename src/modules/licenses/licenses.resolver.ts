@@ -4,7 +4,8 @@ import { License } from './entity/licenses.entity';
 import { CreateLicenseInput } from './dto/create-license.input';
 import { UpdateLicenseInput } from './dto/update-license.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
-import { UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -16,6 +17,7 @@ import {
 } from '../../common/auth/access';
 
 @Resolver(() => License)
+@UseFilters(LocalizedExceptionFilter)
 export class LicensesResolver {
   constructor(private readonly licensesService: LicensesService) {}
 

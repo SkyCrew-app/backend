@@ -47,6 +47,8 @@ import { AviationDataModule } from './modules/aviation-data/aviation-data.module
 import { APP_GUARD } from '@nestjs/core';
 import { DemoModeGuard } from './common/guards/demo-mode.guard';
 import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-default.guard';
+import { AdminActionsModule } from './common/admin-actions/admin-actions.module';
+import { MemberDepartureModule } from './modules/users/member-departure.module';
 
 @Module({
   imports: [
@@ -134,7 +136,11 @@ import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-de
 
     MailerModule,
 
+    AdminActionsModule,
+
     UsersModule,
+
+    MemberDepartureModule,
 
     AircraftModule,
 

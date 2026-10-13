@@ -1,5 +1,5 @@
 import { Resolver, Mutation, Args, Context, Query } from '@nestjs/graphql';
-import { AuthService } from './auth.service';
+import { AuthService, SESSION_LIFETIME_SECONDS } from './auth.service';
 import { LoginResponse } from './dto/login-response.dto';
 import { LoginInput } from './dto/login-input.dto';
 import { Response, Request } from 'express';
@@ -30,7 +30,7 @@ export class AuthResolver {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict' as const,
-      maxAge: 7200000,
+      maxAge: SESSION_LIFETIME_SECONDS * 1000,
       path: '/',
     };
   }

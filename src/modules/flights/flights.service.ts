@@ -16,7 +16,11 @@ import {
   FLIGHT_DELETED,
   FlightAmendment,
 } from './entity/flight-amendment.entity';
-import { MAX_FLIGHT_HOURS, RECENT_FLIGHTS_MAX } from './flight-rules';
+import {
+  INSTRUCTION_COUNTS_IN_INSTRUCTOR_TOTAL,
+  MAX_FLIGHT_HOURS,
+  RECENT_FLIGHTS_MAX,
+} from './flight-rules';
 import { CreateFlightInput } from './dto/create-flight.input';
 import { UpdateFlightInput } from './dto/update-flight.input';
 import {
@@ -58,19 +62,25 @@ export interface AIFlightOptions {
   requester?: SessionUser;
 }
 
-// What a flight adds to the totals of its pilot and of its aircraft.
+// What a flight adds to the totals of its pilot, of its instructor and of
+// its aircraft.
 interface CountedHours {
   userId: number | null;
+  instructorId: number | null;
   aircraftId: number | null;
   hours: number;
 }
 
 const FLIGHT_RELATIONS = [
   'user',
+  'instructor',
   'reservation',
   'reservation.aircraft',
   'reservation.user',
+  'reservation.instructor',
 ];
+
+const BOOKING_RELATIONS = ['aircraft', 'user', 'instructor'];
 
 const sameId = (a: unknown, b: unknown): boolean =>
   a != null && b != null && Number(a) === Number(b);
@@ -110,7 +120,7 @@ export class FlightsService {
 
     const reservation = await this.reservationsRepository.findOne({
       where: { id: reservationId },
-      relations: ['aircraft', 'user'],
+      relations: BOOKING_RELATIONS,
     });
     if (!reservation) {
       throw new NotFoundException(
@@ -182,6 +192,10 @@ export class FlightsService {
       ...otherFields,
       reservation: reservation ? { id: reservation.id } : null,
       user: { id: pilotId },
+      // The instructor of the booking is on board.
+      instructor: reservation?.instructor
+        ? { id: reservation.instructor.id }
+        : null,
       waypoints: JSON.stringify(otherFields.waypoints || []),
     });
 
@@ -214,7 +228,7 @@ export class FlightsService {
 
       const reservation = await this.reservationsRepository.findOne({
         where: { id: reservation_id },
-        relations: ['aircraft', 'user'],
+        relations: BOOKING_RELATIONS,
       });
 
       if (!reservation) {
@@ -329,6 +343,9 @@ export class FlightsService {
         destination_icao,
         user: { id: user_id },
         reservation: { id: reservation_id },
+        instructor: reservation.instructor
+          ? { id: reservation.instructor.id }
+          : null,
         flight_hours: adjustedFlightHours,
         estimated_flight_time: adjustedFlightHours,
         flight_type: reservation.flight_category,
@@ -405,7 +422,7 @@ export class FlightsService {
   async findOne(id: number): Promise<Flight> {
     const flight = await this.flightsRepository.findOne({
       where: { id },
-      relations: ['user', 'reservation'],
+      relations: ['user', 'instructor', 'reservation'],
     });
     if (!flight) {
       throw new NotFoundException(`Flight with ID ${id} not found`);
@@ -431,12 +448,19 @@ export class FlightsService {
   }
 
   // The flights of a member are read by that member, by an administrator
-  // and by an instructor who teaches them.
+  // and by an instructor who teaches them. The flights of one booking are
+  // also read by the instructor of that booking (`bookingInstructorId`),
+  // who was on board: that booking's, not the pilot's other flights.
   async canReadFlightsOf(
     pilotId: number | null | undefined,
     requester: SessionUser | undefined | null,
+    bookingInstructorId?: number | null,
   ): Promise<boolean> {
-    if (isAdmin(requester) || sameId(pilotId, requester?.id)) {
+    if (
+      isAdmin(requester) ||
+      sameId(pilotId, requester?.id) ||
+      sameId(bookingInstructorId, requester?.id)
+    ) {
       return true;
     }
     return (
@@ -450,48 +474,73 @@ export class FlightsService {
   async assertCanReadFlightsOf(
     pilotId: number | null | undefined,
     requester: SessionUser | undefined | null,
+    bookingInstructorId?: number | null,
   ): Promise<void> {
-    if (!(await this.canReadFlightsOf(pilotId, requester))) {
+    if (
+      !(await this.canReadFlightsOf(pilotId, requester, bookingInstructorId))
+    ) {
       throw localized(ForbiddenException, 'error.flight.notOwnFlightRead');
     }
   }
 
   async findOneFor(id: number, requester?: SessionUser): Promise<Flight> {
     const flight = await this.findOne(id);
-    await this.assertCanReadFlightsOf(flight.user?.id, requester);
+    await this.assertCanReadFlightsOf(
+      flight.user?.id,
+      requester,
+      flight.instructor?.id ?? flight.reservation?.instructor?.id,
+    );
     return flight;
   }
 
   private countedHours(flight: Flight): CountedHours {
     return {
       userId: flight.user?.id ?? null,
+      instructorId: flight.instructor?.id ?? null,
       aircraftId: flight.reservation?.aircraft?.id ?? null,
       hours: flight.closed_at ? Number(flight.flight_hours) || 0 : 0,
     };
   }
 
-  // Totals of the member and of the aircraft follow their closed flights:
-  // what the flight counted before is taken back, what it counts now is added.
+  // Totals of the members on board and of the aircraft follow their closed
+  // flights: what the flight counted before is taken back, what it counts
+  // now is added. The hours count once for the aircraft, and for each of
+  // the pilot and the instructor.
   private async moveCountedHours(
     manager: EntityManager,
     before: CountedHours,
     after: CountedHours,
   ): Promise<void> {
-    const totals: [typeof User | typeof Aircraft, 'userId' | 'aircraftId'][] = [
-      [User, 'userId'],
-      [Aircraft, 'aircraftId'],
+    const hoursByMember = (counted: CountedHours): Map<number, number> => {
+      const members = INSTRUCTION_COUNTS_IN_INSTRUCTOR_TOTAL
+        ? [counted.userId, counted.instructorId]
+        : [counted.userId];
+      const hours = new Map<number, number>();
+      for (const id of members) {
+        if (id != null) hours.set(Number(id), counted.hours);
+      }
+      return hours;
+    };
+    const hoursByAircraft = (counted: CountedHours): Map<number, number> =>
+      new Map(
+        counted.aircraftId != null
+          ? [[Number(counted.aircraftId), counted.hours]]
+          : [],
+      );
+
+    const totals: [
+      typeof User | typeof Aircraft,
+      Map<number, number>,
+      Map<number, number>,
+    ][] = [
+      [User, hoursByMember(before), hoursByMember(after)],
+      [Aircraft, hoursByAircraft(before), hoursByAircraft(after)],
     ];
 
-    for (const [entity, key] of totals) {
-      const changes: [number | null, number][] = sameId(before[key], after[key])
-        ? [[after[key], after.hours - before.hours]]
-        : [
-            [before[key], -before.hours],
-            [after[key], after.hours],
-          ];
-
-      for (const [id, delta] of changes) {
-        if (id != null && delta !== 0) {
+    for (const [entity, counted, counts] of totals) {
+      for (const id of new Set([...counted.keys(), ...counts.keys()])) {
+        const delta = (counts.get(id) ?? 0) - (counted.get(id) ?? 0);
+        if (delta !== 0) {
           await manager.increment(entity, { id }, 'total_flight_hours', delta);
         }
       }
@@ -501,6 +550,7 @@ export class FlightsService {
   private snapshot(flight: Flight): Record<string, unknown> {
     return {
       user_id: flight.user?.id ?? null,
+      instructor_id: flight.instructor?.id ?? null,
       reservation_id: flight.reservation?.id ?? null,
       aircraft_id: flight.reservation?.aircraft?.id ?? null,
       flight_hours: flight.flight_hours ?? null,
@@ -579,7 +629,7 @@ export class FlightsService {
     if (admin && reservation_id != null) {
       const reservation = await this.reservationsRepository.findOne({
         where: { id: reservation_id },
-        relations: ['aircraft', 'user'],
+        relations: BOOKING_RELATIONS,
       });
       if (!reservation) {
         throw new NotFoundException(
@@ -587,6 +637,8 @@ export class FlightsService {
         );
       }
       flight.reservation = reservation;
+      // The instructor on board is the one of the booking.
+      flight.instructor = reservation.instructor ?? null;
     }
     if (admin && user_id != null && !sameId(user_id, flight.user?.id)) {
       const pilot = await this.flightsRepository.manager.findOne(User, {
@@ -609,6 +661,11 @@ export class FlightsService {
     this.assertPlausibleTimes(flight);
     if (closing) {
       this.assertClosable(flight, requester);
+      // The flight records the instructor of its booking as it stands when
+      // the flight is closed.
+      if (flight.reservation) {
+        flight.instructor = flight.reservation.instructor ?? null;
+      }
     }
 
     return this.flightsRepository.manager.transaction(async (manager) => {
@@ -685,6 +742,7 @@ export class FlightsService {
       if (flight.closed_at) {
         await this.moveCountedHours(manager, before, {
           userId: null,
+          instructorId: null,
           aircraftId: null,
           hours: 0,
         });
@@ -784,7 +842,7 @@ export class FlightsService {
   async getFlightsByUser(user_id: number): Promise<Flight[]> {
     return this.flightsRepository.find({
       where: { user: { id: user_id } },
-      relations: ['user', 'reservation'],
+      relations: ['user', 'instructor', 'reservation'],
     });
   }
 
