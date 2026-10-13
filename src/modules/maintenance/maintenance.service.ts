@@ -113,11 +113,18 @@ export class MaintenanceService {
     return this.maintenanceRepository.save(maintenance);
   }
 
+  // An id assigns that technician, null removes the current one and an
+  // absent value leaves the assignment as it is.
   private async assignTechnician(
     maintenance: Maintenance,
-    technicianId?: number,
+    technicianId?: number | null,
   ): Promise<void> {
-    if (!technicianId) {
+    if (technicianId === undefined) {
+      return;
+    }
+
+    if (technicianId === null) {
+      maintenance.technician = null;
       return;
     }
 

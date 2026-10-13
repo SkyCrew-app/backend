@@ -70,6 +70,25 @@ export class AuthService {
     return true;
   }
 
+  // What a login enforces: a confirmed secret, not the profile flag.
+  async isTwoFactorEnabled(userEmail: string): Promise<boolean> {
+    const user = await this.usersService.findOneByEmail(userEmail);
+    return !!user?.twoFactorAuthSecret;
+  }
+
+  // Turning two-factor off requires the current password, so an open
+  // session alone is not enough to weaken the account.
+  async disable2FA(userEmail: string, password: string): Promise<boolean> {
+    const user = await this.validateUser(userEmail, password);
+
+    if (!user) {
+      return false;
+    }
+
+    await this.usersService.update2FAStatus(userEmail, false);
+    return true;
+  }
+
   async verify2FACode(userEmail: string, token: string): Promise<boolean> {
     const user = await this.usersService.findOneByEmail(userEmail);
 

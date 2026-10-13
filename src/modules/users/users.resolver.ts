@@ -131,6 +131,13 @@ export class UsersResolver {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     @Args('email', { nullable: true }) _email?: string,
   ) {
+    // Switching it off removes a protection: that goes through disable2FA,
+    // which asks for the password.
+    if (!is2FAEnabled) {
+      throw new ForbiddenException(
+        'Pour désactiver la double authentification, confirmez votre mot de passe.',
+      );
+    }
     return this.usersService.update2FAStatus(
       context.req.user.email,
       is2FAEnabled,

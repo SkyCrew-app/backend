@@ -32,6 +32,8 @@ describe('NotificationsResolver', () => {
     remove: jest.fn(),
     seenNotification: jest.fn(),
     findOwnerId: jest.fn(),
+    markAllRead: jest.fn(),
+    removeAllForUser: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -161,6 +163,19 @@ describe('NotificationsResolver', () => {
       expect(result).toBe(true);
     });
   });
+  describe('bulk actions', () => {
+    it("only ever act on the caller's own notifications", async () => {
+      mockService.markAllRead.mockResolvedValue(5);
+      mockService.removeAllForUser.mockResolvedValue(8);
+
+      await expect(resolver.markAllNotificationsRead(owner)).resolves.toBe(5);
+      await expect(resolver.deleteAllNotifications(owner)).resolves.toBe(8);
+
+      expect(mockService.markAllRead).toHaveBeenCalledWith(3);
+      expect(mockService.removeAllForUser).toHaveBeenCalledWith(3);
+    });
+  });
+
   describe('authorization', () => {
     it("refuses a member reading another user's notifications", async () => {
       await expect(resolver.notificationsByUser(3, stranger)).rejects.toThrow(

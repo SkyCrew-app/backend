@@ -14,6 +14,7 @@ import { UpdateChecklistItemInput } from './dto/update-checklist-item.input';
 import { SubmitChecklistInput } from './dto/submit-checklist.input';
 import { UpdateChecklistSubmissionInput } from './dto/update-checklist-submission.input';
 import { User } from '../users/entity/users.entity';
+import { ChecklistTemplateRemoval } from './dto/checklist-template-removal.type';
 
 @Injectable()
 export class ChecklistsService {
@@ -68,8 +69,12 @@ export class ChecklistsService {
     const template = await this.findOneTemplate(input.id);
     Object.assign(template, {
       ...(input.name !== undefined && { name: input.name }),
-      ...(input.aircraft_model !== undefined && { aircraft_model: input.aircraft_model }),
-      ...(input.description !== undefined && { description: input.description }),
+      ...(input.aircraft_model !== undefined && {
+        aircraft_model: input.aircraft_model,
+      }),
+      ...(input.description !== undefined && {
+        description: input.description,
+      }),
       ...(input.is_active !== undefined && { is_active: input.is_active }),
     });
     return this.templateRepository.save(template);
@@ -79,6 +84,38 @@ export class ChecklistsService {
     const template = await this.findOneTemplate(id);
     template.is_active = false;
     return this.templateRepository.save(template);
+  }
+
+  // A template nobody filled in is deleted with its items. Once checklists
+  // refer to it, it is kept for the record and only taken out of use.
+  async removeTemplate(id: number): Promise<ChecklistTemplateRemoval> {
+    const template = await this.templateRepository.findOne({ where: { id } });
+    if (!template) {
+      throw new NotFoundException('Modèle de checklist introuvable');
+    }
+
+    const submissionsCount = await this.submissionRepository.count({
+      where: { template: { id } },
+    });
+
+    if (submissionsCount > 0) {
+      template.is_active = false;
+      await this.templateRepository.save(template);
+      return {
+        deleted: false,
+        deactivated: true,
+        submissions_count: submissionsCount,
+        message: `Le modèle « ${template.name} » est utilisé par ${submissionsCount} checklist(s) déjà remplie(s) : il a été désactivé au lieu d'être supprimé, afin de conserver l'historique.`,
+      };
+    }
+
+    await this.templateRepository.delete(id);
+    return {
+      deleted: true,
+      deactivated: false,
+      submissions_count: 0,
+      message: `Le modèle « ${template.name} » a été supprimé.`,
+    };
   }
 
   // ── Items ──────────────────────────────────────────────────
@@ -98,12 +135,18 @@ export class ChecklistsService {
       relations: ['template'],
     });
     if (!item) {
-      throw new NotFoundException(`Checklist item with ID ${input.id} not found`);
+      throw new NotFoundException(
+        `Checklist item with ID ${input.id} not found`,
+      );
     }
     Object.assign(item, {
       ...(input.item_name !== undefined && { item_name: input.item_name }),
-      ...(input.description !== undefined && { description: input.description }),
-      ...(input.is_required !== undefined && { is_required: input.is_required }),
+      ...(input.description !== undefined && {
+        description: input.description,
+      }),
+      ...(input.is_required !== undefined && {
+        is_required: input.is_required,
+      }),
       ...(input.sort_order !== undefined && { sort_order: input.sort_order }),
       ...(input.category !== undefined && { category: input.category }),
     });
@@ -119,7 +162,10 @@ export class ChecklistsService {
     return true;
   }
 
-  async reorderItems(templateId: number, itemIds: number[]): Promise<ChecklistItem[]> {
+  async reorderItems(
+    templateId: number,
+    itemIds: number[],
+  ): Promise<ChecklistItem[]> {
     // Fails when the template does not exist.
     await this.findOneTemplate(templateId);
     const items = await this.itemRepository.find({

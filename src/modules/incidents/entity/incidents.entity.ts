@@ -4,6 +4,17 @@ import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
 import { Flight } from '../../flights/entity/flights.entity';
 
+// Statuses an incident goes through while the club follows it up.
+export const INCIDENT_STATUS_OPEN = 'Ouvert';
+export const INCIDENT_STATUS_IN_PROGRESS = 'En cours';
+export const INCIDENT_STATUS_RESOLVED = 'Résolu';
+
+export const INCIDENT_STATUSES = [
+  INCIDENT_STATUS_OPEN,
+  INCIDENT_STATUS_IN_PROGRESS,
+  INCIDENT_STATUS_RESOLVED,
+];
+
 @ObjectType()
 @Entity('incidents')
 export class Incident {
@@ -54,4 +65,17 @@ export class Incident {
   @Field()
   @Column()
   category: string;
+
+  // Follow-up by the club, filled in when the incident is resolved.
+  @Field({ nullable: true })
+  @Column({ type: 'text', nullable: true })
+  resolution_note: string;
+
+  @Field({ nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
+  resolved_at: Date;
+
+  @Field(() => User, { nullable: true })
+  @ManyToOne(() => User, { nullable: true })
+  resolved_by: User;
 }

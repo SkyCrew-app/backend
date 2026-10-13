@@ -62,6 +62,19 @@ describe('Checklists authorization', () => {
 
       expect(roles).toEqual(['Administrateur', 'Instructeur', 'Technicien']);
     });
+
+    it('deleting a template is reserved to administrators', async () => {
+      const roles = reflector.get<string[]>(
+        ROLES_KEY,
+        ChecklistsResolver.prototype.deleteChecklistTemplate,
+      );
+      expect(roles).toEqual(['Administrateur']);
+
+      const removal = { deleted: true };
+      service.removeTemplate = jest.fn().mockResolvedValue(removal);
+      await expect(resolver.deleteChecklistTemplate(12)).resolves.toBe(removal);
+      expect(service.removeTemplate).toHaveBeenCalledWith(12);
+    });
   });
 
   describe('submissions', () => {

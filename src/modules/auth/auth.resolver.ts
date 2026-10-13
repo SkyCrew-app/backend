@@ -121,6 +121,34 @@ export class AuthResolver {
     return true;
   }
 
+  // Two-factor state of the authenticated user only.
+  @Query(() => Boolean)
+  @UseGuards(JwtAuthGuard)
+  twoFactorEnabled(
+    @Context('req') req: Request & { user: { email: string } },
+  ): Promise<boolean> {
+    return this.authService.isTwoFactorEnabled(req.user.email);
+  }
+
+  @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
+  async disable2FA(
+    @Context('req') req: Request & { user: { email: string } },
+    @Args('password') password: string,
+  ): Promise<boolean> {
+    const disabled = await this.authService.disable2FA(
+      req.user.email,
+      password,
+    );
+
+    if (!disabled) {
+      throw new BadRequestException('Mot de passe incorrect');
+    }
+
+    return true;
+  }
+
   @Public()
   @UseGuards(GqlThrottlerGuard)
   @Throttle(SECRET_ATTEMPT_LIMITS)

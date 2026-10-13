@@ -87,4 +87,19 @@ export class NotificationsResolver {
     await this.assertOwner(currentUser, id);
     return await this.notificationsService.seenNotification(id);
   }
+
+  // Bulk actions always apply to the caller's own notifications.
+  @Mutation(() => Int, { name: 'markAllNotificationsRead' })
+  async markAllNotificationsRead(
+    @CurrentUser() currentUser?: SessionUser,
+  ): Promise<number> {
+    return await this.notificationsService.markAllRead(currentUser.id);
+  }
+
+  @Mutation(() => Int, { name: 'deleteAllNotifications' })
+  async deleteAllNotifications(
+    @CurrentUser() currentUser?: SessionUser,
+  ): Promise<number> {
+    return await this.notificationsService.removeAllForUser(currentUser.id);
+  }
 }

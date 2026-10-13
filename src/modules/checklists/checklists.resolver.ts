@@ -13,6 +13,7 @@ import { CreateChecklistItemInput } from './dto/create-checklist-item.input';
 import { UpdateChecklistItemInput } from './dto/update-checklist-item.input';
 import { SubmitChecklistInput } from './dto/submit-checklist.input';
 import { UpdateChecklistSubmissionInput } from './dto/update-checklist-submission.input';
+import { ChecklistTemplateRemoval } from './dto/checklist-template-removal.type';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../users/entity/users.entity';
@@ -133,6 +134,14 @@ export class ChecklistsResolver {
     input: UpdateChecklistTemplateInput,
   ) {
     return this.checklistsService.updateTemplate(input);
+  }
+
+  // Deleting a template is reserved to administrators.
+  @Mutation(() => ChecklistTemplateRemoval)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
+  deleteChecklistTemplate(@Args('id', { type: () => Int }) id: number) {
+    return this.checklistsService.removeTemplate(id);
   }
 
   // ── Item Mutations ─────────────────────────────────────────

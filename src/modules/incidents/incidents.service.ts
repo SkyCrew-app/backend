@@ -1,7 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Incident } from './entity/incidents.entity';
+import {
+  Incident,
+  INCIDENT_STATUS_RESOLVED,
+  INCIDENT_STATUSES,
+} from './entity/incidents.entity';
 import { CreateIncidentInput } from './dto/create-incident.input';
 import { UpdateIncidentInput } from './dto/update-incident.input';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
@@ -10,7 +18,13 @@ import { User } from '../users/entity/users.entity';
 
 @Injectable()
 export class IncidentsService {
-  private readonly incidentRelations = ['aircraft', 'flight', 'user'] as const;
+  private readonly incidentRelations = [
+    'aircraft',
+    'flight',
+    'flight.reservation',
+    'user',
+    'resolved_by',
+  ] as const;
 
   constructor(
     @InjectRepository(Incident)
@@ -26,6 +40,7 @@ export class IncidentsService {
   async getAllIncidents(): Promise<Incident[]> {
     return this.incidentRepository.find({
       relations: [...this.incidentRelations],
+      order: { incident_date: 'DESC' },
     });
   }
 
@@ -130,6 +145,46 @@ export class IncidentsService {
     }
 
     return this.incidentRepository.save(incident);
+  }
+
+  // Moves an incident through its follow-up. Resolving records who closed
+  // it and when; reopening clears that, the note is kept.
+  async updateIncidentStatus(
+    id: number,
+    status: string,
+    resolutionNote: string | null | undefined,
+    actorId: number,
+  ): Promise<Incident> {
+    if (!INCIDENT_STATUSES.includes(status)) {
+      throw new BadRequestException(
+        `Statut inconnu. Valeurs acceptées : ${INCIDENT_STATUSES.join(', ')}.`,
+      );
+    }
+
+    const incident = await this.incidentRepository.findOne({ where: { id } });
+    if (!incident) {
+      throw new NotFoundException('Incident introuvable');
+    }
+
+    const wasResolved = incident.status === INCIDENT_STATUS_RESOLVED;
+    incident.status = status;
+
+    if (resolutionNote != null) {
+      incident.resolution_note = resolutionNote.trim() || null;
+    }
+
+    if (status === INCIDENT_STATUS_RESOLVED) {
+      if (!wasResolved || !incident.resolved_at) {
+        incident.resolved_at = new Date();
+        incident.resolved_by = { id: actorId } as User;
+      }
+    } else {
+      incident.resolved_at = null;
+      incident.resolved_by = null;
+    }
+
+    await this.incidentRepository.save(incident);
+    return this.getIncident(id);
   }
 
   async deleteIncident(id: string): Promise<boolean> {
