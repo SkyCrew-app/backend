@@ -72,8 +72,11 @@ describe('Checklists authorization', () => {
 
       const removal = { deleted: true };
       service.removeTemplate = jest.fn().mockResolvedValue(removal);
-      await expect(resolver.deleteChecklistTemplate(12)).resolves.toBe(removal);
-      expect(service.removeTemplate).toHaveBeenCalledWith(12);
+      await expect(resolver.deleteChecklistTemplate(12, 'en')).resolves.toBe(
+        removal,
+      );
+      // The message of the removal is written in the language of the request.
+      expect(service.removeTemplate).toHaveBeenCalledWith(12, 'en');
     });
   });
 

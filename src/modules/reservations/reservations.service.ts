@@ -11,15 +11,24 @@ import { MailerService } from '../mail/mailer.service';
 import { User } from '../users/entity/users.entity';
 import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { enGB, fr } from 'date-fns/locale';
 import { AdministrationService } from '../administration/administration.service';
 import {
   BadRequestException,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { languageOf } from '../../common/i18n/languages';
+import { translate } from '../../common/i18n/translate';
+import { localized } from '../../common/i18n/localized-exception';
 import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
+
+// A date as written in an e-mail, in the member's language.
+const mailDate = (date: Date | string, language: string) =>
+  format(new Date(date), 'd MMMM yyyy, HH:mm', {
+    locale: language === 'en' ? enGB : fr,
+  });
 
 @Injectable()
 export class ReservationsService {
@@ -48,9 +57,9 @@ export class ReservationsService {
       where: { id: aircraft_id },
     });
     if (!aircraft) {
-      throw new NotFoundException(
-        `L'avion avec l'ID ${aircraft_id} n'existe pas.`,
-      );
+      throw localized(NotFoundException, 'error.reservation.aircraftNotFound', {
+        aircraftId: aircraft_id,
+      });
     }
 
     const conflictingReservations = await this.reservationRepository.find({
@@ -62,8 +71,9 @@ export class ReservationsService {
     });
 
     if (conflictingReservations.length > 0) {
-      throw new ConflictException(
-        'Cet avion est déjà réservé pour les dates spécifiées.',
+      throw localized(
+        ConflictException,
+        'error.reservation.aircraftAlreadyBooked',
       );
     }
 
@@ -73,16 +83,14 @@ export class ReservationsService {
     });
 
     if (!user) {
-      throw new NotFoundException(
-        `L'utilisateur avec l'ID ${user_id} n'existe pas.`,
-      );
+      throw localized(NotFoundException, 'error.reservation.userNotFound', {
+        userId: user_id,
+      });
     }
 
     const administration = await this.administrationService.findAll();
     if (!administration) {
-      throw new NotFoundException(
-        "Aucune configuration d'administration trouvée",
-      );
+      throw localized(NotFoundException, 'error.reservation.noClubSettings');
     }
 
     const authorizedLicenses = administration[0].pilotLicenses;
@@ -94,15 +102,11 @@ export class ReservationsService {
     );
 
     if (!hasLicense) {
-      throw new BadRequestException(
-        `Vous n'avez pas de licence valide pour réserver cet avion`,
-      );
+      throw localized(BadRequestException, 'error.reservation.noValidLicence');
     }
 
     if (user.licenses.length == 0) {
-      throw new BadRequestException(
-        `Vous n'avez pas de licence valide pour réserver cet avion`,
-      );
+      throw localized(BadRequestException, 'error.reservation.noValidLicence');
     }
 
     const startTime = new Date(start_time);
@@ -112,8 +116,9 @@ export class ReservationsService {
     const totalCost = hoursReserved * aircraft.hourly_cost;
 
     if (user.user_account_balance < totalCost) {
-      throw new BadRequestException(
-        `Solde insuffisant pour réserver cet avion`,
+      throw localized(
+        BadRequestException,
+        'error.reservation.insufficientBalance',
       );
     }
 
@@ -124,19 +129,24 @@ export class ReservationsService {
       status: ReservationStatus.CONFIRMED,
     });
 
+    // The confirmation is written to the member the reservation is for.
+    const language = languageOf(user);
+    const locale = language === 'en' ? enGB : fr;
     const formattedStartDate = format(
       new Date(start_time),
       'd MMMM yyyy, HH:mm',
-      { locale: fr },
+      { locale },
     );
     const formattedEndDate = format(new Date(end_time), 'd MMMM yyyy, HH:mm', {
-      locale: fr,
+      locale,
     });
 
     await this.mailerService.sendMail(
       user.email,
-      'Confirmation de votre réservation',
-      `Votre réservation pour l'avion ${aircraft.registration_number} a été confirmée.`,
+      translate(language, 'mail.reservationConfirmed.subject'),
+      translate(language, 'mail.reservationConfirmed.text', {
+        registration: aircraft.registration_number,
+      }),
       'reservation-confirmation',
       {
         name: user.first_name,
@@ -144,13 +154,16 @@ export class ReservationsService {
         start_time: formattedStartDate,
         end_time: formattedEndDate,
       },
+      language,
     );
 
     await this.notificationService.create({
       user_id: user.id,
       notification_type: 'RESERVATION_CONFIRMED',
       notification_date: new Date(),
-      message: `Votre réservation pour l'avion ${aircraft.registration_number} a été confirmée.`,
+      message: translate(language, 'notification.reservationConfirmed', {
+        registration: aircraft.registration_number,
+      }),
       is_read: false,
     });
 
@@ -191,26 +204,32 @@ export class ReservationsService {
       where: { id: reservation.user.id },
     });
     if (user) {
+      const language = languageOf(user);
       await this.mailerService.sendMail(
         user.email,
-        'Modification de votre réservation',
-        `Votre réservation pour l'avion immatriculé ${aircraft.registration_number} a été modifiée.`,
+        translate(language, 'mail.reservationModified.subject'),
+        translate(language, 'mail.reservationModified.text', {
+          registration: aircraft.registration_number,
+        }),
         'reservation-modification',
         {
           name: user.first_name,
-          registration_number: aircraft.registration_number,
-          previous_start_time: previousStartTime,
-          previous_end_time: previousEndTime,
-          new_start_time: updatedReservation.start_time,
-          new_end_time: updatedReservation.end_time,
+          aircraft_registration: aircraft.registration_number,
+          previous_start_time: mailDate(previousStartTime, language),
+          previous_end_time: mailDate(previousEndTime, language),
+          new_start_time: mailDate(updatedReservation.start_time, language),
+          new_end_time: mailDate(updatedReservation.end_time, language),
         },
+        language,
       );
 
       await this.notificationService.create({
         user_id: user.id,
         notification_type: 'RESERVATION_MODIFIED',
         notification_date: new Date(),
-        message: `Votre réservation pour l'avion immatriculé ${aircraft.registration_number} a été modifiée.`,
+        message: translate(language, 'notification.reservationModified', {
+          registration: aircraft.registration_number,
+        }),
         is_read: false,
       });
     }
@@ -241,17 +260,21 @@ export class ReservationsService {
       where: { id: reservation.user.id },
     });
     if (user) {
+      const language = languageOf(user);
       await this.mailerService.sendMail(
         user.email,
-        'Annulation de votre réservation',
-        `Votre réservation pour l'avion immatriculé ${aircraft.registration_number} a été annulée.`,
+        translate(language, 'mail.reservationCancelled.subject'),
+        translate(language, 'mail.reservationCancelled.text', {
+          registration: aircraft.registration_number,
+        }),
         'reservation-cancellation',
         {
           name: user.first_name,
-          registration_number: aircraft.registration_number,
-          start_time: reservation.start_time,
-          end_time: reservation.end_time,
+          aircraft_registration: aircraft.registration_number,
+          start_time: mailDate(reservation.start_time, language),
+          end_time: mailDate(reservation.end_time, language),
         },
+        language,
       );
 
       const startTime = new Date(reservation.start_time);
@@ -267,7 +290,9 @@ export class ReservationsService {
         user_id: user.id,
         notification_type: 'RESERVATION_CANCELLED',
         notification_date: new Date(),
-        message: `Votre réservation pour l'avion immatriculé ${aircraft.registration_number} a été annulée.`,
+        message: translate(language, 'notification.reservationCancelled', {
+          registration: aircraft.registration_number,
+        }),
         is_read: false,
       });
     }
@@ -313,6 +338,8 @@ export class ReservationsService {
 
     queryBuilder.leftJoinAndSelect('reservation.aircraft', 'aircraft');
     queryBuilder.leftJoinAndSelect('reservation.user', 'user');
+    // Flights come along so the calendar knows which bookings are closed.
+    queryBuilder.leftJoinAndSelect('reservation.flights', 'flights');
 
     return await queryBuilder.getMany();
   }

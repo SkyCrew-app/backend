@@ -72,4 +72,26 @@ describe('ChecklistsService template removal', () => {
     await expect(service.removeTemplate(99)).rejects.toThrow(NotFoundException);
     expect(templates.delete).not.toHaveBeenCalled();
   });
+
+  it('writes the message in the language of the request', async () => {
+    await expect(service.removeTemplate(4, 'en')).resolves.toEqual(
+      expect.objectContaining({
+        deleted: true,
+        message: 'The template "Prévol DR400" has been deleted.',
+      }),
+    );
+
+    submissions.count.mockResolvedValue(3);
+    const kept = await service.removeTemplate(4, 'en');
+
+    expect(kept.message).toBe(
+      'The template "Prévol DR400" is used by 3 completed checklist(s): it has been deactivated instead of deleted, to keep the history.',
+    );
+    await expect(service.removeTemplate(4)).resolves.toEqual(
+      expect.objectContaining({
+        message:
+          "Le modèle « Prévol DR400 » est utilisé par 3 checklist(s) déjà remplie(s) : il a été désactivé au lieu d'être supprimé, afin de conserver l'historique.",
+      }),
+    );
+  });
 });

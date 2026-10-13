@@ -342,6 +342,7 @@ describe('ReservationsService', () => {
         expect.any(String),
         'reservation-modification',
         expect.any(Object),
+        'fr',
       );
       expect(mockNotificationService.create).toHaveBeenCalled();
       expect(result).toEqual(updatedReservation);
@@ -394,6 +395,7 @@ describe('ReservationsService', () => {
         expect.any(String),
         'reservation-cancellation',
         expect.any(Object),
+        'fr',
       );
       expect(mockPaymentService.refund).toHaveBeenCalledWith(1, 300);
       expect(mockNotificationService.create).toHaveBeenCalled();
@@ -470,7 +472,7 @@ describe('ReservationsService', () => {
         'reservation',
       );
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledTimes(2);
-      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledTimes(2);
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledTimes(3);
       expect(result).toEqual([{ id: 1 }]);
     });
 

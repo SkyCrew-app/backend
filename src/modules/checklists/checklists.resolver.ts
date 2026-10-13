@@ -1,6 +1,8 @@
 import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { ChecklistsService } from './checklists.service';
+import { Language } from '../../common/i18n/languages';
+import { RequestLanguage } from '../../common/i18n/request-language';
 import { ChecklistTemplate } from './entity/checklist-template.entity';
 import { ChecklistItem } from './entity/checklist-item.entity';
 import {
@@ -140,8 +142,11 @@ export class ChecklistsResolver {
   @Mutation(() => ChecklistTemplateRemoval)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
-  deleteChecklistTemplate(@Args('id', { type: () => Int }) id: number) {
-    return this.checklistsService.removeTemplate(id);
+  deleteChecklistTemplate(
+    @Args('id', { type: () => Int }) id: number,
+    @RequestLanguage() language?: Language,
+  ) {
+    return this.checklistsService.removeTemplate(id, language);
   }
 
   // ── Item Mutations ─────────────────────────────────────────

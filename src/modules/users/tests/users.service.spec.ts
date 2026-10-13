@@ -185,6 +185,7 @@ describe('UsersService', () => {
         expect.stringContaining('veuillez cliquer sur le lien suivant'),
         'confirmation-email',
         { name: 'John', confirmationUrl: expectedUrl },
+        'fr',
       );
       expect(userRepository.save).toHaveBeenCalled();
       expect(result).toEqual(savedUser);
@@ -246,7 +247,8 @@ describe('UsersService', () => {
         'Authentification à deux facteurs activée',
         expect.any(String),
         '2fa-enabled',
-        { first_name: 'Jean' },
+        { name: 'Jean' },
+        'fr',
       );
       expect(notificationsService.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -330,7 +332,8 @@ describe('UsersService', () => {
         'Vos informations ont été mises à jour',
         expect.any(String),
         'update-user',
-        { first_name: 'NewName' },
+        { name: 'NewName' },
+        'fr',
       );
       expect(notificationsService.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -657,7 +660,8 @@ describe('UsersService', () => {
         'Votre mot de passe a été modifié',
         expect.any(String),
         'change-password',
-        { first_name: 'Demo' },
+        { name: 'Demo' },
+        'fr',
       );
       expect(userRepository.save).toHaveBeenCalledWith(user);
       expect(result.password).toBe('newHashedPassword');

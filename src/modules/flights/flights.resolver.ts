@@ -16,14 +16,17 @@ import { GenerateFlightPlanInput } from './dto/generate-flight-plan.input';
 import { AirportsService } from './airports.service';
 import { MetarService } from './metar.service';
 import { AirportData } from './interfaces/airport.interface';
-import { UseGuards, ForbiddenException } from '@nestjs/common';
+import { UseFilters, UseGuards, ForbiddenException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SessionUser } from '../../common/auth/access';
+import { languageOf } from '../../common/i18n/languages';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver(() => Flight)
+@UseFilters(LocalizedExceptionFilter)
 export class FlightsResolver {
   constructor(
     private readonly flightsService: FlightsService,
@@ -148,7 +151,7 @@ export class FlightsResolver {
       context.req.user.role !== 'Administrateur'
     ) {
       throw new ForbiddenException(
-        'Vous ne pouvez pas accéder aux vols d\'un autre utilisateur',
+        "Vous ne pouvez pas accéder aux vols d'un autre utilisateur",
       );
     }
 
@@ -162,7 +165,10 @@ export class FlightsResolver {
     @Context() context,
   ) {
     createFlightInput.user_id = context.req.user.id;
-    return this.flightsService.createFlightByUser(createFlightInput);
+    return this.flightsService.createFlightByUser(
+      createFlightInput,
+      languageOf(context.req.user),
+    );
   }
 
   @Mutation(() => Flight)
@@ -183,6 +189,7 @@ export class FlightsResolver {
         cruise_altitude_ft: input.cruise_altitude_ft,
         departure_time: input.departure_time,
         flight_rules: input.flight_rules as 'VFR' | 'IFR' | undefined,
+        language: languageOf(context.req.user),
       },
     );
   }
