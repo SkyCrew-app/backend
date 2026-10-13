@@ -11,7 +11,6 @@ coverage
 .vscode
 .idea
 monitoring
-*.spec.ts
-*.test.ts
+**/*.spec.ts
+**/*.test.ts
 jest.config.*
-tsconfig.build.json
