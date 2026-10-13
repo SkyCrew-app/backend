@@ -104,7 +104,7 @@ const canonical = (value: unknown): unknown => {
   if (typeof value === 'object') {
     return Object.fromEntries(
       Object.keys(value)
-        .sort()
+        .sort((a, b) => a.localeCompare(b))
         .map((key) => [key, canonical((value as Record<string, unknown>)[key])])
         .filter(([, item]) => item !== null),
     );
