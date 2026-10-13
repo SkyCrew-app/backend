@@ -101,6 +101,9 @@ database.
 
 - Card payments, PayPal and weather are optional: leave their keys empty and
   the rest of the application works.
+- `API_NINJAS_KEY` (a free key from api-ninjas.com) feeds the aerodrome
+  search of the profile and the weather of the dashboard. It is read by the
+  API only and never reaches the browser; without it both stay empty.
 - The map and weather keys used by the browser are part of the web
   application image. They are set as repository variables on GitHub
   (`NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN`, `NEXT_PUBLIC_OPENWEATHERMAP_API_KEY`,

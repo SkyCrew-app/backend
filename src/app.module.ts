@@ -42,6 +42,7 @@ import { DatabaseMetricsInterceptor } from './common/interceptors/database.inter
 import { FinancialModule } from './modules/financial/financial.module';
 import { HealthModule } from './modules/health/health.module';
 import { ChecklistsModule } from './modules/checklists/checklists.module';
+import { AviationDataModule } from './modules/aviation-data/aviation-data.module';
 import { APP_GUARD } from '@nestjs/core';
 import { DemoModeGuard } from './common/guards/demo-mode.guard';
 import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-default.guard';
@@ -112,7 +113,8 @@ import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-de
         metricsPlugin: GraphQLMetricsPlugin,
       ) => ({
         autoSchemaFile: true,
-        playground: true,
+        // The query explorer is a development tool: not served in production.
+        playground: process.env.NODE_ENV !== 'production',
         path: process.env.GRAPHQL_ENDPOINT || '/graphql',
         resolvers: { JSON: GraphQLJSON },
         plugins: [metricsPlugin],
@@ -166,6 +168,8 @@ import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-de
     HealthModule,
 
     ChecklistsModule,
+
+    AviationDataModule,
 
     AuditModule,
 

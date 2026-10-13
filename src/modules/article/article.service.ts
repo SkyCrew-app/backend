@@ -7,6 +7,7 @@ import { UpdateArticleInput } from './dto/update-article.input';
 import { FileUpload } from 'graphql-upload-ts';
 import * as path from 'path';
 import * as fs from 'fs';
+import { sanitizeRichText } from '../../common/html/sanitize-rich-text';
 
 @Injectable()
 export class ArticlesService {
@@ -21,6 +22,9 @@ export class ArticlesService {
     documentPaths: string[] | null,
   ): Promise<Article> {
     const article = this.articlesRepository.create(createArticleInput);
+    if (typeof article.text === 'string') {
+      article.text = sanitizeRichText(article.text);
+    }
 
     if (photoPath) {
       article.photo_url = photoPath;
@@ -46,7 +50,12 @@ export class ArticlesService {
     photoPath: string | null,
     documentPaths: string[] | null,
   ): Promise<Article> {
-    const article = await this.articlesRepository.preload(updateArticleInput);
+    const article = await this.articlesRepository.preload({
+      ...updateArticleInput,
+      ...(typeof updateArticleInput.text === 'string'
+        ? { text: sanitizeRichText(updateArticleInput.text) }
+        : {}),
+    });
     if (!article) {
       throw new NotFoundException(
         `Article with ID ${updateArticleInput.id} not found`,

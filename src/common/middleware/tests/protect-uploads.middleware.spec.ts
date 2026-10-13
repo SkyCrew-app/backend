@@ -1,16 +1,36 @@
 import { JwtService } from '@nestjs/jwt';
-import { protectUploads } from '../protect-uploads.middleware';
+import {
+  protectUploads,
+  setUploadHeaders,
+} from '../protect-uploads.middleware';
 
 const SECRET = 'uploads-test-secret';
 const sign = (payload: object, secret = SECRET) =>
   new JwtService({ secret }).sign(payload, { expiresIn: '5m' });
 
-const pilotToken = () =>
-  sign({ sub: 3, email: 'p@example.com', role: 'Pilote' });
+const pilotToken = (extra: object = {}) =>
+  sign({ sub: 3, email: 'p@example.com', role: 'Pilote', ...extra });
 const adminToken = () =>
   sign({ sub: 1, email: 'a@example.com', role: 'Administrateur' });
 
-const run = (path: string, token?: string) => {
+// The members as the database knows them.
+const members: Record<string, any> = {
+  'p@example.com': {
+    id: 3,
+    email: 'p@example.com',
+    sessionVersion: 0,
+    role: { role_name: 'Pilote' },
+  },
+  'a@example.com': {
+    id: 1,
+    email: 'a@example.com',
+    sessionVersion: 0,
+    role: { role_name: 'Administrateur' },
+  },
+};
+const findUser = jest.fn(async (email: string) => members[email] ?? null);
+
+const run = async (path: string, token?: string) => {
   const request: any = { path, cookies: token ? { token } : {} };
   const response: any = {
     statusCode: undefined,
@@ -22,7 +42,7 @@ const run = (path: string, token?: string) => {
   };
   const next = jest.fn();
 
-  protectUploads(request, response, next);
+  await protectUploads(findUser)(request, response, next);
 
   return { served: next.mock.calls.length === 1, status: response.statusCode };
 };
@@ -30,12 +50,15 @@ const run = (path: string, token?: string) => {
 describe('protectUploads', () => {
   beforeEach(() => {
     process.env.JWT_SECRET = SECRET;
+    members['p@example.com'].sessionVersion = 0;
+    members['p@example.com'].role = { role_name: 'Pilote' };
+    findUser.mockClear();
   });
 
   it.each(['/users/3/photo.png', '/tmp/article.jpg'])(
     'serves %s without a session',
-    (path) => {
-      expect(run(path)).toEqual({ served: true, status: undefined });
+    async (path) => {
+      expect(await run(path)).toEqual({ served: true, status: undefined });
     },
   );
 
@@ -44,27 +67,27 @@ describe('protectUploads', () => {
     '/12/manuel.pdf',
     '/licences/ppl.pdf',
     '/exports/financial-report.pdf',
-  ])('refuses %s without a session', (path) => {
-    expect(run(path)).toEqual({ served: false, status: 401 });
+  ])('refuses %s without a session', async (path) => {
+    expect(await run(path)).toEqual({ served: false, status: 401 });
   });
 
   it.each([
     '/maintenance/4/rapport.pdf',
     '/12/manuel.pdf',
     '/licences/ppl.pdf',
-  ])('serves %s to a signed-in member', (path) => {
-    expect(run(path, pilotToken())).toEqual({
+  ])('serves %s to a signed-in member', async (path) => {
+    expect(await run(path, pilotToken())).toEqual({
       served: true,
       status: undefined,
     });
   });
 
-  it('keeps the financial exports for administrators', () => {
-    expect(run('/exports/financial-report.pdf', pilotToken())).toEqual({
+  it('keeps the financial exports for administrators', async () => {
+    expect(await run('/exports/financial-report.pdf', pilotToken())).toEqual({
       served: false,
       status: 403,
     });
-    expect(run('/exports/financial-report.pdf', adminToken())).toEqual({
+    expect(await run('/exports/financial-report.pdf', adminToken())).toEqual({
       served: true,
       status: undefined,
     });
@@ -74,32 +97,131 @@ describe('protectUploads', () => {
     '/users/../exports/financial-report.pdf',
     '/users/%2e%2e/exports/financial-report.pdf',
     '/tmp/../maintenance/4/rapport.pdf',
-  ])('judges %s by the directory it really points to', (path) => {
-    expect(run(path).served).toBe(false);
-    expect(run(path).status).toBe(401);
+  ])('judges %s by the directory it really points to', async (path) => {
+    expect(await run(path)).toEqual({ served: false, status: 401 });
   });
 
-  it.each(['/', '/..'])('answers not found for %s', (path) => {
-    expect(run(path)).toEqual({ served: false, status: 404 });
+  it.each(['/', '/..'])('answers not found for %s', async (path) => {
+    expect(await run(path)).toEqual({ served: false, status: 404 });
   });
 
-  it('does not let a leading .. reach outside the uploads directory', () => {
+  it('does not let a leading .. reach outside the uploads directory', async () => {
     // Normalised to /secret.env, a non-public entry of the uploads root.
-    expect(run('/../secret.env')).toEqual({ served: false, status: 401 });
+    expect(await run('/../secret.env')).toEqual({ served: false, status: 401 });
   });
 
-  it('answers bad request for a path that cannot be decoded', () => {
-    expect(run('/users/%E0%A4%A')).toEqual({ served: false, status: 400 });
+  it('answers bad request for a path that cannot be decoded', async () => {
+    expect(await run('/users/%E0%A4%A')).toEqual({
+      served: false,
+      status: 400,
+    });
   });
 
   it.each([
     ['a token signed with another secret', () => sign({ sub: 3 }, 'other')],
     ['a malformed token', () => 'not-a-jwt'],
-    ['a two-factor challenge', () => sign({ sub: 3, purpose: '2fa' })],
-  ])('does not accept %s as a session', (_label, token) => {
-    expect(run('/maintenance/4/rapport.pdf', token())).toEqual({
+    [
+      'a two-factor challenge',
+      () => sign({ sub: 3, email: 'p@example.com', purpose: '2fa' }),
+    ],
+    ['a session of a deleted account', () => sign({ email: 'gone@x.fr' })],
+    ['a token without e-mail', () => sign({ sub: 3 })],
+  ])('does not accept %s as a session', async (_label, token) => {
+    expect(await run('/maintenance/4/rapport.pdf', token())).toEqual({
       served: false,
       status: 401,
+    });
+  });
+
+  describe('after a password change', () => {
+    it('refuses the sessions opened before it', async () => {
+      const before = pilotToken({ sv: 0 });
+      expect(await run('/maintenance/4/rapport.pdf', before)).toEqual({
+        served: true,
+        status: undefined,
+      });
+
+      members['p@example.com'].sessionVersion = 1;
+
+      expect(await run('/maintenance/4/rapport.pdf', before)).toEqual({
+        served: false,
+        status: 401,
+      });
+      expect(
+        await run('/maintenance/4/rapport.pdf', pilotToken({ sv: 1 })),
+      ).toEqual({ served: true, status: undefined });
+    });
+
+    it('treats a token without version as opened before any change', async () => {
+      members['p@example.com'].sessionVersion = 2;
+
+      expect(await run('/licences/ppl.pdf', pilotToken())).toEqual({
+        served: false,
+        status: 401,
+      });
+    });
+  });
+
+  it('judges the role held today, not the one written in the token', async () => {
+    const formerAdmin = sign({
+      email: 'p@example.com',
+      role: 'Administrateur',
+    });
+
+    expect(await run('/exports/financial-report.pdf', formerAdmin)).toEqual({
+      served: false,
+      status: 403,
+    });
+  });
+
+  it('refuses when the user cannot be loaded', async () => {
+    findUser.mockRejectedValueOnce(new Error('database down'));
+
+    expect(await run('/licences/ppl.pdf', pilotToken())).toEqual({
+      served: false,
+      status: 401,
+    });
+  });
+
+  it('does not query the database for the public directories', async () => {
+    await run('/users/3/photo.png', pilotToken());
+
+    expect(findUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('setUploadHeaders', () => {
+  const headersFor = (filePath: string) => {
+    const headers: Record<string, string> = {};
+    setUploadHeaders(
+      {
+        setHeader: (name: string, value: string) => (headers[name] = value),
+      } as any,
+      filePath,
+    );
+    return headers;
+  };
+
+  it.each([
+    '/uploads/users/3/photo.PNG',
+    '/uploads/tmp/a.jpeg',
+    '/uploads/4/manuel.pdf',
+  ])('lets the browser display %s', (filePath) => {
+    expect(headersFor(filePath)).toEqual({
+      'X-Content-Type-Options': 'nosniff',
+    });
+  });
+
+  it.each([
+    '/uploads/tmp/page.html',
+    '/uploads/users/3/photo.svg',
+    '/uploads/tmp/script.js',
+    '/uploads/tmp/photo.png.htm',
+    '/uploads/tmp/sans-extension',
+  ])('has %s downloaded instead of displayed', (filePath) => {
+    expect(headersFor(filePath)).toEqual({
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Disposition': 'attachment',
     });
   });
 });

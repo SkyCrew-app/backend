@@ -66,6 +66,7 @@ services:
       PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
       PAYPAL_MODE: ${PAYPAL_MODE:-sandbox}
       OPENWEATHERMAP_API_KEY: ${OPENWEATHERMAP_API_KEY:-}
+      API_NINJAS_KEY: ${API_NINJAS_KEY:-}
     volumes:
       - uploads:/usr/src/app/dist/src/uploads
     depends_on:

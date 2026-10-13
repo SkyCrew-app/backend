@@ -98,4 +98,35 @@ describe('ArticlesService', () => {
 
     await expect(service.remove(7)).resolves.toEqual({ id: 7, title: 'T' });
   });
+
+  describe('article text', () => {
+    const DIRTY =
+      '<p>Bonjour <strong>à tous</strong></p><img src="x" onerror="steal()"><script>steal()</script>';
+    const CLEAN = '<p>Bonjour <strong>à tous</strong></p><img src="x" />';
+
+    it('is sanitised when an article is created', async () => {
+      await service.create(
+        { title: 'T', description: 'D', text: DIRTY, tags: [] } as any,
+        null,
+        null,
+      );
+
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'T', text: CLEAN }),
+      );
+    });
+
+    it('is sanitised when an article is updated, and left alone when absent', async () => {
+      (repo.preload as jest.Mock).mockImplementation(async (dto) => dto);
+
+      await service.update({ id: 1, text: DIRTY } as any, null, null);
+      expect(repo.preload).toHaveBeenLastCalledWith({ id: 1, text: CLEAN });
+
+      await service.update({ id: 1, title: 'Nouveau' } as any, null, null);
+      expect(repo.preload).toHaveBeenLastCalledWith({
+        id: 1,
+        title: 'Nouveau',
+      });
+    });
+  });
 });

@@ -17,6 +17,7 @@ import { CreateModuleDTO } from './dto/create-module.input';
 import { UpdateModuleDTO } from './dto/update-module.input';
 import { CreateLessonDTO } from './dto/create-lesson.input';
 import { UpdateLessonDTO } from './dto/update-lesson.input';
+import { sanitizeLessonContent } from '../../common/html/sanitize-rich-text';
 
 @Injectable()
 export class ELearningService {
@@ -211,6 +212,7 @@ export class ELearningService {
 
     const lesson = this.lessonRepository.create({
       ...createLessonDto,
+      content: sanitizeLessonContent(createLessonDto.content),
       module,
     });
 
@@ -226,7 +228,12 @@ export class ELearningService {
     lessonId: number,
     updateLessonDto: UpdateLessonDTO,
   ): Promise<Lesson> {
-    await this.lessonRepository.update(lessonId, updateLessonDto);
+    await this.lessonRepository.update(lessonId, {
+      ...updateLessonDto,
+      ...(updateLessonDto.content !== undefined
+        ? { content: sanitizeLessonContent(updateLessonDto.content) }
+        : {}),
+    });
     return this.lessonRepository.findOne({ where: { id: lessonId } });
   }
 

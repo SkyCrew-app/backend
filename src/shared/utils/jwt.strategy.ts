@@ -5,6 +5,7 @@ import { Request } from 'express';
 import { UsersService } from '../../modules/users/users.service';
 import { User } from '../../modules/users/entity/users.entity';
 import { ConfigService } from '@nestjs/config';
+import { isCurrentSession } from '../../common/auth/session';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -31,11 +32,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     const user = await this.usersService.findOneByEmail(payload.email);
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-    // The password changed since this session was opened.
-    if ((payload.sv ?? 0) !== (user.sessionVersion ?? 0)) {
+    // Unknown user, or the password changed since this session was opened.
+    if (!isCurrentSession(payload, user)) {
       throw new UnauthorizedException();
     }
     return user;
