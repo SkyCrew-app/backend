@@ -338,6 +338,8 @@ export class ReservationsService {
 
     queryBuilder.leftJoinAndSelect('reservation.aircraft', 'aircraft');
     queryBuilder.leftJoinAndSelect('reservation.user', 'user');
+    // Flights come along so the calendar knows which bookings are closed.
+    queryBuilder.leftJoinAndSelect('reservation.flights', 'flights');
 
     return await queryBuilder.getMany();
   }
