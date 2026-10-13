@@ -1,9 +1,12 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
 import {
   IsBoolean,
+  IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 @InputType()
@@ -17,7 +20,11 @@ export class UpdateFlightInput {
   @Field(() => Int, { nullable: true })
   user_id?: number;
 
+  // Its bounds are checked by the service, which answers in the member's
+  // language.
   @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
   flight_hours?: number;
 
   @Field({ nullable: true })
@@ -45,15 +52,24 @@ export class UpdateFlightInput {
   closed?: boolean;
 
   @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
   number_of_passengers?: number;
 
   @Field({ nullable: true })
   encoded_polyline?: string;
 
   @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   distance_km?: number;
 
   @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   estimated_flight_time?: number;
 
   @Field(() => [String], { nullable: true })

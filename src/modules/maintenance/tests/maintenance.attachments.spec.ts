@@ -26,6 +26,7 @@ describe('MaintenanceService attachments', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
     );
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'maintenance-'));
     jest

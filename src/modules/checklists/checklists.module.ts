@@ -5,6 +5,7 @@ import { ChecklistsResolver } from './checklists.resolver';
 import { ChecklistTemplate } from './entity/checklist-template.entity';
 import { ChecklistItem } from './entity/checklist-item.entity';
 import { ChecklistSubmission } from './entity/checklist-submission.entity';
+import { Reservation } from '../reservations/entity/reservations.entity';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { ChecklistSubmission } from './entity/checklist-submission.entity';
       ChecklistTemplate,
       ChecklistItem,
       ChecklistSubmission,
+      Reservation,
     ]),
   ],
   providers: [ChecklistsService, ChecklistsResolver],

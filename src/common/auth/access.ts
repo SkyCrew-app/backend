@@ -5,6 +5,15 @@ export const ROLE_INSTRUCTOR = 'Instructeur';
 export const ROLE_TECHNICIAN = 'Technicien';
 export const ROLE_PILOT = 'Pilote';
 
+// The roles the application itself relies on (guards, default role of a new
+// member): they can be neither renamed nor deleted.
+export const BUILT_IN_ROLES: readonly string[] = [
+  ROLE_ADMIN,
+  ROLE_PILOT,
+  ROLE_INSTRUCTOR,
+  ROLE_TECHNICIAN,
+];
+
 // Shape of the authenticated user attached to the request by JwtStrategy.
 export interface SessionUser {
   id: number;

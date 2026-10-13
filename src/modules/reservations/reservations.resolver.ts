@@ -1,4 +1,13 @@
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
+import {
+  Resolver,
+  Query,
+  Mutation,
+  Args,
+  Int,
+  ResolveField,
+  Parent,
+  Context,
+} from '@nestjs/graphql';
 import { ReservationsService } from './reservations.service';
 import { Reservation } from './entity/reservations.entity';
 import { ReservationTemplate } from './entity/reservation-template.entity';
@@ -14,11 +23,52 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../users/entity/users.entity';
 import { assertSelfOrRole, isAdmin } from '../../common/auth/access';
+import { FlightsService } from '../flights/flights.service';
+import { Flight } from '../flights/entity/flights.entity';
+
+// Who may read whose flights, asked once per request and per pilot.
+const flightReaders = new WeakMap<object, Map<number, Promise<boolean>>>();
 
 @Resolver(() => Reservation)
 @UseFilters(LocalizedExceptionFilter)
 export class ReservationsResolver {
-  constructor(private readonly reservationService: ReservationsService) {}
+  constructor(
+    private readonly reservationService: ReservationsService,
+    private readonly flightsService: FlightsService,
+  ) {}
+
+  // The schedule is public (who, which aircraft, when); the flights of a
+  // booking are not. They are read like any flight: by the pilot, an
+  // administrator or an instructor who teaches that pilot. Anyone else gets
+  // an empty list, so the schedule itself still loads.
+  @ResolveField(() => [Flight], { name: 'flights', nullable: true })
+  async flights(
+    @Parent() reservation: Reservation,
+    @CurrentUser() currentUser?: User,
+    @Context() context?: object,
+  ): Promise<Flight[] | null> {
+    if (!reservation.flights?.length) {
+      return reservation.flights ?? null;
+    }
+    const pilotId =
+      reservation.user?.id ??
+      (await this.reservationService.findOwnerId(reservation.id));
+
+    const asked =
+      (context && flightReaders.get(context)) ??
+      new Map<number, Promise<boolean>>();
+    if (context && !flightReaders.has(context)) {
+      flightReaders.set(context, asked);
+    }
+    const key = Number(pilotId);
+    if (!asked.has(key)) {
+      asked.set(
+        key,
+        this.flightsService.canReadFlightsOf(pilotId, currentUser),
+      );
+    }
+    return (await asked.get(key)) ? reservation.flights : [];
+  }
 
   // Everyone sees the schedule, but only the holder of a reservation or an
   // administrator may change or cancel it.
@@ -77,7 +127,10 @@ export class ReservationsResolver {
     @CurrentUser() currentUser?: User,
   ): Promise<boolean> {
     await this.assertHolder(currentUser, id);
-    await this.reservationService.delete(id);
+    // After the start time, cancelling is an administrator's decision.
+    await this.reservationService.delete(id, {
+      isAdmin: isAdmin(currentUser),
+    });
     return true;
   }
 

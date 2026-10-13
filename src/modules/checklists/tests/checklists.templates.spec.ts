@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ChecklistsService } from '../checklists.service';
+import { Reservation } from '../../reservations/entity/reservations.entity';
 import { ChecklistTemplate } from '../entity/checklist-template.entity';
 import { ChecklistItem } from '../entity/checklist-item.entity';
 import { ChecklistSubmission } from '../entity/checklist-submission.entity';
@@ -30,6 +31,7 @@ describe('ChecklistsService template removal', () => {
           provide: getRepositoryToken(ChecklistSubmission),
           useValue: submissions,
         },
+        { provide: getRepositoryToken(Reservation), useValue: {} },
       ],
     }).compile();
 

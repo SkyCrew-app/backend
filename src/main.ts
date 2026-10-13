@@ -18,6 +18,8 @@ import { DataSource } from 'typeorm';
 import { ensureBaseData } from './db/ensure-base-data';
 import { User } from './modules/users/entity/users.entity';
 import { UPLOAD_MAX_FILE_SIZE } from './common/uploads/save-upload';
+import { License } from './modules/licenses/entity/licenses.entity';
+import { holdersOfLicenceDocument } from './modules/licenses/licenses.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -69,14 +71,20 @@ async function bootstrap() {
 
   app.use(
     '/uploads',
-    protectUploads((email) =>
-      app
-        .get(DataSource)
-        .getRepository(User)
-        .findOne({
-          where: { email },
-          relations: ['role'],
-        }),
+    protectUploads(
+      (email) =>
+        app
+          .get(DataSource)
+          .getRepository(User)
+          .findOne({
+            where: { email },
+            relations: ['role'],
+          }),
+      (documentUrl) =>
+        holdersOfLicenceDocument(
+          app.get(DataSource).getRepository(License),
+          documentUrl,
+        ),
     ),
     express.static(join(__dirname, 'uploads'), {
       setHeaders: setUploadHeaders,

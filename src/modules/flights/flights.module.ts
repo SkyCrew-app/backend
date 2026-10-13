@@ -3,6 +3,7 @@ import { FlightsService } from './flights.service';
 import { FlightsResolver } from './flights.resolver';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Flight } from './entity/flights.entity';
+import { FlightAmendment } from './entity/flight-amendment.entity';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { User } from '../users/entity/users.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -16,7 +17,7 @@ import { LogbookResolver } from './logbook.resolver';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Flight, Reservation, User]),
+    TypeOrmModule.forFeature([Flight, FlightAmendment, Reservation, User]),
     NotificationsModule,
   ],
   exports: [FlightsService, LogbookService],

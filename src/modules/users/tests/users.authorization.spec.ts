@@ -55,6 +55,11 @@ describe('Users authorization', () => {
       markLessonCompleted: jest.fn(),
       getEvaluationResults: jest.fn().mockResolvedValue([]),
       getUserProgress: jest.fn().mockResolvedValue(true),
+      // By default the instructor has no course with the member read.
+      isInstructorOf: jest.fn().mockResolvedValue(false),
+      setActive: jest.fn().mockResolvedValue({}),
+      remove: jest.fn().mockResolvedValue(true),
+      resendInvitation: jest.fn().mockResolvedValue(true),
     };
     evalService = { getUserEvaluationResults: jest.fn().mockResolvedValue([]) };
 
@@ -196,8 +201,69 @@ describe('Users authorization', () => {
       await expect(call(pilot)).rejects.toThrow(ForbiddenException);
     });
 
-    it.each(progressReads)('%s accepts an instructor', async (_name, call) => {
-      await expect(call(instructor)).resolves.toBeDefined();
+    // Rewritten: any instructor used to read the progress of every member.
+    it.each(progressReads)(
+      '%s refuses an instructor who does not teach this member',
+      async (_name, call) => {
+        await expect(call(instructor)).rejects.toThrow(ForbiddenException);
+        expect(usersService.isInstructorOf).toHaveBeenCalledWith(4, 7);
+      },
+    );
+
+    it.each(progressReads)(
+      '%s accepts the instructor of this member',
+      async (_name, call) => {
+        usersService.isInstructorOf.mockResolvedValue(true);
+        await expect(call(instructor)).resolves.toBeDefined();
+      },
+    );
+
+    it.each(progressReads)(
+      '%s accepts the member and an administrator',
+      async (_name, call) => {
+        await expect(call({ ...pilot, id: 7 })).resolves.toBeDefined();
+        await expect(call(admin)).resolves.toBeDefined();
+      },
+    );
+  });
+
+  describe('member accounts', () => {
+    const adminOnly: Array<[string, keyof UsersResolver]> = [
+      ['getUsers', 'getUsers'],
+      ['createUser', 'createUser'],
+      ['setUserActive', 'setUserActive'],
+      ['deleteUser', 'deleteUser'],
+      ['resendInvitation', 'resendInvitation'],
+    ];
+
+    it.each(adminOnly)('%s is for administrators only', (_name, method) => {
+      expect(
+        Reflect.getMetadata('roles', UsersResolver.prototype[method]),
+      ).toEqual(['Administrateur']);
+      expect(
+        Reflect.getMetadata('__guards__', UsersResolver.prototype[method]),
+      ).toContain(RolesGuard);
+    });
+
+    it('leaves deactivated members out of the directory', async () => {
+      usersService.findAll = jest.fn().mockResolvedValue([
+        { ...otherUser, id: 7, is_active: true },
+        { ...otherUser, id: 8, is_active: false },
+      ]);
+
+      const directory = await users.membersDirectory();
+
+      expect(directory.map((member) => member.id)).toEqual([7]);
+    });
+
+    it('accepts the own address typed in another case', async () => {
+      await users.updateUser(
+        { email: 'Pilot@Example.com', first_name: 'X' },
+        undefined,
+        pilot,
+      );
+
+      expect(usersService.updateUser).toHaveBeenCalled();
     });
   });
 });

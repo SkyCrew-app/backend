@@ -13,8 +13,11 @@ export class InvoicesService {
   ) {}
 
   async create(createInvoiceInput: CreateInvoiceInput): Promise<Invoice> {
+    // user_id is not a column: the invoice is attached through its relation.
+    const { user_id, ...fields } = createInvoiceInput;
     const invoice = this.invoicesRepository.create({
-      ...createInvoiceInput,
+      ...fields,
+      user: { id: user_id },
       payment_status: 'paid',
     });
     return this.invoicesRepository.save(invoice);

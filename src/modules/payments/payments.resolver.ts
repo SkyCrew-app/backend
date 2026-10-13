@@ -2,6 +2,7 @@ import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { PaymentsService } from './payments.service';
 import { Payment } from './entity/payments.entity';
 import { CreatePaymentInput } from './dto/create-payment.input';
+import { AdjustBalanceInput } from './dto/adjust-balance.input';
 import { PaymentResult } from './dto/payment-result.input';
 import { UseFilters, UseGuards } from '@nestjs/common';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
@@ -20,7 +21,21 @@ import {
 export class PaymentsResolver {
   constructor(private readonly paymentsService: PaymentsService) {}
 
-  // Records a payment by hand (cheque, cash…): administrators only.
+  // Credits or debits a member's account by hand (cash, cheque, correction),
+  // with a reason: administrators only. The administrator is taken from the
+  // session.
+  @Mutation(() => Payment)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
+  adjustMemberBalance(
+    @Args('input') input: AdjustBalanceInput,
+    @CurrentUser() currentUser?: SessionUser,
+  ) {
+    return this.paymentsService.adjustBalance(input, currentUser);
+  }
+
+  // Records a payment that is expected: administrators only. It credits
+  // nothing (see adjustMemberBalance).
   @Mutation(() => Payment)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')

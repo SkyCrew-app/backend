@@ -40,8 +40,13 @@ describe('InvoicesService', () => {
     (repo.save as jest.Mock).mockResolvedValue(created);
 
     const result = await service.create(input);
+    // The invoice is attached to its member through the relation: user_id
+    // is not a column and used to be dropped.
     expect(repo.create).toHaveBeenCalledWith({
-      ...input,
+      amount: 100,
+      invoice_date: input.invoice_date,
+      balance_due: 50,
+      user: { id: 1 },
       payment_status: 'paid',
     });
     expect(repo.save).toHaveBeenCalledWith(created);

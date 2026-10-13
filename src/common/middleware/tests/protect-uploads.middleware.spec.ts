@@ -29,6 +29,12 @@ const members: Record<string, any> = {
   },
 };
 const findUser = jest.fn(async (email: string) => members[email] ?? null);
+// The licence documents and the member each belongs to.
+const licenceHolders: Record<string, number[]> = {
+  '/uploads/licences/ppl.pdf': [3],
+  '/uploads/licences/other.pdf': [8],
+};
+const holdersOf = jest.fn(async (url: string) => licenceHolders[url] ?? []);
 
 const run = async (path: string, token?: string) => {
   const request: any = { path, cookies: token ? { token } : {} };
@@ -42,7 +48,7 @@ const run = async (path: string, token?: string) => {
   };
   const next = jest.fn();
 
-  await protectUploads(findUser)(request, response, next);
+  await protectUploads(findUser, holdersOf)(request, response, next);
 
   return { served: next.mock.calls.length === 1, status: response.statusCode };
 };
@@ -52,6 +58,7 @@ describe('protectUploads', () => {
     process.env.JWT_SECRET = SECRET;
     members['p@example.com'].sessionVersion = 0;
     members['p@example.com'].role = { role_name: 'Pilote' };
+    members['p@example.com'].is_active = true;
     findUser.mockClear();
   });
 
@@ -79,6 +86,43 @@ describe('protectUploads', () => {
     expect(await run(path, pilotToken())).toEqual({
       served: true,
       status: undefined,
+    });
+  });
+
+  // Rewritten: licence documents used to be served to any signed-in member.
+  it('keeps a licence document for its holder and administrators', async () => {
+    expect(await run('/licences/other.pdf', pilotToken())).toEqual({
+      served: false,
+      status: 403,
+    });
+    expect(await run('/licences/unknown.pdf', pilotToken())).toEqual({
+      served: false,
+      status: 403,
+    });
+    expect(await run('/licences/other.pdf', adminToken())).toEqual({
+      served: true,
+      status: undefined,
+    });
+    expect(holdersOf).toHaveBeenCalledWith('/uploads/licences/other.pdf');
+  });
+
+  it('keeps a directory nobody classified for administrators', async () => {
+    expect(await run('/invoices/2026-001.pdf', pilotToken())).toEqual({
+      served: false,
+      status: 403,
+    });
+    expect(await run('/invoices/2026-001.pdf', adminToken())).toEqual({
+      served: true,
+      status: undefined,
+    });
+  });
+
+  it('refuses the session of a deactivated member', async () => {
+    members['p@example.com'].is_active = false;
+
+    expect(await run('/maintenance/4/rapport.pdf', pilotToken())).toEqual({
+      served: false,
+      status: 401,
     });
   });
 

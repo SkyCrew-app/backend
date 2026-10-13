@@ -1,12 +1,30 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Repository } from 'typeorm';
+import { LessThanOrEqual, Like, Repository } from 'typeorm';
 import { License } from './entity/licenses.entity';
 import { CreateLicenseInput } from './dto/create-license.input';
 import { UpdateLicenseInput } from './dto/update-license.input';
 import { FileUpload } from 'graphql-upload-ts';
 import { UsersService } from '../users/users.service';
 import { saveUploadTo } from '../../common/uploads/save-upload';
+
+// Members holding a licence that carries this document (its address under
+// /uploads): they are the ones allowed to open it.
+export const holdersOfLicenceDocument = async (
+  licences: Repository<License>,
+  documentUrl: string,
+): Promise<number[]> => {
+  // The column is a comma-separated list: narrowed in SQL, matched exactly
+  // here (in LIKE, "_" stands for any character).
+  const candidates = await licences.find({
+    where: { documents_url: Like(`%${documentUrl}%`) as never },
+    relations: ['user'],
+  });
+  return candidates
+    .filter((licence) => (licence.documents_url ?? []).includes(documentUrl))
+    .map((licence) => licence.user?.id)
+    .filter((id): id is number => id != null);
+};
 
 @Injectable()
 export class LicensesService {
@@ -49,7 +67,15 @@ export class LicensesService {
 
   async update(updateLicenseInput: UpdateLicenseInput): Promise<License> {
     const license = await this.findOne(updateLicenseInput.id);
-    Object.assign(license, updateLicenseInput);
+    // A field that is not sent keeps its value; the documents are only
+    // replaced by an actual list.
+    for (const [field, value] of Object.entries(updateLicenseInput)) {
+      const notSent =
+        value === undefined || (field === 'documents_url' && value === null);
+      if (field !== 'id' && !notSent) {
+        license[field] = value;
+      }
+    }
     return this.licenseRepository.save(license);
   }
 

@@ -3,6 +3,7 @@ import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReservationsResolver } from '../reservations.resolver';
 import { ReservationsService } from '../reservations.service';
+import { FlightsService } from '../../flights/flights.service';
 import { CreateReservationInput } from '../dto/create-reservation.input';
 import { UpdateReservationInput } from '../dto/update-reservation.input';
 import { FlightCategory } from '../entity/reservations.entity';
@@ -41,6 +42,24 @@ describe('ReservationsResolver', () => {
     findRecentReservations: jest.fn(),
   };
 
+  // The real rule of the flights service, with one course on record: the
+  // instructor 20 teaches the holder.
+  const flightsService = new FlightsService(
+    {
+      manager: {
+        count: jest.fn(async (_entity, { where }) =>
+          where.instructor.id === 20 && where.student.id === holder.id ? 1 : 0,
+        ),
+      },
+    } as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+    {} as any,
+  );
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -49,6 +68,7 @@ describe('ReservationsResolver', () => {
           provide: ReservationsService,
           useValue: mockService,
         },
+        { provide: FlightsService, useValue: flightsService },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -126,7 +146,7 @@ describe('ReservationsResolver', () => {
 
       const result = await resolver.deleteReservation(id, admin);
 
-      expect(mockService.delete).toHaveBeenCalledWith(id);
+      expect(mockService.delete).toHaveBeenCalledWith(id, { isAdmin: true });
       expect(result).toBe(true);
     });
   });
@@ -271,7 +291,9 @@ describe('ReservationsResolver', () => {
       await expect(resolver.deleteReservation(10, holder)).resolves.toBe(true);
 
       expect(mockService.update).toHaveBeenCalledWith({ id: 10, purpose: 'x' });
-      expect(mockService.delete).toHaveBeenCalledWith(10);
+      // The service is told the caller is not an administrator: it then
+      // refuses a cancellation after the start time.
+      expect(mockService.delete).toHaveBeenCalledWith(10, { isAdmin: false });
     });
 
     it('does not let the holder hand the reservation to someone else', async () => {
@@ -288,6 +310,51 @@ describe('ReservationsResolver', () => {
       await expect(resolver.deleteReservation(99, holder)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  // The schedule shows everyone's bookings; the flights attached to them
+  // are the pilot's.
+  describe('the flights of a booking', () => {
+    const flights = [{ id: 1, closed_at: new Date(), flight_hours: 1.2 }];
+    const booking = () => ({ id: 10, user: { id: holder.id }, flights }) as any;
+    const instructor = (id: number) =>
+      ({
+        id,
+        email: 'i@example.com',
+        role: { role_name: 'Instructeur' },
+      }) as any;
+
+    it.each([
+      ['the holder', holder],
+      ['an administrator', admin],
+      ['an instructor who teaches the holder', instructor(20)],
+    ])('are read by %s', async (_who, reader) => {
+      await expect(resolver.flights(booking(), reader, {})).resolves.toBe(
+        flights,
+      );
+    });
+
+    it.each([
+      ['another member', stranger],
+      ['an instructor who does not teach the holder', instructor(21)],
+      ['nobody', undefined],
+    ])('come back empty for %s, without failing', async (_who, reader) => {
+      await expect(resolver.flights(booking(), reader, {})).resolves.toEqual(
+        [],
+      );
+    });
+
+    it('asks once per pilot within a request', async () => {
+      const context = {};
+      const spy = jest.spyOn(flightsService, 'canReadFlightsOf');
+      spy.mockClear();
+
+      await resolver.flights(booking(), stranger, context);
+      await resolver.flights({ ...booking(), id: 11 }, stranger, context);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
     });
   });
 });

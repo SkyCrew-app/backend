@@ -1,16 +1,18 @@
 import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { AircraftService } from './aircraft.service';
-import { Aircraft } from './entity/aircraft.entity';
+import { Aircraft, AvailabilityStatus } from './entity/aircraft.entity';
 import { CreateAircraftInput } from './dto/create-aircraft.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
 import { saveUploadToTmp } from '../../common/uploads/save-upload';
 import { UpdateAircraftInput } from './dto/update-aircraft.input';
-import { UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver(() => Aircraft)
+@UseFilters(LocalizedExceptionFilter)
 export class AircraftResolver {
   constructor(private readonly aircraftService: AircraftService) {}
 
@@ -91,7 +93,23 @@ export class AircraftResolver {
     });
   }
 
-  @Mutation(() => Boolean)
+  // Grounds an aircraft or puts it back in service, for instance after an
+  // incident: the job of administrators and technicians.
+  @Mutation(() => Aircraft)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur', 'Technicien')
+  setAircraftAvailability(
+    @Args('aircraftId', { type: () => Int }) aircraftId: number,
+    @Args('availability_status', { type: () => AvailabilityStatus })
+    availabilityStatus: AvailabilityStatus,
+  ): Promise<Aircraft> {
+    return this.aircraftService.updateStatus(aircraftId, availabilityStatus);
+  }
+
+  @Mutation(() => Boolean, {
+    description:
+      'true when the aircraft was deleted, false when it has a history and was retired (made unavailable) instead',
+  })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('Administrateur')
   async deleteAircraft(

@@ -100,6 +100,19 @@ describe('LicensesResolver', () => {
     expect(result).toBe(lic);
   });
 
+  // The scan of a licence used to disappear each time its dates were edited.
+  it('updateLicense leaves the documents alone when no file is sent', async () => {
+    const dto = { id: 2, expiration_date: new Date('2030-01-01') } as any;
+    (service.uploadFiles as jest.Mock).mockResolvedValue(null);
+    (service.update as jest.Mock).mockReturnValue({} as License);
+
+    await resolver.updateLicense(dto, undefined);
+
+    const [sent] = (service.update as jest.Mock).mock.calls[0];
+    expect(sent).toEqual(dto);
+    expect('documents_url' in sent).toBe(false);
+  });
+
   it('deleteLicense should call service.remove', () => {
     (service.remove as jest.Mock).mockReturnValue(true);
     expect(resolver.deleteLicense(4)).toBe(true);

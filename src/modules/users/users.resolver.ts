@@ -4,6 +4,7 @@ import { User } from './entity/users.entity';
 import {
   BadRequestException,
   ForbiddenException,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
@@ -38,8 +39,11 @@ import {
   parseLanguage,
 } from '../../common/i18n/languages';
 import { RequestLanguage } from '../../common/i18n/request-language';
+import { normalizeEmail } from '../../common/validation/email';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver(() => User)
+@UseFilters(LocalizedExceptionFilter)
 export class UsersResolver {
   constructor(private readonly usersService: UsersService) {}
 
@@ -56,7 +60,39 @@ export class UsersResolver {
   @UseGuards(JwtAuthGuard)
   async membersDirectory() {
     const users = await this.usersService.findAll();
-    return users.map((user) => this.directoryEntry(user));
+    // A deactivated member is no longer someone to book a course with.
+    return users
+      .filter((user) => user.is_active !== false)
+      .map((user) => this.directoryEntry(user));
+  }
+
+  // A member who leaves is deactivated: they can no longer sign in, and
+  // everything they did stays. Reversible.
+  @Mutation(() => User)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
+  setUserActive(
+    @Args('id', { type: () => Int }) id: number,
+    @Args('active') active: boolean,
+  ): Promise<User> {
+    return this.usersService.setActive(id, active);
+  }
+
+  // Refused for a member with any history: see setUserActive.
+  @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
+  deleteUser(@Args('id', { type: () => Int }) id: number): Promise<boolean> {
+    return this.usersService.remove(id);
+  }
+
+  @Mutation(() => Boolean)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
+  resendInvitation(
+    @Args('id', { type: () => Int }) id: number,
+  ): Promise<boolean> {
+    return this.usersService.resendInvitation(id);
   }
 
   @Mutation(() => User)
@@ -107,7 +143,11 @@ export class UsersResolver {
     const asAdmin = isAdmin(currentUser);
     const requestedEmail = updateUserInput.email;
 
-    if (!asAdmin && requestedEmail && requestedEmail !== currentUser.email) {
+    if (
+      !asAdmin &&
+      requestedEmail &&
+      normalizeEmail(requestedEmail) !== normalizeEmail(currentUser.email)
+    ) {
       throw new ForbiddenException('You can only update your own account');
     }
 
@@ -339,13 +379,30 @@ export class UserProgressResolver {
     private readonly usersService: UsersService,
   ) {}
 
+  // Progress is read by the member, administrators, and an instructor for
+  // their own students only.
+  private async assertMayReadProgress(
+    currentUser: User | undefined,
+    userId: number,
+  ): Promise<void> {
+    const isOwnStudent =
+      hasRole(currentUser, ROLE_INSTRUCTOR) &&
+      (await this.usersService.isInstructorOf(
+        Number(currentUser.id),
+        Number(userId),
+      ));
+    if (!isOwnStudent) {
+      assertSelfOrRole(currentUser, userId);
+    }
+  }
+
   @Query(() => [Evaluation], { name: 'getUserProgressByEvaluation' })
   @UseGuards(JwtAuthGuard)
   async getUserProgressByEvaluation(
     @Args('userId') userId: number,
     @CurrentUser() currentUser?: User,
   ): Promise<any[]> {
-    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
+    await this.assertMayReadProgress(currentUser, userId);
     return this.evalService.getUserEvaluationResults(userId);
   }
 
@@ -356,7 +413,7 @@ export class UserProgressResolver {
     @Args('courseId') courseId: number,
     @CurrentUser() currentUser?: User,
   ): Promise<number> {
-    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
+    await this.assertMayReadProgress(currentUser, userId);
     return this.usersService.getCourseProgress(userId, courseId);
   }
 
@@ -390,7 +447,7 @@ export class UserProgressResolver {
     @Args('userId') userId: number,
     @CurrentUser() currentUser?: User,
   ): Promise<UserProgress[]> {
-    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
+    await this.assertMayReadProgress(currentUser, userId);
     return this.usersService.getEvaluationResults(userId);
   }
 
@@ -401,7 +458,7 @@ export class UserProgressResolver {
     @Args('lessonId') lessonId: number,
     @CurrentUser() currentUser?: User,
   ): Promise<boolean> {
-    assertSelfOrRole(currentUser, userId, ROLE_INSTRUCTOR);
+    await this.assertMayReadProgress(currentUser, userId);
     return this.usersService.getUserProgress(userId, lessonId);
   }
 }

@@ -47,4 +47,35 @@ export class PaypalService {
     const request = new paypal.orders.OrdersCaptureRequest(orderId);
     return this.getClient().execute(request);
   }
+
+  // True when the order has been paid. An order already captured by an
+  // earlier attempt (the answer was lost, or the server failed before
+  // recording it) cannot be captured again: its state is read instead.
+  async isOrderPaid(orderId: string): Promise<boolean> {
+    let order: { result?: PaypalOrder };
+    try {
+      order = await this.capturePayment(orderId);
+    } catch (error) {
+      if (!String(error?.message ?? '').includes('ORDER_ALREADY_CAPTURED')) {
+        throw error;
+      }
+      order = await this.getClient().execute(
+        new paypal.orders.OrdersGetRequest(orderId),
+      );
+    }
+
+    const captures = (order?.result?.purchase_units ?? []).flatMap(
+      (unit) => unit?.payments?.captures ?? [],
+    );
+    return (
+      order?.result?.status === 'COMPLETED' &&
+      // A capture held for review is not money received yet.
+      captures.every((capture) => capture?.status === 'COMPLETED')
+    );
+  }
+}
+
+interface PaypalOrder {
+  status?: string;
+  purchase_units?: { payments?: { captures?: { status?: string }[] } }[];
 }

@@ -32,6 +32,7 @@ describe('PaymentsResolver', () => {
     updatePaymentStatus: jest.fn(),
     settlePayment: jest.fn(),
     processRefund: jest.fn(),
+    adjustBalance: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -365,6 +366,46 @@ describe('PaymentsResolver', () => {
 
       expect(mockService.processPayment).toHaveBeenCalledWith(
         expect.objectContaining({ user_id: 7 }),
+      );
+    });
+  });
+
+  describe('adjustMemberBalance', () => {
+    const input = {
+      user_id: 3,
+      amount: 250,
+      credit: true,
+      payment_method: 'cheque',
+      reason: 'Chèque n° 1234',
+    };
+
+    it('is reserved to administrators', () => {
+      expect(
+        Reflect.getMetadata(
+          'roles',
+          PaymentsResolver.prototype.adjustMemberBalance,
+        ),
+      ).toEqual(['Administrateur']);
+      const guards = Reflect.getMetadata(
+        '__guards__',
+        PaymentsResolver.prototype.adjustMemberBalance,
+      );
+      expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
+    });
+
+    it('records the administrator of the session, not one named by the caller', async () => {
+      const administrator = {
+        id: 1,
+        email: 'admin@test.com',
+        role: { role_name: 'Administrateur' },
+      };
+      mockService.adjustBalance.mockResolvedValue({ id: 8 });
+
+      await resolver.adjustMemberBalance(input, administrator);
+
+      expect(mockService.adjustBalance).toHaveBeenCalledWith(
+        input,
+        administrator,
       );
     });
   });
