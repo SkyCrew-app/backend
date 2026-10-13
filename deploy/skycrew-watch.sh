@@ -30,7 +30,7 @@ notify() {
 
 failures=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
 
-if curl -fsS -m 10 -o /dev/null "$HEALTH_URL"; then
+if curl -fs -m 10 -o /dev/null "$HEALTH_URL"; then
   [ "$failures" -ge "$THRESHOLD" ] && notify "SkyCrew answers again ($HEALTH_URL)."
   echo 0 > "$STATE_FILE"
   exit 0
