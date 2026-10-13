@@ -3,8 +3,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // The language a member is written to (e-mails, notifications) is always
 // known: 'fr' or 'en', French unless chosen otherwise. The column existed as
 // a free, optional text.
-export class AddUserLanguageDefault1791900000000 implements MigrationInterface {
-  name = 'AddUserLanguageDefault1791900000000';
+export class AddUserLanguageDefault1791900000001 implements MigrationInterface {
+  name = 'AddUserLanguageDefault1791900000001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
