@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.16.0](https://github.com/SkyCrew-app/backend/compare/2.15.1...2.16.0) (2026-10-13)
+
+
+### Features
+
+* **instruction:** :sparkles: bookings with an instructor, action log, invoices, licence reminders ([#178](https://github.com/SkyCrew-app/backend/issues/178)) ([f844309](https://github.com/SkyCrew-app/backend/commit/f84430941b4f27d08835a980b5629fad10c614b9))
+
 ## [2.15.1](https://github.com/SkyCrew-app/backend/compare/2.15.0...2.15.1) (2026-10-13)
 
 
