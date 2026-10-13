@@ -62,12 +62,15 @@ describe('UsersResolver', () => {
 
     const result = await resolver.createUser(firstName, lastName, email, dob);
 
-    expect(usersService.create).toHaveBeenCalledWith({
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      date_of_birth: dob,
-    });
+    expect(usersService.create).toHaveBeenCalledWith(
+      {
+        first_name: firstName,
+        last_name: lastName,
+        email,
+        date_of_birth: dob,
+      },
+      undefined,
+    );
     expect(result).toEqual(createdUser);
   });
 

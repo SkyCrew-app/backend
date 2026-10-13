@@ -156,14 +156,12 @@ export class ReservationsService {
 
     const savedReservation = await this.reservationRepository.save(reservation);
 
-    this.paymentService.createWithdrawal({
+    // Flight hours are counted when the flight is closed, not when it is booked.
+    await this.paymentService.createWithdrawal({
       user_id: user.id,
       amount: totalCost,
       payment_method: 'account_balance',
     });
-
-    user.total_flight_hours = (user.total_flight_hours || 0) + hoursReserved;
-    await this.userRepository.save(user);
 
     return savedReservation;
   }

@@ -151,8 +151,22 @@ describe('UsersService', () => {
         validation_token: 'validation-token-uuid',
       });
       userRepository.save.mockResolvedValue(savedUser);
+      const roleLookup = jest
+        .fn()
+        .mockResolvedValue({ id: 2, role_name: 'Pilote' });
+      (userRepository as any).manager = {
+        getRepository: () => ({ findOne: roleLookup }),
+      };
 
       const result = await service.create(newUserData);
+
+      // A new member is never an administrator by default.
+      expect(roleLookup).toHaveBeenCalledWith({
+        where: { role_name: 'Pilote' },
+      });
+      expect(userRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({ role: { id: 2, role_name: 'Pilote' } }),
+      );
 
       expect(bcrypt.hash).toHaveBeenCalledWith(expect.any(String), 10);
       expect(userRepository.create).toHaveBeenCalledWith(
@@ -160,7 +174,7 @@ describe('UsersService', () => {
           first_name: 'John',
           last_name: 'Doe',
           email: 'john.doe@example.com',
-          role: { id: 1 },
+          role: { id: 2, role_name: 'Pilote' },
           validation_token: 'validation-token-uuid',
         }),
       );

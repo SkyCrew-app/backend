@@ -38,6 +38,8 @@ export const PASSWORD_MIN_LENGTH = 8;
 const hashResetToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
 
+const DEFAULT_MEMBER_ROLE = 'Pilote';
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -73,7 +75,24 @@ export class UsersService {
     });
   }
 
-  async create(userData: Partial<User>): Promise<User> {
+  // A new member is a pilot unless the administrator chose another role:
+  // nobody becomes an administrator by default.
+  private async roleOfNewMember(roleId?: number): Promise<Role> {
+    const roles = this.usersRepository.manager.getRepository(Role);
+    const role = roleId
+      ? await roles.findOne({ where: { id: roleId } })
+      : await roles.findOne({ where: { role_name: DEFAULT_MEMBER_ROLE } });
+    if (!role) {
+      throw new BadRequestException(
+        roleId
+          ? 'Rôle introuvable'
+          : `Rôle « ${DEFAULT_MEMBER_ROLE} » introuvable`,
+      );
+    }
+    return role;
+  }
+
+  async create(userData: Partial<User>, roleId?: number): Promise<User> {
     const generatedPassword = uuidv4();
     const token = uuidv4();
     const hashedPassword = await bcrypt.hash(generatedPassword, 10);
@@ -81,7 +100,7 @@ export class UsersService {
 
     const newUser = this.usersRepository.create({
       ...userData,
-      role: { id: 1 },
+      role: await this.roleOfNewMember(roleId),
       validation_token: token,
     });
     const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${token}`;

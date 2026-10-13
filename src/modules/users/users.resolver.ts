@@ -55,13 +55,17 @@ export class UsersResolver {
     @Args('last_name') last_name: string,
     @Args('email') email: string,
     @Args('date_of_birth') date_of_birth: Date,
+    @Args('roleId', { type: () => Int, nullable: true }) roleId?: number,
   ) {
-    return this.usersService.create({
-      first_name,
-      last_name,
-      email,
-      date_of_birth,
-    });
+    return this.usersService.create(
+      {
+        first_name,
+        last_name,
+        email,
+        date_of_birth,
+      },
+      roleId ?? undefined,
+    );
   }
 
   @Query(() => User)
