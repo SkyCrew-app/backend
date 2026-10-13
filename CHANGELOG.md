@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.15.0](https://github.com/SkyCrew-app/backend/compare/2.14.0...2.15.0) (2026-10-13)
+
+
+### Features
+
+* **rules:** :sparkles: enforce the club's business rules in the API and add manual account entries ([#170](https://github.com/SkyCrew-app/backend/issues/170)) ([42d1e8d](https://github.com/SkyCrew-app/backend/commit/42d1e8d54dfc6494dd530879bad85323da9f2960))
+
 ## [2.14.0](https://github.com/SkyCrew-app/backend/compare/2.13.0...2.14.0) (2026-10-13)
 
 
