@@ -1,3 +1,5 @@
+import { TypeMetadataStorage } from '@nestjs/graphql';
+import { LazyMetadataStorage } from '@nestjs/graphql/dist/schema-builder/storages/lazy-metadata.storage';
 import { CreateUserInput } from '../dto/create-user.input';
 
 describe('CreateUserInput', () => {
@@ -191,14 +193,9 @@ describe('UpdateUserInput', () => {
     dto.first_name = 'John';
     dto.last_name = 'Smith';
     dto.email = 'john.smith@example.com';
-    dto.password = 'newPassword123';
-    dto.profile_picture = 'new-avatar.jpg';
     dto.phone_number = '+1122334455';
     dto.address = '456 Updated Street';
     dto.date_of_birth = new Date('1990-01-01');
-    dto.membership_start_date = new Date('2023-01-01');
-    dto.membership_end_date = new Date('2024-01-01');
-    dto.is_instructor = false;
     dto.language = 'en';
     dto.speed_unit = 'knots';
     dto.distance_unit = 'nautical_miles';
@@ -208,32 +205,37 @@ describe('UpdateUserInput', () => {
     expect(dto.id).toBe(1);
     expect(dto.first_name).toBe('John');
     expect(dto.email).toBe('john.smith@example.com');
-    expect(dto.is_instructor).toBe(false);
     expect(dto.roleId).toBe(2);
   });
 
-  it('should handle boolean updates correctly', () => {
-    const dto = new UpdateUserInput();
-    dto.email = 'instructor@example.com';
-    dto.is_instructor = true;
+  // Inputs the API used to accept and silently drop are no longer part of it.
+  it('no longer declares the fields that were never applied', () => {
+    LazyMetadataStorage.load();
+    TypeMetadataStorage.compile();
+    const fields = TypeMetadataStorage.getInputTypesMetadata()
+      .find((type) => type.target === UpdateUserInput)
+      .properties.map((field) => field.name);
 
-    expect(dto.is_instructor).toBe(true);
-
-    dto.is_instructor = false;
-    expect(dto.is_instructor).toBe(false);
+    expect(fields).toEqual(expect.arrayContaining(['first_name', 'roleId']));
+    for (const dropped of [
+      'password',
+      'profile_picture',
+      'membership_start_date',
+      'membership_end_date',
+      'is_instructor',
+    ]) {
+      expect(fields).not.toContain(dropped);
+    }
   });
 
   it('should handle date updates', () => {
     const dto = new UpdateUserInput();
     const newBirthDate = new Date('1985-06-15');
-    const newMembershipStart = new Date('2023-07-01');
 
     dto.email = 'user@example.com';
     dto.date_of_birth = newBirthDate;
-    dto.membership_start_date = newMembershipStart;
 
     expect(dto.date_of_birth).toEqual(newBirthDate);
-    expect(dto.membership_start_date).toEqual(newMembershipStart);
   });
 
   it('should allow role changes', () => {

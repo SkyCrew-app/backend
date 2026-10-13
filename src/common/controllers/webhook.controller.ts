@@ -50,16 +50,35 @@ export class WebhookController {
           break;
 
         case 'charge.refunded':
-          await this.paymentsService.processRefund(
+          // amount_refunded is the total given back so far, not this refund.
+          await this.paymentsService.applyProviderRefund(
             event.data.object.payment_intent as string,
             event.data.object.amount_refunded / 100,
           );
           break;
+
+        case 'charge.dispute.created':
+          await this.paymentsService.applyDispute(
+            event.data.object.payment_intent as string,
+            event.data.object.id,
+            event.data.object.amount / 100,
+          );
+          break;
       }
     } catch (error) {
-      // An event about a payment this application does not know is not an
-      // error for the provider: answering 4xx would make it retry for days.
-      this.logger.warn(`Stripe event ${event.type} ignored: ${error.message}`);
+      // An event this application can do nothing about (a payment it does not
+      // know, or one in a state that refuses it) is acknowledged: answering an
+      // error would make the provider retry for days.
+      if (error instanceof HttpException && error.getStatus() < 500) {
+        this.logger.warn(
+          `Stripe event ${event.type} ignored: ${error.message}`,
+        );
+        return { received: true };
+      }
+      // Anything else (database or provider unreachable) must be retried:
+      // the provider does so on a 5xx answer.
+      this.logger.error(`Stripe event ${event.type} failed: ${error.message}`);
+      throw new HttpException('Webhook processing failed', 500);
     }
 
     return { received: true };

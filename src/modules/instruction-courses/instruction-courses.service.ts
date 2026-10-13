@@ -1,9 +1,17 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  LessThanOrEqual,
-  MoreThanOrEqual,
   LessThan,
+  MoreThan,
+  MoreThanOrEqual,
+  Not,
   Repository,
   In,
 } from 'typeorm';
@@ -23,6 +31,21 @@ import { Lesson } from '../e-learning/entity/lesson.entity';
 import { User } from '../users/entity/users.entity';
 import { languageOf } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
+import { localized } from '../../common/i18n/localized-exception';
+import {
+  hasRole,
+  isAdmin,
+  ROLE_ADMIN,
+  ROLE_INSTRUCTOR,
+  SessionUser,
+} from '../../common/auth/access';
+
+// Bounds of the rating a student gives a course.
+export const COURSE_RATING_MIN = 1;
+export const COURSE_RATING_MAX = 5;
+
+const differs = (value: unknown, current: unknown): boolean =>
+  value != null && Number(value) !== Number(current);
 
 @Injectable()
 export class InstructionCoursesService {
@@ -42,28 +65,60 @@ export class InstructionCoursesService {
     private readonly eLearningService: ELearningService,
   ) {}
 
+  // Two courses conflict when they share time for the same instructor or the
+  // same student. Courses that follow each other do not, cancelled ones never
+  // do. A course without an end only takes its starting time.
   async checkScheduleConflict(
     instructorId: number,
     studentId: number,
     startTime: Date,
-    endTime: Date,
+    endTime?: Date | null,
+    exceptCourseId?: number,
   ): Promise<boolean> {
+    const start = new Date(startTime);
+    const end = endTime ? new Date(endTime) : start;
+    const overlapping = {
+      startTime: LessThan(end.getTime() > start.getTime() ? end : start),
+      endTime: MoreThan(start),
+      status: Not(CourseStatus.CANCELED),
+      ...(exceptCourseId != null && { id: Not(exceptCourseId) }),
+    };
+
     const conflict = await this.courseRepository.findOne({
       where: [
-        {
-          instructor: { id: instructorId },
-          startTime: LessThanOrEqual(endTime),
-          endTime: MoreThanOrEqual(startTime),
-        },
-        {
-          student: { id: studentId },
-          startTime: LessThanOrEqual(endTime),
-          endTime: MoreThanOrEqual(startTime),
-        },
+        { ...overlapping, instructor: { id: instructorId } },
+        { ...overlapping, student: { id: studentId } },
       ],
     });
 
     return !!conflict;
+  }
+
+  private assertCoherent(
+    instructorId: number,
+    studentId: number,
+    startTime: Date,
+    endTime?: Date | null,
+  ): void {
+    if (Number(instructorId) === Number(studentId)) {
+      throw localized(
+        BadRequestException,
+        'error.course.sameInstructorAndStudent',
+      );
+    }
+    if (
+      endTime &&
+      new Date(endTime).getTime() <= new Date(startTime).getTime()
+    ) {
+      throw localized(BadRequestException, 'error.course.endBeforeStart');
+    }
+  }
+
+  // A course is not planned with a deactivated account, on either side.
+  private assertActive(...participants: (User | null | undefined)[]): void {
+    if (participants.some((participant) => participant?.is_active === false)) {
+      throw localized(BadRequestException, 'error.course.memberInactive');
+    }
   }
 
   // Créer un cours
@@ -71,6 +126,22 @@ export class InstructionCoursesService {
     input: CreateCourseInstructionInput,
   ): Promise<InstructionCourse> {
     const { instructorId, studentId, startTime, endTime } = input;
+
+    this.assertCoherent(instructorId, studentId, startTime, endTime);
+
+    // vérifier si les utilisateurs existent
+    const instructor = await this.userService.findOneById(instructorId);
+    const student = await this.userService.findOneById(studentId);
+
+    if (!instructor || !student) {
+      throw new NotFoundException('Instructor or student not found');
+    }
+    this.assertActive(instructor, student);
+
+    // A course is given by an instructor (or an administrator).
+    if (!hasRole(instructor, ROLE_INSTRUCTOR, ROLE_ADMIN)) {
+      throw localized(BadRequestException, 'error.course.notAnInstructor');
+    }
 
     const hasConflict = await this.checkScheduleConflict(
       instructorId,
@@ -80,21 +151,13 @@ export class InstructionCoursesService {
     );
 
     if (hasConflict) {
-      throw new Error(
-        'Schedule conflict detected. The instructor or student already has a course during this period.',
-      );
+      throw localized(ConflictException, 'error.course.scheduleConflict');
     }
 
-    // vérifier si les utilisateurs existent
-    const instructor = await this.userService.findOneById(instructorId);
-    const student = await this.userService.findOneById(studentId);
-
-    if (!instructor || !student) {
-      throw new NotFoundException('Instructor or student not found');
-    }
-
+    // The rating and its comment are the student's, given afterwards.
     const course = this.courseRepository.create({
-      ...input,
+      startTime,
+      endTime,
       instructor,
       student,
     });
@@ -170,31 +233,114 @@ export class InstructionCoursesService {
     return course;
   }
 
-  // Mettre à jour un cours
+  // Mettre à jour un cours. The instructor of a course changes its times and
+  // its status; who gives it and who takes it is the administrator's choice,
+  // and the rating stays the student's.
   async updateCourse(
     id: number,
     input: UpdateCourseInstructionInput,
+    requester?: SessionUser | null,
   ): Promise<InstructionCourse> {
     const course = await this.findOne(id);
 
-    // The instructor and the student are relations: their ids cannot simply
-    // be copied onto the course.
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { id: _id, instructorId, studentId, ...fields } = input;
+    // The id comes from the argument; who gives and takes the course, and
+    // its rating, are handled apart.
+    const { instructorId, studentId, rating, feedback, ...fields } = input;
+    delete (fields as { id?: number }).id;
+
+    if (
+      (rating != null && rating !== course.rating) ||
+      (feedback != null && feedback !== course.feedback)
+    ) {
+      throw localized(ForbiddenException, 'error.course.ratingIsStudents');
+    }
+
+    const movesInstructor = differs(instructorId, course.instructor?.id);
+    const movesStudent = differs(studentId, course.student?.id);
+    if ((movesInstructor || movesStudent) && !isAdmin(requester)) {
+      throw localized(ForbiddenException, 'error.course.participantsAdminOnly');
+    }
+
+    const nextInstructorId = movesInstructor
+      ? instructorId
+      : course.instructor?.id;
+    const nextStudentId = movesStudent ? studentId : course.student?.id;
+    const nextStart = fields.startTime ?? course.startTime;
+    const nextEnd =
+      fields.endTime !== undefined ? fields.endTime : course.endTime;
+    const nextStatus = fields.status ?? course.status;
+
+    this.assertCoherent(nextInstructorId, nextStudentId, nextStart, nextEnd);
+
+    if (movesInstructor) {
+      const instructor = await this.userService.findOneById(instructorId);
+      if (!instructor) {
+        throw new NotFoundException('Instructor or student not found');
+      }
+      this.assertActive(instructor);
+      if (!hasRole(instructor, ROLE_INSTRUCTOR, ROLE_ADMIN)) {
+        throw localized(BadRequestException, 'error.course.notAnInstructor');
+      }
+    }
+
+    if (movesStudent) {
+      this.assertActive(await this.userService.findOneById(studentId));
+    }
+
+    const slotChanged =
+      movesInstructor ||
+      movesStudent ||
+      new Date(nextStart).getTime() !== new Date(course.startTime).getTime() ||
+      (nextEnd ? new Date(nextEnd).getTime() : null) !==
+        (course.endTime ? new Date(course.endTime).getTime() : null) ||
+      (course.status === CourseStatus.CANCELED &&
+        nextStatus !== CourseStatus.CANCELED);
+
+    if (
+      slotChanged &&
+      nextStatus !== CourseStatus.CANCELED &&
+      (await this.checkScheduleConflict(
+        nextInstructorId,
+        nextStudentId,
+        nextStart,
+        nextEnd,
+        id,
+      ))
+    ) {
+      throw localized(ConflictException, 'error.course.scheduleConflict');
+    }
+
     Object.assign(course, fields);
 
-    if (instructorId) {
+    // The instructor and the student are relations: their ids cannot simply
+    // be copied onto the course.
+    if (movesInstructor) {
       course.instructor = { id: instructorId } as User;
     }
-    if (studentId) {
+    if (movesStudent) {
       course.student = { id: studentId } as User;
     }
 
     return this.courseRepository.save(course);
   }
 
-  // Supprimer un cours
+  // Supprimer un cours. Only a course that left no trace is deleted: once it
+  // took place or carries competencies, comments or a rating, it is part of
+  // the student's training record and can only be cancelled.
   async deleteCourse(id: number): Promise<boolean> {
+    const course = await this.findOne(id);
+
+    const hasRecord =
+      course.status === CourseStatus.IN_PROGRESS ||
+      course.status === CourseStatus.COMPLETED ||
+      (course.competencies?.length ?? 0) > 0 ||
+      (course.comments?.length ?? 0) > 0 ||
+      course.rating != null ||
+      !!course.feedback;
+    if (hasRecord) {
+      throw localized(ConflictException, 'error.course.hasRecord');
+    }
+
     const result = await this.courseRepository.delete(id);
     return result.affected > 0;
   }
@@ -219,10 +365,33 @@ export class InstructionCoursesService {
     rating: number,
     feedback: string,
   ): Promise<InstructionCourse> {
+    if (
+      !Number.isInteger(rating) ||
+      rating < COURSE_RATING_MIN ||
+      rating > COURSE_RATING_MAX
+    ) {
+      throw localized(BadRequestException, 'error.course.ratingOutOfRange', {
+        min: COURSE_RATING_MIN,
+        max: COURSE_RATING_MAX,
+      });
+    }
+
     const course = await this.findOne(id);
+    this.assertTookPlace(course);
     course.rating = rating;
     course.feedback = feedback;
     return this.courseRepository.save(course);
+  }
+
+  // Nothing is validated or rated on a course that is cancelled or has not
+  // started yet.
+  private assertTookPlace(course: InstructionCourse): void {
+    if (
+      course.status === CourseStatus.CANCELED ||
+      new Date(course.startTime).getTime() > Date.now()
+    ) {
+      throw localized(ConflictException, 'error.course.notStarted');
+    }
   }
 
   // Valider une compétence dans un cours
@@ -236,6 +405,7 @@ export class InstructionCoursesService {
         `Competency with ID ${competencyId} not found`,
       );
     }
+    this.assertTookPlace(competency.course);
     competency.validated = true;
 
     await this.notificationsService.create({
@@ -340,6 +510,8 @@ export class InstructionCoursesService {
         endTime: LessThan(now),
         status: In(['IN_PROGRESS', 'SCHEDULED']),
       },
+      // Both are notified when the course is marked as completed.
+      relations: ['instructor', 'student'],
     });
   }
 

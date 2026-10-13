@@ -71,6 +71,8 @@ export const fr = {
     'Cet avion est déjà réservé pour les dates spécifiées.',
   'error.reservation.userNotFound':
     "L'utilisateur avec l'ID {{userId}} n'existe pas.",
+  'error.reservation.memberInactive':
+    'Ce membre est désactivé : aucune réservation ne peut être faite à son nom',
   'error.reservation.noClubSettings':
     "Aucune configuration d'administration trouvée",
   'error.reservation.noValidLicence':
@@ -93,6 +95,157 @@ export const fr = {
   'checklist.templateDeleted': 'Le modèle « {{name}} » a été supprimé.',
   'checklist.templateDeactivated':
     "Le modèle « {{name}} » est utilisé par {{count}} checklist(s) déjà remplie(s) : il a été désactivé au lieu d'être supprimé, afin de conserver l'historique.",
+
+  // Members, accounts, roles and club settings.
+  'error.auth.passwordTooShort':
+    'Le mot de passe doit contenir au moins {{min}} caractères',
+  'error.auth.invitationInvalid':
+    "Ce lien d'activation est invalide ou a expiré. Demandez une nouvelle invitation à un administrateur du club.",
+  'error.auth.accountDeactivated':
+    'Ce compte est désactivé. Contactez un administrateur du club.',
+  'error.auth.twoFactorProofRequired':
+    'Pour remplacer la double authentification, confirmez votre mot de passe ou un code de votre application actuelle.',
+  'error.user.emailInvalid': "Cette adresse e-mail n'est pas valide",
+  'error.user.emailAlreadyUsed':
+    'Un compte existe déjà avec cette adresse e-mail',
+  'error.user.notFound': 'Membre introuvable',
+  'error.user.roleNotFound': 'Rôle introuvable',
+  'error.user.lastAdministrator':
+    'Le club doit garder au moins un administrateur actif : ce compte est le dernier.',
+  'error.user.hasHistory':
+    'Ce membre a un historique dans le club (réservations, vols, factures…) : il ne peut pas être supprimé. Désactivez son compte à la place.',
+  'error.user.alreadyActivated': 'Ce membre a déjà activé son compte',
+  'error.role.builtIn':
+    "Le rôle « {{name}} » est nécessaire au fonctionnement de l'application : il ne peut être ni renommé ni supprimé.",
+  'error.role.nameRequired': 'Le nom du rôle est requis',
+  'error.role.nameAlreadyUsed': 'Un rôle porte déjà ce nom',
+  'error.role.inUse':
+    'Ce rôle est attribué à {{count}} membre(s) : il ne peut pas être supprimé.',
+  'error.settings.cannotDelete':
+    'Les réglages du club ne peuvent pas être supprimés',
+  'error.settings.alreadyExist':
+    'Les réglages du club existent déjà : modifiez-les au lieu de les recréer',
+  // Bookings and money (business-rules audit).
+  'error.reservation.notFound': 'Réservation introuvable',
+  'error.reservation.endBeforeStart':
+    "L'heure de fin doit être après l'heure de début",
+  'error.reservation.tooShort':
+    'Une réservation dure au moins {{minutes}} minutes',
+  'error.reservation.tooLong':
+    'Une réservation ne peut pas dépasser {{hours}} heures',
+  'error.reservation.inThePast':
+    'Une réservation ne peut pas commencer dans le passé',
+  'error.reservation.clubClosedDay': 'Le club est fermé ce jour-là',
+  'error.reservation.outsideOpeningHours':
+    "La réservation doit tenir dans les horaires d'ouverture du club, de {{opening}} à {{closing}}",
+  'error.reservation.aircraftUnavailable':
+    "Cet avion n'est pas disponible à la réservation",
+  'error.reservation.aircraftInMaintenance':
+    'Cet avion est en maintenance sur ce créneau',
+  'error.reservation.pilotAlreadyBooked':
+    'Ce pilote a déjà une réservation sur un autre avion à ce moment-là',
+  'error.reservation.noLessonThatDay':
+    "Sans licence valide, seul un vol d'instruction peut être réservé, un jour où un instructeur a planifié une leçon avec vous",
+  'error.reservation.invalidPrice':
+    "Le tarif horaire de cet avion n'est pas valide",
+  'error.reservation.alreadyStarted':
+    'Une réservation commencée ne peut plus être modifiée',
+  'error.reservation.holderCannotChange':
+    'Une réservation ne peut pas être transférée à un autre membre : annulez-la et réservez à son nom',
+  'error.reservation.priceUnknown':
+    "Le montant payé pour cette réservation n'est pas connu : son créneau ne peut pas être modifié. Annulez-la et réservez à nouveau, ou contactez un administrateur",
+  'error.reservation.flightClosed':
+    'Le vol de cette réservation est clôturé : elle ne peut plus être annulée.',
+  'error.reservation.flightFlown':
+    'Un vol a été effectué sur cette réservation : seul un administrateur peut l’annuler',
+  'error.reservation.cancelAfterStart':
+    'Cette réservation a commencé : seul un administrateur peut l’annuler',
+  'error.payment.invalidAmount':
+    'Le montant doit être positif, avec deux décimales au plus',
+  'error.payment.adjustmentTooLarge':
+    'Le montant ne peut pas dépasser {{max}} euros',
+  'error.payment.reasonRequired': 'Le motif est obligatoire',
+  'error.payment.unknownManualMethod': "Ce mode de règlement n'est pas reconnu",
+  'error.payment.debitExceedsBalance':
+    'Le solde du membre est insuffisant pour ce débit',
+  'error.payment.statusLocked':
+    'Le statut de ce paiement ne peut pas être modifié ainsi',
+  'error.payment.notRefundable': 'Ce paiement ne peut pas être remboursé',
+  'error.payment.refundExceedsPayment':
+    'Le remboursement dépasse le montant du paiement',
+  // Flights, fleet and training rules (audit fixes).
+  'notification.aircraftGrounded':
+    "L'avion {{registration}} est immobilisé à la suite d'un incident. Votre réservation N°{{reservationId}} du {{date}} est concernée : contactez le club.",
+  'notification.aircraftGroundedStaff':
+    "L'avion {{registration}} a été immobilisé à la suite de l'incident N°{{incidentId}}. Réservations à venir concernées : {{count}}.",
+  'error.flight.bookingRequired':
+    'Un vol doit être rattaché à une de vos réservations',
+  'error.flight.notOwnBooking':
+    "Cette réservation n'est pas la vôtre : vous ne pouvez pas y rattacher ni y clôturer un vol",
+  'error.flight.bookingCancelled': 'Cette réservation est annulée',
+  'error.flight.arrivalBeforeDeparture':
+    "L'heure d'arrivée doit être postérieure à l'heure de départ",
+  'error.flight.notOwnFlightRead':
+    'Vous ne pouvez consulter que vos propres vols',
+  'error.flight.notOwnFlightDelete':
+    'Vous ne pouvez supprimer que vos propres vols',
+  'error.flight.noBookingToClose':
+    "Ce vol n'est rattaché à aucune réservation : seul un administrateur peut le clôturer",
+  'error.flight.bookingNotStarted':
+    'Ce vol ne peut pas être clôturé avant le début de sa réservation',
+  'error.flight.hoursOutOfRange':
+    'La durée du vol doit être supérieure à 0 et ne pas dépasser {{max}} heures',
+  'error.flight.closedNotDeletable':
+    'Un vol clôturé ne peut être supprimé que par un administrateur',
+  'error.flight.hasIncident':
+    'Un incident est rattaché à ce vol : il ne peut pas être supprimé',
+  'error.aircraft.upcomingBookings':
+    'Cet avion a {{count}} réservation(s) à venir : annulez-les ou déplacez-les avant de le retirer',
+  'error.aircraft.heldByMaintenance':
+    "Cet avion est en maintenance : sa disponibilité ne peut pas être modifiée tant que la maintenance n'est pas terminée",
+  'error.maintenance.endBeforeStart':
+    'La fin de la maintenance ne peut pas précéder son début',
+  'error.maintenance.overBookings':
+    'Cette maintenance chevauche {{count}} réservation(s) : {{bookings}}. Annulez ou déplacez ces réservations, ou choisissez une autre période.',
+  'error.maintenance.technicianNotFound': 'Technicien introuvable',
+  'error.incident.unknownSeverity':
+    'Gravité inconnue : choisissez faible, moyenne ou élevée',
+  'error.incident.flightNotFound': 'Vol introuvable',
+  'error.incident.aircraftNotFound': 'Avion introuvable',
+  'error.incident.notOwnFlight':
+    'Vous ne pouvez déclarer un incident que sur vos propres vols',
+  'error.incident.notAllowed':
+    'Vous ne pouvez modifier que les incidents que vous avez déclarés',
+  'error.incident.staffOnlyFields':
+    "Le statut, l'auteur, le vol et l'avion d'un incident ne peuvent être modifiés que par un technicien ou un administrateur",
+  'error.course.sameInstructorAndStudent':
+    "L'instructeur et l'élève doivent être deux personnes différentes",
+  'error.course.endBeforeStart':
+    'La fin du cours doit être postérieure à son début',
+  'error.course.notAnInstructor':
+    "La personne choisie pour donner le cours n'est pas instructeur",
+  'error.course.memberInactive':
+    'Ce cours ne peut pas être planifié avec un compte désactivé',
+  'error.course.scheduleConflict':
+    "L'instructeur ou l'élève a déjà un cours sur ce créneau",
+  'error.course.ratingIsStudents':
+    "La note et l'avis d'un cours sont donnés par l'élève",
+  'error.course.participantsAdminOnly':
+    "Seul un administrateur peut changer l'instructeur ou l'élève d'un cours",
+  'error.course.hasRecord':
+    "Ce cours fait partie du dossier de formation de l'élève : il ne peut pas être supprimé. Passez-le au statut annulé si nécessaire.",
+  'error.course.ratingOutOfRange':
+    'La note doit être un nombre entier entre {{min}} et {{max}}',
+  'error.course.notStarted': "Ce cours est annulé ou n'a pas encore commencé",
+  'error.checklist.templateInactive':
+    "Ce modèle de checklist n'est plus utilisé",
+  'error.checklist.notOwnBooking':
+    'Une checklist ne peut être rattachée qu’à une de vos réservations',
+  'error.checklist.bookingCancelled': 'Cette réservation est annulée',
+  'error.checklist.alreadyCompleted':
+    'Cette checklist est terminée : elle ne peut plus être modifiée',
+  'error.checklist.requiredItemsMissing':
+    'Il reste {{count}} point(s) obligatoire(s) à vérifier',
 } as const;
 
 export type TranslationKey = keyof typeof fr;

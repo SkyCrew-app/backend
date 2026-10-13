@@ -1,4 +1,3 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { IncidentsResolver } from '../incidents.resolver';
 import { IncidentsService } from '../incidents.service';
@@ -92,56 +91,35 @@ describe('IncidentsResolver', () => {
     service.getRecentIncidents.mockResolvedValue(arr);
     expect(await resolver.recentIncidents(2)).toBe(arr);
   });
+  // Who may report and change what is decided by the service, which knows
+  // the incident: the resolver hands it the caller.
   describe('authorization', () => {
     const report = { aircraft_id: 2, user_id: 3, description: 'x' } as any;
 
-    it('reports an incident in the name of the caller', async () => {
+    it.each([
+      ['a member', stranger],
+      ['a technician', technician],
+    ])('reports an incident with %s as the caller', async (_label, caller) => {
       service.createIncident.mockResolvedValue({});
 
-      await resolver.create(report, stranger);
+      await resolver.create(report, caller);
 
-      expect(service.createIncident).toHaveBeenCalledWith({
-        ...report,
-        user_id: 7,
-      });
-    });
-
-    it('lets a technician record an incident for someone else', async () => {
-      service.createIncident.mockResolvedValue({});
-
-      await resolver.create(report, technician);
-
-      expect(service.createIncident).toHaveBeenCalledWith(report);
+      expect(service.createIncident).toHaveBeenCalledWith(report, caller);
     });
 
     it.each([
       ['its author', author],
       ['a technician', technician],
       ['an administrator', admin],
-    ])('lets %s update an incident', async (_label, caller) => {
-      service.getIncident.mockResolvedValue({ id: 4, user: { id: 3 } });
+      ['another member', stranger],
+    ])('updates an incident with %s as the caller', async (_label, caller) => {
       service.updateIncident.mockResolvedValue({ id: 4 });
+      const changes = { description: 'y' } as any;
 
-      await expect(
-        resolver.update(4, { status: 'closed' } as any, caller),
-      ).resolves.toEqual({ id: 4 });
-    });
-
-    it('refuses another member updating an incident', async () => {
-      service.getIncident.mockResolvedValue({ id: 4, user: { id: 3 } });
-
-      await expect(
-        resolver.update(4, { status: 'closed' } as any, stranger),
-      ).rejects.toThrow(ForbiddenException);
-      expect(service.updateIncident).not.toHaveBeenCalled();
-    });
-
-    it('answers not found for an unknown incident', async () => {
-      service.getIncident.mockResolvedValue(null);
-
-      await expect(
-        resolver.update(99, { status: 'closed' } as any, author),
-      ).rejects.toThrow(NotFoundException);
+      await expect(resolver.update(4, changes, caller)).resolves.toEqual({
+        id: 4,
+      });
+      expect(service.updateIncident).toHaveBeenCalledWith(4, changes, caller);
     });
   });
 

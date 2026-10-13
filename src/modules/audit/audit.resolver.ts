@@ -36,7 +36,8 @@ export class AuditResolver {
   }
 
   @Query(() => Audit, { name: 'audit' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async findAuditById(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<Audit> {
@@ -44,7 +45,8 @@ export class AuditResolver {
   }
 
   @Query(() => [Audit], { name: 'upcomingAudits' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getUpcomingAudits(
     @Args('daysAhead', { type: () => Int, defaultValue: 30 }) daysAhead: number,
   ): Promise<Audit[]> {
@@ -52,7 +54,8 @@ export class AuditResolver {
   }
 
   @Query(() => [Audit], { name: 'overdueAudits' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   async getOverdueAudits(): Promise<Audit[]> {
     return this.auditService.getOverdueAudits();
   }

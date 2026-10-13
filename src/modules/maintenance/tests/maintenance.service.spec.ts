@@ -1,13 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MaintenanceService } from '../maintenance.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 import { Maintenance } from '../entity/maintenance.entity';
 import { AircraftService } from '../../aircraft/aircraft.service';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
 import * as fs from 'fs';
-import { NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Reservation } from '../../reservations/entity/reservations.entity';
 
 describe('MaintenanceService', () => {
   let service: MaintenanceService;
@@ -15,6 +20,12 @@ describe('MaintenanceService', () => {
   const mockAircraftService = { findOne: jest.fn() };
   const mockAircraftRepo = { findOne: jest.fn() };
   const mockUserRepo = { findOne: jest.fn() };
+  const mockReservationRepo = { find: jest.fn() };
+  // Two hours, tomorrow.
+  const period = {
+    start_date: new Date(Date.now() + 24 * 3_600_000),
+    end_date: new Date(Date.now() + 26 * 3_600_000),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -24,6 +35,10 @@ describe('MaintenanceService', () => {
         { provide: getRepositoryToken(Aircraft), useValue: mockAircraftRepo },
         { provide: getRepositoryToken(User), useValue: mockUserRepo },
         { provide: AircraftService, useValue: mockAircraftService },
+        {
+          provide: getRepositoryToken(Reservation),
+          useValue: mockReservationRepo,
+        },
       ],
     }).compile();
 
@@ -33,6 +48,7 @@ describe('MaintenanceService', () => {
     jest
       .spyOn(repo, 'save')
       .mockImplementation(async (m) => ({ id: 42, ...m }) as any);
+    mockReservationRepo.find.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -78,8 +94,7 @@ describe('MaintenanceService', () => {
           aircraft_id: 1,
           technician_id: 9,
           status: 'IN_PROGRESS',
-          start_date: new Date(),
-          end_date: new Date(),
+          ...period,
         } as any,
         [],
         [],
@@ -94,7 +109,7 @@ describe('MaintenanceService', () => {
     it('saves new maintenance without files/images', async () => {
       mockAircraftService.findOne.mockResolvedValue({ id: 1 } as any);
       const result = await service.create(
-        { aircraft_id: 1, start_date: new Date(), end_date: new Date() } as any,
+        { aircraft_id: 1, ...period } as any,
         [],
         [],
       );
@@ -115,7 +130,7 @@ describe('MaintenanceService', () => {
       jest.spyOn(fs, 'renameSync').mockImplementation();
 
       const result = await service.create(
-        { aircraft_id: 1, start_date: new Date(), end_date: new Date() } as any,
+        { aircraft_id: 1, ...period } as any,
         [dummyFile],
         [dummyImage],
       );
@@ -154,6 +169,7 @@ describe('MaintenanceService', () => {
         id: 5,
         aircraft: { id: 1 },
         technician: { id: 2 },
+        ...period,
       } as any;
       jest.spyOn(repo, 'findOne').mockResolvedValue(existing);
       mockAircraftRepo.findOne.mockResolvedValue({ id: 9 } as any);
@@ -205,6 +221,135 @@ describe('MaintenanceService', () => {
       );
 
       expect(res.technician).toEqual({ id: 2 });
+    });
+  });
+
+  describe('planning rules', () => {
+    const booking = {
+      id: 12,
+      user: { first_name: 'Jean', last_name: 'Dupont' },
+      start_time: new Date(2026, 9, 14, 10, 0),
+      end_time: new Date(2026, 9, 14, 12, 0),
+    };
+
+    beforeEach(() => {
+      mockAircraftService.findOne.mockResolvedValue({ id: 1 } as any);
+    });
+
+    it('refuses a maintenance planned over bookings and names them', async () => {
+      mockReservationRepo.find.mockResolvedValue([booking]);
+
+      const planning = service.create(
+        { aircraft_id: 1, ...period } as any,
+        [],
+        [],
+      );
+
+      await expect(planning).rejects.toThrow(ConflictException);
+      await expect(planning).rejects.toThrow(
+        'N°12 Jean Dupont (14/10/2026 10:00 – 14/10/2026 12:00)',
+      );
+      expect(repo.save).not.toHaveBeenCalled();
+      // Bookings of that aircraft that share time with the maintenance.
+      expect(mockReservationRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ aircraft: { id: 1 } }),
+        }),
+      );
+    });
+
+    it('refuses to move a maintenance over bookings', async () => {
+      jest.spyOn(repo, 'findOne').mockResolvedValue({
+        id: 5,
+        aircraft: { id: 1 },
+        ...period,
+      } as any);
+      mockReservationRepo.find.mockResolvedValue([booking]);
+
+      await expect(
+        service.update(
+          {
+            id: 5,
+            start_date: new Date(2026, 9, 14, 8, 0),
+            end_date: new Date(2026, 9, 14, 18, 0),
+          } as any,
+          [],
+          [],
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('does not look at bookings again when the slot stays the same', async () => {
+      jest.spyOn(repo, 'findOne').mockResolvedValue({
+        id: 5,
+        aircraft: { id: 1 },
+        ...period,
+      } as any);
+      mockReservationRepo.find.mockResolvedValue([booking]);
+
+      await expect(
+        service.update({ id: 5, description: 'Vidange' } as any, [], []),
+      ).resolves.toMatchObject({ description: 'Vidange' });
+      expect(mockReservationRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('lets a finished maintenance be recorded whatever the bookings', async () => {
+      mockReservationRepo.find.mockResolvedValue([booking]);
+
+      await expect(
+        service.create(
+          { aircraft_id: 1, status: 'COMPLETED', ...period } as any,
+          [],
+          [],
+        ),
+      ).resolves.toMatchObject({ status: 'COMPLETED' });
+    });
+
+    it('refuses a maintenance that ends before it starts', async () => {
+      await expect(
+        service.create(
+          {
+            aircraft_id: 1,
+            start_date: period.start_date,
+            end_date: new Date(period.start_date.getTime() - 1000),
+          } as any,
+          [],
+          [],
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('holds the aircraft through the last day: a one-day maintenance runs into the bookings of that day', async () => {
+      const day = new Date(2026, 9, 14);
+      mockReservationRepo.find.mockResolvedValue([booking]);
+
+      await expect(
+        service.create(
+          { aircraft_id: 1, start_date: day, end_date: day } as any,
+          [],
+          [],
+        ),
+      ).rejects.toThrow(ConflictException);
+
+      const { where } = mockReservationRepo.find.mock.calls[0][0];
+      // Bookings starting before the end of that day and ending after its start.
+      expect(where.start_time).toEqual(LessThan(new Date(2026, 9, 15)));
+      expect(where.end_time).toEqual(MoreThan(day));
+    });
+
+    it('refuses an unknown technician instead of ignoring it', async () => {
+      mockUserRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.create(
+          { aircraft_id: 1, technician_id: 404, ...period } as any,
+          [],
+          [],
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(repo.save).not.toHaveBeenCalled();
     });
   });
 

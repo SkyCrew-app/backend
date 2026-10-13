@@ -1,21 +1,29 @@
 import { NextFunction, Request, Response } from 'express';
 import { extname, posix } from 'path';
-import { isAdmin, SessionUser } from '../auth/access';
+import { SessionUser } from '../auth/access';
 import { userOfSessionToken } from '../auth/session';
+import {
+  decideUploadAccess,
+  DocumentHoldersLoader,
+  uploadAccessOf,
+} from '../uploads/upload-access';
 
 // Profile pictures (users/) and article images (tmp/) are shown by their
-// link, sometimes outside a session. Everything else under /uploads —
-// aircraft and maintenance documents, licences — needs a session, and the
-// financial exports an administrator.
-const PUBLIC_DIRECTORIES = ['users', 'tmp'];
-const ADMIN_DIRECTORIES = ['exports'];
+// link, sometimes outside a session. Everything else under /uploads needs a
+// session, and more for licences and financial exports: see upload-access.
 
 // Loads the user of a session; the application wires it to the database.
-export type UploadsUser = SessionUser & { sessionVersion?: number | null };
+export type UploadsUser = SessionUser & {
+  sessionVersion?: number | null;
+  is_active?: boolean | null;
+};
 export type SessionUserLoader = (email: string) => Promise<UploadsUser | null>;
 
 export const protectUploads =
-  (findUserByEmail: SessionUserLoader) =>
+  (
+    findUserByEmail: SessionUserLoader,
+    holdersOfDocument: DocumentHoldersLoader = async () => [],
+  ) =>
   async (
     request: Request,
     response: Response,
@@ -31,14 +39,15 @@ export const protectUploads =
 
     // The directory is read after normalisation, so `users/../exports/x`
     // is judged as `exports`.
-    const [directory] = requestedPath.split('/').filter(Boolean);
+    const segments = requestedPath.split('/').filter(Boolean);
+    const [directory] = segments;
 
     if (!directory || directory === '..') {
       response.status(404).json({ message: 'File not found' });
       return;
     }
 
-    if (PUBLIC_DIRECTORIES.includes(directory)) {
+    if (uploadAccessOf(directory) === 'public') {
       next();
       return;
     }
@@ -50,12 +59,18 @@ export const protectUploads =
       findUserByEmail,
     );
 
-    if (!user) {
+    const decision = await decideUploadAccess(
+      segments,
+      user,
+      holdersOfDocument,
+    );
+
+    if (decision === 'unauthenticated') {
       response.status(401).json({ message: 'Unauthorized' });
       return;
     }
 
-    if (ADMIN_DIRECTORIES.includes(directory) && !isAdmin(user)) {
+    if (decision === 'forbidden') {
       response.status(403).json({ message: 'Forbidden' });
       return;
     }

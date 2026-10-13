@@ -41,7 +41,14 @@ describe('E-Learning Resolvers', () => {
       deleteLesson: jest.fn(),
       completeLesson: jest.fn(),
     };
-    userService = { getCourseProgress: jest.fn() };
+    userService = {
+      getCourseProgress: jest.fn(),
+      // The instructor 20 teaches the member 7, and nobody else.
+      isInstructorOf: jest.fn(
+        async (instructorId, studentId) =>
+          instructorId === 20 && studentId === 7,
+      ),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -127,6 +134,24 @@ describe('E-Learning Resolvers', () => {
     it("refuses a member reading a course with another user's progress", async () => {
       await expect(
         courseResolver.getCourseById(1, 7, member(3)),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('lets an instructor read the progress of their own students only', async () => {
+      const instructor = (id: number) =>
+        ({ ...member(id), role: { role_name: 'Instructeur' } }) as any;
+      (eLearningService.getCourseById as jest.Mock).mockResolvedValue({
+        id: 1,
+      });
+
+      await expect(
+        courseResolver.getCourseById(1, 7, instructor(20)),
+      ).resolves.toEqual({ id: 1 });
+      await expect(
+        courseResolver.getCourseById(1, 8, instructor(20)),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        courseResolver.getCourseById(1, 7, instructor(21)),
       ).rejects.toThrow(ForbiddenException);
     });
 

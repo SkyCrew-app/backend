@@ -42,6 +42,13 @@ registerEnumType(FlightCategory, {
   name: 'FlightCategory',
 });
 
+// Names of the database guards added by the ReservationsNoDoubleBooking
+// migration. They are deliberately not declared with @Check / @Exclusion:
+// schema synchronisation (development) would then need the btree_gist
+// extension and fail on a database that holds overlapping rows.
+export const RESERVATION_SLOT_EXCLUSION = 'EXC_reservations_aircraft_slot';
+export const RESERVATION_TIME_ORDER_CHECK = 'CHK_reservations_time_order';
+
 @ObjectType()
 @Entity('reservations')
 export class Reservation {
@@ -116,4 +123,20 @@ export class Reservation {
   // Use string-based relation to avoid circular import with ChecklistSubmission
   @OneToMany('ChecklistSubmission', 'reservation', { nullable: true })
   checklistSubmissions: any[];
+
+  // What the member was charged for this booking, set when it is charged.
+  // Refunds give back exactly this, whatever the rate has become since.
+  // Null on bookings older than the column whose charge was not found.
+  @Field(() => Float, { nullable: true })
+  @Column('decimal', {
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: {
+      to: (value: number | null | undefined) => value,
+      from: (value: string | number | null) =>
+        value === null || value === undefined ? null : Number(value),
+    },
+  })
+  charged_amount: number | null;
 }

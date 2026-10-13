@@ -3,6 +3,7 @@ import { IsPhoneNumberField } from '../../../common/validation/phone-number';
 
 @InputType()
 export class UpdateUserInput {
+  // With `email`, identifies the account: they must agree.
   @Field({ nullable: true })
   id?: number;
 
@@ -18,12 +19,6 @@ export class UpdateUserInput {
   email?: string;
 
   @Field({ nullable: true })
-  password?: string;
-
-  @Field({ nullable: true })
-  profile_picture?: string;
-
-  @Field({ nullable: true })
   @IsPhoneNumberField({ optional: true })
   phone_number?: string;
 
@@ -32,15 +27,6 @@ export class UpdateUserInput {
 
   @Field({ nullable: true })
   date_of_birth?: Date;
-
-  @Field({ nullable: true })
-  membership_start_date?: Date;
-
-  @Field({ nullable: true })
-  membership_end_date?: Date;
-
-  @Field({ nullable: true })
-  is_instructor?: boolean;
 
   @Field({ nullable: true })
   language?: string;

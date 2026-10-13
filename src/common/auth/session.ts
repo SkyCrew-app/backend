@@ -12,11 +12,13 @@ export interface SessionTokenPayload {
 
 interface VersionedUser {
   sessionVersion?: number | null;
+  // False once an administrator has deactivated the account.
+  is_active?: boolean | null;
 }
 
 // The one rule every entry point applies to a verified token: it is a
-// session token, its user still exists, and the password has not changed
-// since the session was opened.
+// session token, its user still exists and is not deactivated, and the
+// password has not changed since the session was opened.
 export const isCurrentSession = (
   payload: SessionTokenPayload | null | undefined,
   user: VersionedUser | null | undefined,
@@ -24,6 +26,7 @@ export const isCurrentSession = (
   !!payload &&
   !payload.purpose &&
   !!user &&
+  user.is_active !== false &&
   (payload.sv ?? 0) === (user.sessionVersion ?? 0);
 
 // For the entry points that do not go through the passport strategy (static

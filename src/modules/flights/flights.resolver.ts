@@ -6,7 +6,6 @@ import {
   Parent,
   ResolveField,
   Int,
-  Context,
 } from '@nestjs/graphql';
 import { FlightsService } from './flights.service';
 import { Flight } from './entity/flights.entity';
@@ -16,7 +15,7 @@ import { GenerateFlightPlanInput } from './dto/generate-flight-plan.input';
 import { AirportsService } from './airports.service';
 import { MetarService } from './metar.service';
 import { AirportData } from './interfaces/airport.interface';
-import { UseFilters, UseGuards, ForbiddenException } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -24,6 +23,9 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SessionUser } from '../../common/auth/access';
 import { languageOf } from '../../common/i18n/languages';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
+
+// The session user, with the language they are written to.
+type Member = SessionUser & { language?: string | null };
 
 @Resolver(() => Flight)
 @UseFilters(LocalizedExceptionFilter)
@@ -121,10 +123,15 @@ export class FlightsResolver {
     return this.flightsService.getDetailedWaypoints(flight.waypoints);
   }
 
+  // A flight is read by its pilot, an administrator or an instructor who
+  // teaches that pilot.
   @Query(() => Flight, { name: 'getFlightById' })
   @UseGuards(JwtAuthGuard)
-  getFlightById(@Args('id', { type: () => Int }) id: number) {
-    return this.flightsService.findOne(id);
+  getFlightById(
+    @Args('id', { type: () => Int }) id: number,
+    @CurrentUser() currentUser?: SessionUser,
+  ) {
+    return this.flightsService.findOneFor(id, currentUser);
   }
 
   // Base64 of a PDF summarising the flight.
@@ -139,22 +146,15 @@ export class FlightsResolver {
 
   @Query(() => [Flight], { name: 'getFlightsByUser' })
   @UseGuards(JwtAuthGuard)
-  getFlightsByUser(
+  async getFlightsByUser(
     @Args('userId', { type: () => Int, nullable: true }) userId: number,
-    @Context() context,
+    @CurrentUser() currentUser?: SessionUser,
   ) {
-    const authenticatedUserId = context.req.user.id;
-    const effectiveUserId = userId ?? authenticatedUserId;
-
-    if (
-      effectiveUserId !== authenticatedUserId &&
-      context.req.user.role !== 'Administrateur'
-    ) {
-      throw new ForbiddenException(
-        "Vous ne pouvez pas accéder aux vols d'un autre utilisateur",
-      );
-    }
-
+    const effectiveUserId = userId ?? currentUser.id;
+    await this.flightsService.assertCanReadFlightsOf(
+      effectiveUserId,
+      currentUser,
+    );
     return this.flightsService.getFlightsByUser(effectiveUserId);
   }
 
@@ -162,12 +162,12 @@ export class FlightsResolver {
   @UseGuards(JwtAuthGuard)
   createFlight(
     @Args('createFlightInput') createFlightInput: CreateFlightInput,
-    @Context() context,
+    @CurrentUser() currentUser?: Member,
   ) {
-    createFlightInput.user_id = context.req.user.id;
     return this.flightsService.createFlightByUser(
       createFlightInput,
-      languageOf(context.req.user),
+      currentUser,
+      languageOf(currentUser),
     );
   }
 
@@ -175,13 +175,12 @@ export class FlightsResolver {
   @UseGuards(JwtAuthGuard)
   async generateFlightPlan(
     @Args('input') input: GenerateFlightPlanInput,
-    @Context() context,
+    @CurrentUser() currentUser?: Member,
   ) {
-    const user_id = context.req.user.id;
     return this.flightsService.createFlightByAI(
       input.origin_icao,
       input.destination_icao,
-      user_id,
+      currentUser.id,
       input.reservation_id,
       {
         preferred_runway_dep: input.preferred_runway_dep,
@@ -189,7 +188,8 @@ export class FlightsResolver {
         cruise_altitude_ft: input.cruise_altitude_ft,
         departure_time: input.departure_time,
         flight_rules: input.flight_rules as 'VFR' | 'IFR' | undefined,
-        language: languageOf(context.req.user),
+        language: languageOf(currentUser),
+        requester: currentUser,
       },
     );
   }
@@ -212,13 +212,15 @@ export class FlightsResolver {
   @UseGuards(JwtAuthGuard)
   removeFlight(
     @Args('id', { type: () => Number }) id: number,
-    @Context() context,
+    @CurrentUser() currentUser?: SessionUser,
   ) {
-    return this.flightsService.removeFlight(id, context.req.user.id);
+    return this.flightsService.removeFlight(id, currentUser);
   }
 
+  // Every member's latest flights: for the administration dashboard.
   @Query(() => [Flight], { name: 'recentFlights' })
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Administrateur')
   getRecentFlights(@Args('limit', { type: () => Int }) limit: number) {
     return this.flightsService.getRecentFlights(limit);
   }

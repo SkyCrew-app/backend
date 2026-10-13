@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { LicensesService } from '../licenses.service';
+import { holdersOfLicenceDocument, LicensesService } from '../licenses.service';
 import { License } from '../entity/licenses.entity';
 import { UsersService } from '../../users/users.service';
 import { saveUploadTo } from '../../../common/uploads/save-upload';
@@ -108,11 +108,70 @@ describe('LicensesService', () => {
       expect(existing.license_type).toBe('C');
     });
 
+    it('keeps the documents and every field that is not sent', async () => {
+      const existing = {
+        id: 4,
+        license_type: 'PPL',
+        license_number: 'F-123',
+        documents_url: ['/uploads/licences/scan.pdf'],
+      } as any;
+      (licenseRepo.findOne as jest.Mock).mockResolvedValue(existing);
+      (licenseRepo.save as jest.Mock).mockImplementation(async (l) => l);
+
+      const saved = await service.update({
+        id: 4,
+        expiration_date: new Date('2030-01-01'),
+        license_number: undefined,
+        documents_url: null,
+      } as any);
+
+      expect(saved.documents_url).toEqual(['/uploads/licences/scan.pdf']);
+      expect(saved.license_number).toBe('F-123');
+      expect(saved.expiration_date).toEqual(new Date('2030-01-01'));
+    });
+
+    it('replaces the documents when a list is given, and clears a field set to null', async () => {
+      const existing = {
+        id: 4,
+        certification_authority: 'DGAC',
+        documents_url: ['/uploads/licences/old.pdf'],
+      } as any;
+      (licenseRepo.findOne as jest.Mock).mockResolvedValue(existing);
+      (licenseRepo.save as jest.Mock).mockImplementation(async (l) => l);
+
+      const saved = await service.update({
+        id: 4,
+        certification_authority: null,
+        documents_url: ['/uploads/licences/new.pdf'],
+      } as any);
+
+      expect(saved.documents_url).toEqual(['/uploads/licences/new.pdf']);
+      expect(saved.certification_authority).toBeNull();
+    });
+
     it('should throw if license not found', async () => {
       (licenseRepo.findOne as jest.Mock).mockResolvedValue(undefined);
       await expect(service.update({ id: 7 } as any)).rejects.toThrow(
         'License with ID 7 not found.',
       );
+    });
+  });
+
+  describe('holdersOfLicenceDocument', () => {
+    it('returns the holders of the licences carrying exactly this document', async () => {
+      (licenseRepo.find as jest.Mock).mockResolvedValue([
+        { user: { id: 3 }, documents_url: ['/uploads/licences/a_b.pdf'] },
+        // Matched by LIKE ("_" is a wildcard) but another file.
+        { user: { id: 9 }, documents_url: ['/uploads/licences/aXb.pdf'] },
+        { user: { id: 4 }, documents_url: null },
+      ]);
+
+      await expect(
+        holdersOfLicenceDocument(
+          licenseRepo as any,
+          '/uploads/licences/a_b.pdf',
+        ),
+      ).resolves.toEqual([3]);
     });
   });
 

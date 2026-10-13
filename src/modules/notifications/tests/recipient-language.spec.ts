@@ -36,10 +36,17 @@ describe('notifications in the language of their recipient', () => {
     });
 
     const input = () =>
-      ({ user_id: 2, origin_icao: 'LFPG', destination_icao: 'EGLL' }) as any;
+      ({
+        user_id: 2,
+        origin_icao: 'LFPG',
+        destination_icao: 'EGLL',
+        flight_hours: 1,
+      }) as any;
+    // A flight without a booking is recorded by an administrator.
+    const caller = { id: 2, email: 'a@example.com', role: 'Administrateur' };
 
     it('keeps the French wording by default', async () => {
-      await service.createFlightByUser(input());
+      await service.createFlightByUser(input(), caller);
 
       expect(sent()).toEqual([
         [2, 'FLIGHT_CREATED', 'Votre plan de vol de LFPG a EGLL a ete cree'],
@@ -47,7 +54,7 @@ describe('notifications in the language of their recipient', () => {
     });
 
     it('is announced in English to an English-speaking pilot', async () => {
-      await service.createFlightByUser(input(), 'en');
+      await service.createFlightByUser(input(), caller, 'en');
 
       expect(sent()).toEqual([
         [
@@ -105,28 +112,22 @@ describe('notifications in the language of their recipient', () => {
     ])(
       'announces an invoice to a member whose language is %s',
       async (language, message) => {
-        await service.createInvoice({
-          amount: 50,
-          user: { id: 4, language },
-        } as any);
+        await service.notifyMovement(
+          { id: 4, language },
+          'INVOICE_CREATED',
+          50,
+        );
 
         expect(sent()).toEqual([[4, 'INVOICE_CREATED', message]]);
       },
     );
 
     it('announces a refund in English to an English-speaking member', async () => {
-      paymentsRepository.findOne.mockResolvedValue({
-        id: 1,
-        amount: 30,
-        user: { id: 4, language: 'en', user_account_balance: 100 },
-      });
-      userRepository.findOne.mockResolvedValue({
-        id: 4,
-        language: 'en',
-        user_account_balance: 100,
-      });
-
-      await service.refund(4, 30);
+      await service.notifyMovement(
+        { id: 4, language: 'en' },
+        'PAYMENT_REFUNDED',
+        30,
+      );
 
       expect(sent()).toEqual([
         [4, 'PAYMENT_REFUNDED', 'A refund of 30 has been made to your account'],
@@ -200,7 +201,9 @@ describe('notifications in the language of their recipient', () => {
     it('announces a new course to each of them in their own language', async () => {
       courseRepository.findOne.mockResolvedValue(null);
       usersService.findOneById.mockImplementation(async (id: number) =>
-        id === 20 ? { id: 20, language: 'en' } : { id: 10, language: 'fr' },
+        id === 20
+          ? { id: 20, language: 'en', role: { role_name: 'Instructeur' } }
+          : { id: 10, language: 'fr' },
       );
 
       await service.createCourse({

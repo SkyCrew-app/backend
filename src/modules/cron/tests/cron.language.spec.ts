@@ -55,6 +55,8 @@ describe('CronService reminders in the language of the member', () => {
     },
   ];
 
+  // The passenger-count reminder used to be listed here: members were asked
+  // every night for a value no screen lets them enter.
   it('keeps the French wording for a French-speaking member', async () => {
     reservations.findReservationsBetween.mockResolvedValue(
       tomorrowReservations(),
@@ -70,10 +72,6 @@ describe('CronService reminders in the language of the member', () => {
       [
         'MISSING_FLIGHT_PLAN',
         "Votre vol prévu demain pour la réservation N°6 n'a pas de plan de vol. Veuillez le soumettre.",
-      ],
-      [
-        'MISSING_PASSENGER_COUNT',
-        "Le nombre de passagers pour votre vol prévu demain (Réservation N°6) n'est pas renseigné. Veuillez le compléter.",
       ],
       [
         'INCOMPLETE_FLIGHT_PLAN',
@@ -97,10 +95,6 @@ describe('CronService reminders in the language of the member', () => {
       [
         'MISSING_FLIGHT_PLAN',
         'Your flight tomorrow for booking no. 6 has no flight plan. Please submit one.',
-      ],
-      [
-        'MISSING_PASSENGER_COUNT',
-        'The number of passengers for your flight tomorrow (booking no. 6) is missing. Please fill it in.',
       ],
       [
         'INCOMPLETE_FLIGHT_PLAN',
@@ -149,7 +143,7 @@ describe('CronService reminders in the language of the member', () => {
     ]);
   });
 
-  it('writes the end of a course in the language of the instructor notified', async () => {
+  it('writes the end of a course to the student and to the instructor, each in their language', async () => {
     courses.findExpiredCourses.mockResolvedValue([
       { id: 4, student: { id: 10 }, instructor: { id: 20, language: 'en' } },
     ]);
@@ -163,12 +157,24 @@ describe('CronService reminders in the language of the member', () => {
         message: 'Your course 4 is complete.',
       }),
     );
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        user_id: 10,
+        notification_type: 'COURSE_COMPLETED',
+        message: 'Votre cours 4 est terminé.',
+      }),
+    );
   });
 
   describe('reservation finished', () => {
     const french =
       'Votre réservation N°7 est terminée. Veuillez clôturer votre vol.';
     const english = 'Your booking no. 7 has ended. Please close the flight.';
+    // Ended an hour ago, with a flight still to close.
+    const unclosed = {
+      end_time: new Date(Date.now() - 3_600_000),
+      flights: [{ id: 1 }],
+    };
 
     it.each([
       [undefined, french],
@@ -176,7 +182,7 @@ describe('CronService reminders in the language of the member', () => {
       ['en', english],
     ])('reminds a member whose language is %s', async (language, expected) => {
       reservations.findFinishedReservations.mockResolvedValue([
-        { id: 7, user: { id: 70, language }, flights: [] },
+        { id: 7, user: { id: 70, language }, ...unclosed },
       ]);
 
       await service.notificationFinishReservation();
@@ -186,7 +192,7 @@ describe('CronService reminders in the language of the member', () => {
 
     it('recognises a reminder already sent in the other language', async () => {
       reservations.findFinishedReservations.mockResolvedValue([
-        { id: 7, user: { id: 70, language: 'en' }, flights: [] },
+        { id: 7, user: { id: 70, language: 'en' }, ...unclosed },
       ]);
       // Sent in French before the member switched to English.
       notifications.alreadySent.mockImplementation(

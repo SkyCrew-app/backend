@@ -18,6 +18,17 @@ import { Parser } from 'json2csv';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 
+// What the members were actually charged for these bookings: the amount
+// stored on each booking when it was paid, summed in cents.
+export const chargedRevenue = (
+  reservations: { charged_amount?: number | string | null }[],
+): number =>
+  reservations.reduce(
+    (cents, reservation) =>
+      cents + Math.round(Number(reservation.charged_amount ?? 0) * 100),
+    0,
+  ) / 100;
+
 @Injectable()
 export class FinancialService {
   private readonly exportsDir = join(__dirname, '../../uploads', 'exports');
@@ -153,14 +164,7 @@ export class FinancialService {
       },
     });
 
-    let totalRevenue = 0;
-    for (const reservation of reservations) {
-      if (reservation.estimated_flight_hours) {
-        totalRevenue +=
-          reservation.estimated_flight_hours * admin.flightHourRate;
-      }
-    }
-    return totalRevenue;
+    return chargedRevenue(reservations);
   }
 
   async aggregateExpensesForPeriod(start: Date, end: Date): Promise<number> {
@@ -233,13 +237,7 @@ export class FinancialService {
       },
     });
 
-    let revenueForecast = 0;
-    for (const reservation of reservations) {
-      if (reservation.estimated_flight_hours) {
-        revenueForecast +=
-          reservation.estimated_flight_hours * admin.flightHourRate;
-      }
-    }
+    const revenueForecast = chargedRevenue(reservations);
 
     const expenseRaw = await this.expenseRepository
       .createQueryBuilder('expense')
@@ -269,12 +267,15 @@ export class FinancialService {
     return { revenueForecast, expenseForecast, netForecast };
   }
 
+  private writeExport(fileName: string, content: string | Uint8Array): void {
+    mkdirSync(this.exportsDir, { recursive: true });
+    writeFileSync(join(this.exportsDir, fileName), content);
+  }
+
   async generateFinancialReportByPeriodPDF(
     startDate: Date,
     endDate: Date,
   ): Promise<string> {
-    mkdirSync(this.exportsDir, { recursive: true });
-
     const forecast = await this.generateBudgetForecast(startDate, endDate);
     const reservations = await this.reservationRepository.find({
       where: {
@@ -303,7 +304,9 @@ export class FinancialService {
       logoImage = await pdfDoc.embedPng(logoBytes);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (e) {
-      new Logger(FinancialService.name).warn('Logo non trouvé, il sera ignoré.');
+      new Logger(FinancialService.name).warn(
+        'Logo non trouvé, il sera ignoré.',
+      );
     }
     if (logoImage) {
       const logoDims = logoImage.scale(0.5);
@@ -375,7 +378,7 @@ export class FinancialService {
 
     reservations.forEach((res) => {
       const hours = res.estimated_flight_hours || 0;
-      const revenue = hours * admin.flightHourRate;
+      const revenue = Number(res.charged_amount ?? 0);
       const line = `${res.id}  |  ${hours.toFixed(2)}  |  ${revenue.toFixed(2)}`;
       page.drawText(line, { x: 50, y: currentY, size: 10, font });
       currentY -= 12;
@@ -396,7 +399,7 @@ export class FinancialService {
     );
     currentY -= 15;
     expenses.forEach((exp) => {
-      const line = `${exp.id}  |  ${exp.category}  |  ${exp.sub_category || '-'}  |  ${exp.amount.toFixed(2)}  |  ${new Date(exp.expense_date).toISOString().substring(0, 10)}`;
+      const line = `${exp.id}  |  ${exp.category}  |  ${exp.sub_category || '-'}  |  ${Number(exp.amount).toFixed(2)}  |  ${new Date(exp.expense_date).toISOString().substring(0, 10)}`;
       page.drawText(line, { x: 50, y: currentY, size: 10, font });
       currentY -= 12;
     });
@@ -414,8 +417,7 @@ export class FinancialService {
 
     const pdfBytes = await pdfDoc.save();
     const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.pdf`;
-    const filePath = join(this.exportsDir, fileName);
-    writeFileSync(filePath, pdfBytes);
+    this.writeExport(fileName, pdfBytes);
     return `/uploads/exports/${fileName}`;
   }
 
@@ -423,8 +425,6 @@ export class FinancialService {
     startDate: Date,
     endDate: Date,
   ): Promise<string> {
-    mkdirSync(this.exportsDir, { recursive: true });
-
     const forecast = await this.generateBudgetForecast(startDate, endDate);
 
     // Créer l'objet JSON pour le rapport
@@ -449,8 +449,7 @@ export class FinancialService {
     const csv = parser.parse(data);
 
     const fileName = `financial-report-${startDate.getTime()}-${endDate.getTime()}.csv`;
-    const filePath = join(this.exportsDir, fileName);
-    writeFileSync(filePath, csv);
+    this.writeExport(fileName, csv);
     return `/uploads/exports/${fileName}`;
   }
 }

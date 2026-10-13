@@ -8,12 +8,14 @@ import {
   saveNamedUploadToTmp,
   UploadKind,
 } from '../../common/uploads/save-upload';
-import { UseGuards } from '@nestjs/common';
+import { UseFilters, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver(() => Maintenance)
+@UseFilters(LocalizedExceptionFilter)
 export class MaintenanceResolver {
   constructor(private readonly maintenanceService: MaintenanceService) {}
 

@@ -152,4 +152,44 @@ describe('PaypalService', () => {
       expect(paypal.orders.OrdersCaptureRequest).toHaveBeenCalledWith(orderId);
     });
   });
+
+  describe('isOrderPaid', () => {
+    it('is true once the capture is completed', async () => {
+      mockClient.execute.mockResolvedValue({
+        result: {
+          status: 'COMPLETED',
+          purchase_units: [
+            { payments: { captures: [{ status: 'COMPLETED' }] } },
+          ],
+        },
+      });
+      expect(await service.isOrderPaid('order1')).toBe(true);
+    });
+
+    it('is false while the capture is held for review', async () => {
+      mockClient.execute.mockResolvedValue({
+        result: {
+          status: 'COMPLETED',
+          purchase_units: [{ payments: { captures: [{ status: 'PENDING' }] } }],
+        },
+      });
+      expect(await service.isOrderPaid('order1')).toBe(false);
+    });
+
+    it('reads the order when an earlier attempt already captured it', async () => {
+      mockClient.execute
+        .mockRejectedValueOnce(
+          new Error('{"details":[{"issue":"ORDER_ALREADY_CAPTURED"}]}'),
+        )
+        .mockResolvedValueOnce({ result: { status: 'COMPLETED' } });
+
+      expect(await service.isOrderPaid('order1')).toBe(true);
+      expect(paypal.orders.OrdersGetRequest).toHaveBeenCalledWith('order1');
+    });
+
+    it('lets any other failure through', async () => {
+      mockClient.execute.mockRejectedValue(new Error('network'));
+      await expect(service.isOrderPaid('order1')).rejects.toThrow('network');
+    });
+  });
 });

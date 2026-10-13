@@ -10,11 +10,19 @@ import {
   Reservation,
   ReservationStatus,
 } from '../reservations/entity/reservations.entity';
-import { formatDate, languageOf } from '../../common/i18n/languages';
+import { formatDate, languageOf, LANGUAGES } from '../../common/i18n/languages';
 import {
   translate,
   translateInEveryLanguage,
 } from '../../common/i18n/translate';
+
+// A deactivated member is no longer written to: no reminder, no e-mail.
+// Their bookings and licences are left as they are.
+const isDeactivated = (user?: { is_active?: boolean | null } | null): boolean =>
+  user?.is_active === false;
+
+// Reminders to close a flight stop once the booking ended that long ago.
+export const FINISHED_REMINDER_MAX_AGE_DAYS = 7;
 
 @Injectable()
 export class CronService {
@@ -32,9 +40,20 @@ export class CronService {
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleCourseStatusUpdate() {
     this.logger.log('Vérification quotidienne des statuts des cours...');
+    let expiredCourses: InstructionCourse[];
     try {
-      const expiredCourses = await this.courseService.findExpiredCourses();
-      for (const course of expiredCourses) {
+      expiredCourses = await this.courseService.findExpiredCourses();
+    } catch (error) {
+      this.logger.error(
+        'Erreur lors de la mise à jour des statuts des cours',
+        error,
+      );
+      return;
+    }
+
+    for (const course of expiredCourses) {
+      // One course that fails must not stop the others.
+      try {
         await this.courseService.updateCourseStatus(
           course.id,
           'COMPLETED' as InstructionCourse['status'],
@@ -42,24 +61,28 @@ export class CronService {
         this.logger.log(
           `Statut du cours ${course.id} mis à jour en "COMPLETED"`,
         );
-        await this.notificationsService.create({
-          user_id: course.student.id && course.instructor.id,
-          notification_type: 'COURSE_COMPLETED',
-          // Written to the instructor, who is the one notified here.
-          message: translate(
-            languageOf(course.instructor),
-            'notification.courseCompleted',
-            { courseId: course.id },
-          ),
-          notification_date: new Date(),
-          is_read: false,
-        });
+        // Both the student and the instructor are told, each in their
+        // own language.
+        for (const participant of [course.student, course.instructor]) {
+          if (!participant?.id || isDeactivated(participant)) continue;
+          await this.notificationsService.create({
+            user_id: participant.id,
+            notification_type: 'COURSE_COMPLETED',
+            message: translate(
+              languageOf(participant),
+              'notification.courseCompleted',
+              { courseId: course.id },
+            ),
+            notification_date: new Date(),
+            is_read: false,
+          });
+        }
+      } catch (error) {
+        this.logger.error(
+          `Erreur lors de la mise à jour du statut du cours ${course.id}`,
+          error,
+        );
       }
-    } catch (error) {
-      this.logger.error(
-        'Erreur lors de la mise à jour des statuts des cours',
-        error,
-      );
     }
   }
 
@@ -81,8 +104,11 @@ export class CronService {
             await this.licensesService.update({
               id: license.id,
               status: 'expired',
+              is_valid: false,
             } as any);
             this.logger.log(`Licence ${license.id} marquée comme expirée.`);
+            // The licence is marked for everyone; only active members are told.
+            if (isDeactivated(license.user)) continue;
             await this.notificationsService.create({
               user_id: userId,
               notification_type: 'LICENSE_EXPIRED',
@@ -95,6 +121,21 @@ export class CronService {
             });
           }
         } else {
+          if (isDeactivated(license.user)) continue;
+          // This job runs every night: one reminder per expiry date, not one
+          // each night until the licence expires.
+          const alreadySent = await this.notificationsService.alreadySent(
+            userId,
+            'LICENSE_EXPIRING_SOON',
+            LANGUAGES.map((written) =>
+              translate(written, 'notification.licenceExpiringSoon', {
+                licenceType: license.license_type,
+                date: formatDate(written, license.expiration_date),
+              }),
+            ),
+          );
+          if (alreadySent) continue;
+
           await this.notificationsService.create({
             user_id: userId,
             notification_type: 'LICENSE_EXPIRING_SOON',
@@ -135,6 +176,7 @@ export class CronService {
       );
 
     for (const reservation of reservations) {
+      if (isDeactivated(reservation.user)) continue;
       const language = languageOf(reservation.user);
       const reservationId = reservation.id;
 
@@ -156,83 +198,62 @@ export class CronService {
 
       // Vérification 2 : Si la réservation est confirmée, on vérifie le plan de vol
       if (reservation.status === ReservationStatus.CONFIRMED) {
-        if (!reservation.flights || reservation.flights.length === 0) {
-          await this.notificationsService.create({
-            user_id: reservation.user.id,
-            notification_type: 'MISSING_FLIGHT_PLAN',
-            message: translate(language, 'notification.missingFlightPlan', {
-              reservationId,
-            }),
-            notification_date: new Date(),
-            is_read: false,
-          });
-          this.logger.log(
-            `Notification envoyée pour plan de vol manquant (aucun vol associé) pour la réservation N°${reservation.id}`,
-          );
-        } else {
-          let missingPlan = false;
-          for (const flight of reservation.flights) {
-            if (!flight.encoded_polyline || !flight.waypoints) {
-              missingPlan = true;
-              break;
-            }
-          }
-          if (missingPlan) {
-            await this.notificationsService.create({
-              user_id: reservation.user.id,
-              notification_type: 'INCOMPLETE_FLIGHT_PLAN',
-              message: translate(
-                language,
-                'notification.incompleteFlightPlan',
-                { reservationId },
-              ),
-              notification_date: new Date(),
-              is_read: false,
-            });
-            this.logger.log(
-              `Notification envoyée pour plan de vol incomplet pour la réservation N°${reservation.id}`,
-            );
-          }
-        }
+        const flights = reservation.flights ?? [];
+        const reminder =
+          flights.length === 0
+            ? ({
+                type: 'MISSING_FLIGHT_PLAN',
+                key: 'notification.missingFlightPlan',
+              } as const)
+            : flights.some(
+                  (flight) => !flight.encoded_polyline || !flight.waypoints,
+                )
+              ? ({
+                  type: 'INCOMPLETE_FLIGHT_PLAN',
+                  key: 'notification.incompleteFlightPlan',
+                } as const)
+              : null;
 
-        // Vérification 3 : Vérifier si le nombre de passagers est renseigné
-        if (reservation.number_of_passengers == null) {
+        // Sent once per booking, even when the job runs twice (two
+        // instances, a restart at midnight).
+        if (
+          reminder &&
+          !(await this.notificationsService.alreadySent(
+            reservation.user.id,
+            reminder.type,
+            translateInEveryLanguage(reminder.key, { reservationId }),
+          ))
+        ) {
           await this.notificationsService.create({
             user_id: reservation.user.id,
-            notification_type: 'MISSING_PASSENGER_COUNT',
-            message: translate(language, 'notification.missingPassengerCount', {
-              reservationId,
-            }),
+            notification_type: reminder.type,
+            message: translate(language, reminder.key, { reservationId }),
             notification_date: new Date(),
             is_read: false,
           });
           this.logger.log(
-            `Notification envoyée pour nombre de passagers manquant pour la réservation N°${reservation.id}`,
+            `Notification ${reminder.type} envoyée pour la réservation N°${reservation.id}`,
           );
         }
+        // The number of passengers is not asked for when booking: there is
+        // nothing to remind the member of.
       }
     }
 
     this.logger.log('Fin de la vérification des réservations pour demain.');
   }
 
-  // Agrégation financière mensuelle
+  // Agrégation financière mensuelle : le mois qui vient de se terminer.
+  // Running it again for the same month refreshes its report instead of
+  // adding a second one.
   @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
-  async generateMonthlyFinancialReport() {
+  async generateMonthlyFinancialReport(now: Date = new Date()) {
     this.logger.log('Démarrage de l’agrégation financière mensuelle.');
 
-    const currentDate = new Date();
-    const startOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth(),
-      1,
-    );
-
-    const endOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth() + 1,
-      0,
-    );
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    // The aggregations take both bounds in: the last instant of the month.
+    const endOfMonth = new Date(startOfNextMonth.getTime() - 1);
 
     const totalRevenue = await this.financialService.aggregateRevenuesForPeriod(
       startOfMonth,
@@ -244,16 +265,32 @@ export class CronService {
     );
     const netProfit = totalRevenue - totalExpense;
 
-    const reportDate = startOfMonth;
-
-    await this.financialService.createFinancialReport({
-      report_date: reportDate,
-      total_revenue: totalRevenue,
-      total_expense: totalExpense,
-      net_profit: netProfit,
-      recommendations: null,
-      average_revenue_per_member: null,
+    const reports = await this.financialService.findAllFinancialReports();
+    const existing = (reports ?? []).find((report) => {
+      const date = new Date(report.report_date);
+      return (
+        date.getFullYear() === startOfMonth.getFullYear() &&
+        date.getMonth() === startOfMonth.getMonth()
+      );
     });
+
+    if (existing) {
+      await this.financialService.updateFinancialReport({
+        id: existing.id,
+        total_revenue: totalRevenue,
+        total_expense: totalExpense,
+        net_profit: netProfit,
+      });
+    } else {
+      await this.financialService.createFinancialReport({
+        report_date: startOfMonth,
+        total_revenue: totalRevenue,
+        total_expense: totalExpense,
+        net_profit: netProfit,
+        recommendations: null,
+        average_revenue_per_member: null,
+      });
+    }
 
     this.logger.log('Rapport financier mensuel généré avec succès.');
   }
@@ -263,13 +300,21 @@ export class CronService {
   async notificationFinishReservation() {
     const reservations =
       await this.reservationsService.findFinishedReservations();
+    const oldest =
+      Date.now() - FINISHED_REMINDER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 
     for (const reservation of reservations) {
-      if (!reservation.user) continue;
+      if (!reservation.user || isDeactivated(reservation.user)) continue;
       if (String(reservation.status).toUpperCase() === 'CANCELLED') continue;
-      // Nothing left to close once every flight of the reservation is closed.
+      // Only a flight that is still open can be closed: nothing to ask for a
+      // booking without a flight plan, or once every flight is closed.
       const flights = reservation.flights ?? [];
-      if (flights.length > 0 && flights.every((flight) => flight.closed_at)) {
+      if (!flights.some((flight) => !flight.closed_at)) {
+        continue;
+      }
+      // Old bookings are not brought back when a member empties their
+      // notifications.
+      if (new Date(reservation.end_time).getTime() < oldest) {
         continue;
       }
 

@@ -92,7 +92,7 @@ export class Aircraft {
   hourly_cost: number;
 
   @Field(() => Float)
-  @Column({ default: 0 })
+  @Column('float', { default: 0 })
   total_flight_hours: number;
 
   @Field(() => [Reservation])

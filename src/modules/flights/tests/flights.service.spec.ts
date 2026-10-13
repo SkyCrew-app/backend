@@ -7,6 +7,7 @@ import { Reservation } from '../../reservations/entity/reservations.entity';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { AirportsService } from '../airports.service';
 import {
+  BadRequestException,
   ForbiddenException,
   NotFoundException,
   ConflictException,
@@ -14,6 +15,10 @@ import {
 import { FlightPlanGeneratorService } from '../flight-plan-generator.service';
 import { AircraftPerformanceService } from '../aircraft-performance.service';
 import { MetarService } from '../metar.service';
+import { User } from '../../users/entity/users.entity';
+import { Aircraft } from '../../aircraft/entity/aircraft.entity';
+import { FlightAmendment } from '../entity/flight-amendment.entity';
+import { MAX_FLIGHT_HOURS } from '../flight-rules';
 
 describe('FlightsService', () => {
   let service: FlightsService;
@@ -24,15 +29,25 @@ describe('FlightsService', () => {
   let generator: Partial<FlightPlanGeneratorService>;
   let perfService: Partial<AircraftPerformanceService>;
   let metar: Partial<MetarService>;
+  let manager: Record<string, jest.Mock>;
 
   beforeEach(async () => {
+    manager = {
+      increment: jest.fn(),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+      save: jest.fn(async (_entity, value) => value),
+      delete: jest.fn().mockResolvedValue({ affected: 1 }),
+      count: jest.fn().mockResolvedValue(0),
+      findOne: jest.fn(),
+    };
+    manager.transaction = jest.fn(async (work) => work(manager));
     repo = {
       save: jest.fn(),
       find: jest.fn(),
       findOne: jest.fn(),
       delete: jest.fn(),
       create: jest.fn(),
-      manager: { increment: jest.fn() } as any,
+      manager: manager as any,
     };
     resRepo = { findOne: jest.fn(), find: jest.fn() };
     notif = { create: jest.fn() };
@@ -70,31 +85,115 @@ describe('FlightsService', () => {
   });
 
   describe('createFlightByUser', () => {
+    const pilot = { id: 2, email: 'p@example.com', role: 'Pilote' };
+    const admin = { id: 1, email: 'a@example.com', role: 'Administrateur' };
+    const input = {
+      reservation_id: 1,
+      user_id: 2,
+      origin_icao: 'AAA',
+      destination_icao: 'BBB',
+      flight_hours: 1,
+      flight_type: 'X',
+      number_of_passengers: 1,
+      waypoints: [],
+    };
+
+    beforeEach(() => {
+      repo.save.mockImplementation(async (flight) => ({ id: 3, ...flight }));
+    });
+
     it('creates and notifies', async () => {
-      const input = {
-        reservation_id: 1,
-        user_id: 2,
-        origin_icao: 'AAA',
-        destination_icao: 'BBB',
-        flight_hours: 1,
-        flight_type: 'X',
-        number_of_passengers: 1,
-        waypoints: [],
-      };
-      resRepo.findOne.mockResolvedValue({ id: 1 } as any);
-      repo.save.mockResolvedValue({ id: 3, ...input, waypoints: '[]' });
-      const res = await service.createFlightByUser(input as any);
+      resRepo.findOne.mockResolvedValue({ id: 1, user: { id: 2 } } as any);
+      const res = await service.createFlightByUser(input as any, pilot);
       expect(notif.create).toHaveBeenCalledWith(
-        expect.objectContaining({ notification_type: 'FLIGHT_CREATED' }),
+        expect.objectContaining({
+          notification_type: 'FLIGHT_CREATED',
+          user_id: 2,
+        }),
       );
-      expect(res).toEqual({ id: 3, ...input, waypoints: '[]' });
+      expect(res).toMatchObject({
+        id: 3,
+        reservation: { id: 1 },
+        user: { id: 2 },
+        waypoints: '[]',
+      });
     });
 
     it('throws if reservation not found', async () => {
       resRepo.findOne.mockResolvedValue(null);
       await expect(
-        service.createFlightByUser({ reservation_id: 9, user_id: 2 } as any),
+        service.createFlightByUser(
+          { reservation_id: 9, user_id: 2 } as any,
+          pilot,
+        ),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it("refuses a flight on another member's booking", async () => {
+      resRepo.findOne.mockResolvedValue({ id: 1, user: { id: 8 } } as any);
+
+      await expect(
+        service.createFlightByUser(input as any, pilot),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses a flight on a cancelled booking', async () => {
+      resRepo.findOne.mockResolvedValue({
+        id: 1,
+        user: { id: 2 },
+        status: 'cancelled',
+      } as any);
+
+      await expect(
+        service.createFlightByUser(input as any, pilot),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('refuses a member creating a flight without a booking', async () => {
+      await expect(
+        service.createFlightByUser(
+          { ...input, reservation_id: undefined } as any,
+          pilot,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('lets an administrator record a flight without a booking', async () => {
+      const res = await service.createFlightByUser(
+        { ...input, reservation_id: undefined } as any,
+        admin,
+      );
+
+      expect(res).toMatchObject({ reservation: null, user: { id: 1 } });
+    });
+
+    it("gives the flight to the holder when an administrator uses a member's booking", async () => {
+      resRepo.findOne.mockResolvedValue({ id: 1, user: { id: 8 } } as any);
+
+      const res = await service.createFlightByUser(input as any, admin);
+
+      expect(res).toMatchObject({ user: { id: 8 } });
+    });
+
+    it.each([
+      ['a negative duration', { flight_hours: -1 }],
+      ['a duration over the maximum', { flight_hours: MAX_FLIGHT_HOURS + 1 }],
+      [
+        'an arrival before the departure',
+        {
+          departure_time: new Date('2026-10-01T10:00:00Z'),
+          arrival_time: new Date('2026-10-01T09:00:00Z'),
+        },
+      ],
+    ])('refuses %s', async (_label, values) => {
+      resRepo.findOne.mockResolvedValue({ id: 1, user: { id: 2 } } as any);
+
+      await expect(
+        service.createFlightByUser({ ...input, ...values } as any, pilot),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.save).not.toHaveBeenCalled();
     });
   });
 
@@ -136,6 +235,18 @@ describe('FlightsService', () => {
       repo.create.mockReturnValue({ id: 10 });
       repo.save.mockResolvedValue({ id: 10 });
     };
+
+    it("refuses a plan generated on another member's booking", async () => {
+      setupMocks();
+      resRepo.findOne.mockResolvedValue({ id: 1, user: { id: 8 } });
+
+      await expect(
+        service.createFlightByAI('LFPG', 'EGLL', 2, 1, {
+          requester: { id: 2, email: 'p@example.com', role: 'Pilote' },
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
 
     it('sends FLIGHT_CREATED notification', async () => {
       setupMocks();
@@ -312,15 +423,74 @@ describe('FlightsService', () => {
     });
   });
 
+  describe('findOneFor', () => {
+    const stored = { id: 5, user: { id: 3 } } as any;
+
+    it.each([
+      ['its pilot', { id: 3, email: 'p@example.com', role: 'Pilote' }],
+      [
+        'an administrator',
+        {
+          id: 1,
+          email: 'a@example.com',
+          role: { role_name: 'Administrateur' },
+        },
+      ],
+    ])('gives the flight to %s', async (_label, caller) => {
+      repo.findOne.mockResolvedValue(stored);
+
+      await expect(service.findOneFor(5, caller as any)).resolves.toBe(stored);
+    });
+
+    it.each([
+      ['another member', { id: 4, email: 'o@example.com', role: 'Pilote' }],
+      ['an unknown caller', undefined],
+    ])('refuses %s', async (_label, caller) => {
+      repo.findOne.mockResolvedValue(stored);
+
+      await expect(service.findOneFor(5, caller)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('gives the flight to an instructor who teaches its pilot, not to another one', async () => {
+      const instructor = { id: 6, email: 'i@example.com', role: 'Instructeur' };
+      repo.findOne.mockResolvedValue(stored);
+
+      manager.count.mockResolvedValue(1);
+      await expect(service.findOneFor(5, instructor)).resolves.toBe(stored);
+      expect(manager.count).toHaveBeenCalledWith(expect.anything(), {
+        where: { instructor: { id: 6 }, student: { id: 3 } },
+      });
+
+      manager.count.mockResolvedValue(0);
+      await expect(service.findOneFor(5, instructor)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+
   describe('updateFlight', () => {
     const admin = { id: 1, email: 'a@example.com', role: 'Administrateur' };
     const owner = { id: 3, email: 'p@example.com', role: 'Pilote' };
     const other = { id: 4, email: 'o@example.com', role: 'Pilote' };
-    const stored = () => ({ id: 7, waypoints: '[]', user: { id: 3 } }) as any;
-
-    beforeEach(() => {
-      repo.save.mockImplementation(async (flight) => flight);
+    const started = new Date(Date.now() - 2 * 3_600_000);
+    const booking = () => ({
+      id: 40,
+      start_time: started,
+      status: 'confirmed',
+      user: { id: 3 },
+      aircraft: { id: 12 },
     });
+    const stored = (values: object = {}) =>
+      ({
+        id: 7,
+        waypoints: '[]',
+        flight_hours: 1,
+        user: { id: 3 },
+        reservation: booking(),
+        ...values,
+      }) as any;
 
     it('lets the pilot of the flight record what was flown', async () => {
       repo.findOne.mockResolvedValue(stored());
@@ -345,7 +515,11 @@ describe('FlightsService', () => {
 
       expect(res).not.toHaveProperty('user_id');
       expect(res).not.toHaveProperty('reservation_id');
-      expect(res).toMatchObject({ flight_hours: 2, user: { id: 3 } });
+      expect(res).toMatchObject({
+        flight_hours: 2,
+        user: { id: 3 },
+        reservation: { id: 40 },
+      });
     });
 
     it.each([
@@ -357,19 +531,32 @@ describe('FlightsService', () => {
       await expect(
         service.updateFlight(7, { id: 7, flight_hours: 9 } as any, caller),
       ).rejects.toThrow(ForbiddenException);
-      expect(repo.save).not.toHaveBeenCalled();
+      expect(manager.save).not.toHaveBeenCalled();
     });
 
-    it('lets an administrator amend any flight', async () => {
+    // This test used to assert that `user_id` was copied onto the flight as a
+    // plain property, which the database ignores: the move was lost.
+    it('lets an administrator move a flight to another member and booking', async () => {
       repo.findOne.mockResolvedValue(stored());
+      manager.findOne.mockResolvedValue({ id: 4 });
+      resRepo.findOne.mockResolvedValue({
+        id: 41,
+        user: { id: 4 },
+        aircraft: { id: 13 },
+      } as any);
 
       const res = await service.updateFlight(
         7,
-        { id: 7, user_id: 4, waypoints: ['A', 'B'] } as any,
+        { id: 7, user_id: 4, reservation_id: 41, waypoints: ['A', 'B'] } as any,
         admin,
       );
 
-      expect(res).toMatchObject({ user_id: 4, waypoints: '["A","B"]' });
+      expect(res).toMatchObject({
+        user: { id: 4 },
+        reservation: { id: 41 },
+        waypoints: '["A","B"]',
+      });
+      expect(res).not.toHaveProperty('user_id');
     });
 
     it('closes the flight when asked to', async () => {
@@ -383,13 +570,32 @@ describe('FlightsService', () => {
 
       expect(res.closed_at).toBeInstanceOf(Date);
       expect(res).not.toHaveProperty('closed');
-      // The hours flown join the pilot's total when the flight is closed.
-      expect((repo as any).manager.increment).toHaveBeenCalledWith(
-        expect.anything(),
+      // The hours flown join the pilot's total when the flight is closed…
+      expect(manager.increment).toHaveBeenCalledWith(
+        User,
         { id: 3 },
         'total_flight_hours',
         1.2,
       );
+      // …and the total of the aircraft that was flown.
+      expect(manager.increment).toHaveBeenCalledWith(
+        Aircraft,
+        { id: 12 },
+        'total_flight_hours',
+        1.2,
+      );
+      expect(manager.increment).toHaveBeenCalledTimes(2);
+    });
+
+    it('counts a flight closed twice at the same time only once', async () => {
+      repo.findOne.mockResolvedValue(stored());
+      // The other request closed it first.
+      manager.update.mockResolvedValue({ affected: 0 });
+
+      await expect(
+        service.updateFlight(7, { id: 7, closed: true } as any, owner),
+      ).rejects.toThrow(ConflictException);
+      expect(manager.increment).not.toHaveBeenCalled();
     });
 
     it('leaves the flight open otherwise', async () => {
@@ -398,26 +604,99 @@ describe('FlightsService', () => {
       const res = await service.updateFlight(7, { id: 7 } as any, owner);
 
       expect(res.closed_at).toBeUndefined();
-      expect((repo as any).manager.increment).not.toHaveBeenCalled();
+      expect(manager.increment).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a negative duration', -50],
+      ['an empty duration', 0],
+      ['a duration over the maximum', MAX_FLIGHT_HOURS + 0.5],
+    ])('refuses to close with %s', async (_label, hours) => {
+      repo.findOne.mockResolvedValue(stored());
+
+      await expect(
+        service.updateFlight(
+          7,
+          { id: 7, flight_hours: hours, closed: true } as any,
+          owner,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(manager.save).not.toHaveBeenCalled();
+      expect(manager.increment).not.toHaveBeenCalled();
+    });
+
+    it('refuses an arrival before the departure', async () => {
+      repo.findOne.mockResolvedValue(
+        stored({ departure_time: new Date('2026-10-01T10:00:00Z') }),
+      );
+
+      await expect(
+        service.updateFlight(
+          7,
+          { id: 7, arrival_time: new Date('2026-10-01T09:30:00Z') } as any,
+          owner,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('refuses to close a flight before its booking has started', async () => {
+      repo.findOne.mockResolvedValue(
+        stored({
+          reservation: {
+            ...booking(),
+            start_time: new Date(Date.now() + 3_600_000),
+          },
+        }),
+      );
+
+      await expect(
+        service.updateFlight(7, { id: 7, closed: true } as any, owner),
+      ).rejects.toThrow(ConflictException);
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it("refuses to close a flight attached to another member's booking", async () => {
+      repo.findOne.mockResolvedValue(
+        stored({ reservation: { ...booking(), user: { id: 8 } } }),
+      );
+
+      await expect(
+        service.updateFlight(7, { id: 7, closed: true } as any, owner),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('refuses a member closing a flight that has no booking, and lets an administrator', async () => {
+      repo.findOne.mockResolvedValue(stored({ reservation: null }));
+      await expect(
+        service.updateFlight(7, { id: 7, closed: true } as any, owner),
+      ).rejects.toThrow(ConflictException);
+
+      repo.findOne.mockResolvedValue(stored({ reservation: null }));
+      const res = await service.updateFlight(
+        7,
+        { id: 7, closed: true } as any,
+        admin,
+      );
+      expect(res.closed_at).toBeInstanceOf(Date);
+      // No aircraft to credit without a booking.
+      expect(manager.increment).toHaveBeenCalledTimes(1);
     });
 
     it('refuses a pilot who changes a flight already closed', async () => {
       const closedAt = new Date('2026-10-01T10:00:00Z');
-      repo.findOne.mockResolvedValue({ ...stored(), closed_at: closedAt });
+      repo.findOne.mockResolvedValue(stored({ closed_at: closedAt }));
 
       await expect(
         service.updateFlight(7, { id: 7, flight_hours: 9 } as any, owner),
       ).rejects.toThrow(ConflictException);
-      expect(repo.save).not.toHaveBeenCalled();
+      expect(manager.save).not.toHaveBeenCalled();
     });
 
     it('lets an administrator amend a closed flight without reopening it', async () => {
       const closedAt = new Date('2026-10-01T10:00:00Z');
-      repo.findOne.mockResolvedValue({
-        ...stored(),
-        flight_hours: 1.5,
-        closed_at: closedAt,
-      });
+      repo.findOne.mockResolvedValue(
+        stored({ flight_hours: 1.5, closed_at: closedAt }),
+      );
 
       const res = await service.updateFlight(
         7,
@@ -426,13 +705,55 @@ describe('FlightsService', () => {
       );
 
       expect(res).toMatchObject({ flight_hours: 2, closed_at: closedAt });
-      // Only the difference with what was already counted.
-      expect((repo as any).manager.increment).toHaveBeenCalledWith(
-        expect.anything(),
+      // Only the difference with what was already counted, for the member
+      // and for the aircraft.
+      expect(manager.increment).toHaveBeenCalledWith(
+        User,
         { id: 3 },
         'total_flight_hours',
         0.5,
       );
+      expect(manager.increment).toHaveBeenCalledWith(
+        Aircraft,
+        { id: 12 },
+        'total_flight_hours',
+        0.5,
+      );
+      // The amendment leaves a trace of what the flight said before.
+      expect(manager.save).toHaveBeenCalledWith(
+        FlightAmendment,
+        expect.objectContaining({
+          flight_id: 7,
+          action: 'amended',
+          actor_id: 1,
+          before: expect.objectContaining({ flight_hours: 1.5 }),
+          after: expect.objectContaining({ flight_hours: 2 }),
+        }),
+      );
+    });
+
+    it('moves the hours of a closed flight with it', async () => {
+      repo.findOne.mockResolvedValue(
+        stored({ flight_hours: 1.5, closed_at: new Date() }),
+      );
+      manager.findOne.mockResolvedValue({ id: 4 });
+
+      await service.updateFlight(7, { id: 7, user_id: 4 } as any, admin);
+
+      expect(manager.increment).toHaveBeenCalledWith(
+        User,
+        { id: 3 },
+        'total_flight_hours',
+        -1.5,
+      );
+      expect(manager.increment).toHaveBeenCalledWith(
+        User,
+        { id: 4 },
+        'total_flight_hours',
+        1.5,
+      );
+      // Same aircraft, same hours: nothing to change there.
+      expect(manager.increment).toHaveBeenCalledTimes(2);
     });
 
     it('throws if not found', async () => {
@@ -491,24 +812,91 @@ describe('FlightsService', () => {
   });
 
   describe('removeFlight', () => {
-    it('deletes own flight', async () => {
-      repo.findOne.mockResolvedValue({ id: 9, user: { id: 1 } } as any);
-      repo.delete.mockResolvedValue({ affected: 1 } as any);
-      expect(await service.removeFlight(9, 1)).toBe(true);
+    const admin = { id: 1, email: 'a@example.com', role: 'Administrateur' };
+    const owner = { id: 3, email: 'p@example.com', role: 'Pilote' };
+    const open = () =>
+      ({
+        id: 9,
+        flight_hours: 1.5,
+        user: { id: 3 },
+        reservation: { id: 40, aircraft: { id: 12 } },
+      }) as any;
+    const closed = () => ({ ...open(), closed_at: new Date() });
+
+    it('deletes own flight plan', async () => {
+      repo.findOne.mockResolvedValue(open());
+
+      expect(await service.removeFlight(9, owner)).toBe(true);
+      expect(manager.delete).toHaveBeenCalledWith(Flight, 9);
+      // An open flight never counted in any total.
+      expect(manager.increment).not.toHaveBeenCalled();
     });
 
     it('throws if flight not found', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(service.removeFlight(9, 1)).rejects.toThrow(
+      await expect(service.removeFlight(9, owner)).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('throws if user does not own the flight', async () => {
-      repo.findOne.mockResolvedValue({ id: 9, user: { id: 2 } } as any);
-      await expect(service.removeFlight(9, 1)).rejects.toThrow(
+      repo.findOne.mockResolvedValue({ ...open(), user: { id: 2 } });
+      await expect(service.removeFlight(9, owner)).rejects.toThrow(
         ForbiddenException,
       );
+      expect(manager.delete).not.toHaveBeenCalled();
+    });
+
+    it('refuses the pilot deleting a closed flight', async () => {
+      repo.findOne.mockResolvedValue(closed());
+
+      await expect(service.removeFlight(9, owner)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(manager.delete).not.toHaveBeenCalled();
+    });
+
+    it("lets an administrator delete a member's closed flight, takes the hours back and keeps a trace", async () => {
+      repo.findOne.mockResolvedValue(closed());
+
+      expect(
+        await service.removeFlight(9, {
+          ...admin,
+          role: { role_name: 'Administrateur' },
+        }),
+      ).toBe(true);
+
+      expect(manager.increment).toHaveBeenCalledWith(
+        User,
+        { id: 3 },
+        'total_flight_hours',
+        -1.5,
+      );
+      expect(manager.increment).toHaveBeenCalledWith(
+        Aircraft,
+        { id: 12 },
+        'total_flight_hours',
+        -1.5,
+      );
+      expect(manager.save).toHaveBeenCalledWith(
+        FlightAmendment,
+        expect.objectContaining({
+          flight_id: 9,
+          action: 'deleted',
+          actor_id: 1,
+          before: expect.objectContaining({ flight_hours: 1.5, user_id: 3 }),
+        }),
+      );
+    });
+
+    it('refuses to delete a flight an incident refers to', async () => {
+      repo.findOne.mockResolvedValue(closed());
+      manager.count.mockResolvedValue(1);
+
+      await expect(service.removeFlight(9, admin)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(manager.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -547,6 +935,19 @@ describe('FlightsService', () => {
       repo.find.mockResolvedValue([{ id: 1 }] as any);
       expect(await service.getFlightsByUser(1)).toEqual([{ id: 1 }]);
       expect(await service.getRecentFlights(2)).toEqual([{ id: 1 }]);
+    });
+
+    it('bounds the number of recent flights', async () => {
+      repo.find.mockResolvedValue([]);
+
+      await service.getRecentFlights(100000);
+      expect(repo.find).toHaveBeenLastCalledWith(
+        expect.objectContaining({ take: 50 }),
+      );
+      await service.getRecentFlights(-3);
+      expect(repo.find).toHaveBeenLastCalledWith(
+        expect.objectContaining({ take: 1 }),
+      );
     });
   });
 });

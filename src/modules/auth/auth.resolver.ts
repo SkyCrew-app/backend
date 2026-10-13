@@ -6,6 +6,7 @@ import { Response, Request } from 'express';
 import {
   BadRequestException,
   UnauthorizedException,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
@@ -15,10 +16,12 @@ import {
   SECRET_ATTEMPT_LIMITS,
 } from '../../common/guards/gql-throttler.guard';
 import { Throttle } from '@nestjs/throttler';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 const TWO_FACTOR_CHALLENGE_COOKIE = 'two_factor_challenge';
 
 @Resolver()
+@UseFilters(LocalizedExceptionFilter)
 export class AuthResolver {
   constructor(private authService: AuthService) {}
 
@@ -44,7 +47,7 @@ export class AuthResolver {
     @Args('loginInput') loginInput: LoginInput,
     @Context('res') res: Response,
   ) {
-    const user = await this.authService.validateUser(
+    const user = await this.authService.validateSignIn(
       loginInput.email,
       loginInput.password,
     );
@@ -91,16 +94,21 @@ export class AuthResolver {
   }
 
   @Mutation(() => String)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, GqlThrottlerGuard)
+  @Throttle(SECRET_ATTEMPT_LIMITS)
   async generate2FASecret(
     @Context('req') req: Request & { user: { email: string } },
     // Kept for older clients. The secret is always generated for the
     // authenticated user, never for an email supplied by the caller.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     @Args('email', { nullable: true }) _email?: string,
+    // Required, one or the other, once two-factor is active.
+    @Args('password', { nullable: true }) password?: string,
+    @Args('code', { nullable: true }) code?: string,
   ) {
     const { qrCodeUrl } = await this.authService.generate2FASecret(
       req.user.email,
+      { password, code },
     );
     return qrCodeUrl;
   }

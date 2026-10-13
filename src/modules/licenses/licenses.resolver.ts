@@ -64,10 +64,13 @@ export class LicensesResolver {
   ) {
     const documentsPath = await this.licensesService.uploadFiles(documents);
 
-    return this.licensesService.update({
-      ...updateLicenseInput,
-      documents_url: documentsPath,
-    });
+    // Without a new upload the documents already on the licence stay: the
+    // list only changes when files are sent, or when it is given explicitly.
+    return this.licensesService.update(
+      documentsPath
+        ? { ...updateLicenseInput, documents_url: documentsPath }
+        : updateLicenseInput,
+    );
   }
 
   @Mutation(() => Boolean)

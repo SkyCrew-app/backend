@@ -1,7 +1,18 @@
 import { DataSource } from 'typeorm';
-import { Reservation, ReservationStatus, FlightCategory } from '../../modules/reservations/entity/reservations.entity';
+import {
+  Reservation,
+  ReservationStatus,
+  FlightCategory,
+} from '../../modules/reservations/entity/reservations.entity';
 import { User } from '../../modules/users/entity/users.entity';
 import { Aircraft } from '../../modules/aircraft/entity/aircraft.entity';
+import { Invoice } from '../../modules/invoices/entity/invoices.entity';
+import {
+  Payment,
+  PAYMENT_KIND,
+} from '../../modules/payments/entity/payments.entity';
+import { fromCents } from '../../modules/payments/money';
+import { priceCents } from '../../modules/reservations/booking-rules';
 
 export const seedDemoReservations = async (
   dataSource: DataSource,
@@ -86,7 +97,7 @@ export const seedDemoReservations = async (
       start_time: makeDate(2, 8, 0),
       end_time: makeDate(2, 10, 30),
       estimated_flight_hours: 2.5,
-      purpose: 'Vol d\'évaluation nouvel élève',
+      purpose: "Vol d'évaluation nouvel élève",
       status: ReservationStatus.CONFIRMED,
       flight_category: FlightCategory.INSTRUCTION,
       notes: 'Évaluation initiale avec Emma Girard',
@@ -95,8 +106,8 @@ export const seedDemoReservations = async (
       aircraft: aircraft[3], // Diamond DA40
       user: admin,
       reservation_date: makeDate(5, 0),
-      start_time: makeDate(5, 7, 0),
-      end_time: makeDate(5, 14, 0),
+      start_time: makeDate(5, 8, 0),
+      end_time: makeDate(5, 15, 0),
       estimated_flight_hours: 7.0,
       purpose: 'Navigation longue Paris - Marseille AR',
       status: ReservationStatus.PENDING,
@@ -198,8 +209,8 @@ export const seedDemoReservations = async (
       aircraft: aircraft[3], // Diamond DA40
       user: pilotes[2], // Lucas
       reservation_date: makeDate(2, 0),
-      start_time: makeDate(2, 7, 30),
-      end_time: makeDate(2, 12, 0),
+      start_time: makeDate(2, 8, 0),
+      end_time: makeDate(2, 12, 30),
       estimated_flight_hours: 4.5,
       purpose: 'Navigation LFBD - LFML (Marseille)',
       status: ReservationStatus.CONFIRMED,
@@ -261,9 +272,47 @@ export const seedDemoReservations = async (
   const savedReservations: Reservation[] = [];
 
   for (const data of demoReservations) {
-    const reservation = reservationRepository.create(data);
+    // As the API does when it books: the price is fixed on the booking and
+    // recorded as a line of the member's account. Without it a demo booking
+    // could be neither moved nor refunded. A cancelled booking holds nothing.
+    const cancelled = data.status === ReservationStatus.CANCELLED;
+    const cents = cancelled
+      ? 0
+      : priceCents(data.aircraft.hourly_cost, data.start_time, data.end_time);
+
+    const reservation = reservationRepository.create({
+      ...data,
+      charged_amount: cancelled ? null : fromCents(cents),
+    });
     const saved = await reservationRepository.save(reservation);
     savedReservations.push(saved);
+
+    if (cents > 0) {
+      const amount = fromCents(cents);
+      // Paid when it was booked: never after the flight, never in the future.
+      const paidOn = new Date(
+        Math.min(now.getTime(), data.reservation_date.getTime()),
+      );
+      const invoice = await dataSource.getRepository(Invoice).save({
+        user: { id: data.user.id },
+        invoice_date: paidOn,
+        amount,
+        payment_status: 'completed',
+        payment_method: 'account_balance',
+        amount_paid: amount,
+        balance_due: 0,
+      });
+      await dataSource.getRepository(Payment).save({
+        user: { id: data.user.id },
+        invoice,
+        amount,
+        payment_date: paidOn,
+        payment_method: 'account_balance',
+        payment_status: 'completed',
+        kind: PAYMENT_KIND.BOOKING,
+        reservation_id: saved.id,
+      });
+    }
   }
 
   console.log(`${savedReservations.length} demo reservations created`);

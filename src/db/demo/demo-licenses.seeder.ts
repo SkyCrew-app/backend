@@ -19,7 +19,9 @@ export const seedDemoLicenses = async (
       license_type: 'PPL',
       license_number: 'PPL-FR-2019-4521',
       issue_date: new Date('2019-06-15'),
-      expiration_date: new Date(now.getTime() + 180 * 24 * 3600000),
+      // Long enough for the demo pilot to book months ahead: a booking needs
+      // a licence valid on the day of the flight.
+      expiration_date: new Date(now.getTime() + 365 * 24 * 3600000),
       certification_authority: 'DGAC',
       is_valid: true,
       status: 'active' as const,

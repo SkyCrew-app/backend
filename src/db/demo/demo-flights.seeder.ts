@@ -1,5 +1,7 @@
 import { DataSource } from 'typeorm';
 import { Flight } from '../../modules/flights/entity/flights.entity';
+import { User } from '../../modules/users/entity/users.entity';
+import { Aircraft } from '../../modules/aircraft/entity/aircraft.entity';
 import { FlightsService } from '../../modules/flights/flights.service';
 import {
   FlightCategory,
@@ -142,9 +144,25 @@ export const seedDemoFlights = async (
     }
 
     // A flight in the past has taken place: it is closed, and so in the logbook.
+    // Its hours then count in the totals of the pilot and of the aircraft,
+    // as when a member closes a flight.
     if (new Date(reservation.end_time) < new Date()) {
       savedFlight.closed_at = new Date(reservation.end_time);
       savedFlight = await flightRepository.save(savedFlight);
+
+      const hours = Number(savedFlight.flight_hours) || 0;
+      if (hours > 0) {
+        await dataSource
+          .getRepository(User)
+          .increment({ id: reservation.user.id }, 'total_flight_hours', hours);
+        await dataSource
+          .getRepository(Aircraft)
+          .increment(
+            { id: reservation.aircraft.id },
+            'total_flight_hours',
+            hours,
+          );
+      }
     }
 
     savedFlights.push(savedFlight);

@@ -14,6 +14,7 @@ describe('AuthResolver', () => {
   beforeEach(async () => {
     authService = {
       validateUser: jest.fn(),
+      validateSignIn: jest.fn(),
       login: jest.fn(),
       generate2FASecret: jest.fn(),
       verify2FACode: jest.fn(),
@@ -42,7 +43,7 @@ describe('AuthResolver', () => {
 
   describe('login', () => {
     it('throws UnauthorizedException with invalid credentials', async () => {
-      (authService.validateUser as jest.Mock).mockResolvedValue(null);
+      (authService.validateSignIn as jest.Mock).mockResolvedValue(null);
       await expect(
         resolver.login(
           { email: 'a@example.com', password: 'wrong' },
@@ -56,7 +57,7 @@ describe('AuthResolver', () => {
         email: 'a@example.com',
         twoFactorAuthSecret: 'sec',
       } as any;
-      (authService.validateUser as jest.Mock).mockResolvedValue(user);
+      (authService.validateSignIn as jest.Mock).mockResolvedValue(user);
 
       const response = await resolver.login(
         { email: 'a@example.com', password: 'pass' },
@@ -111,6 +112,7 @@ describe('AuthResolver', () => {
       } as any);
       expect(authService.generate2FASecret).toHaveBeenCalledWith(
         'a@example.com',
+        { password: undefined, code: undefined },
       );
       expect(url).toBe('url');
     });
@@ -126,6 +128,23 @@ describe('AuthResolver', () => {
       expect(authService.generate2FASecret).toHaveBeenCalledTimes(1);
       expect(authService.generate2FASecret).toHaveBeenCalledWith(
         'a@example.com',
+        { password: undefined, code: undefined },
+      );
+    });
+
+    it('passes the proof asked to replace an active secret', async () => {
+      (authService.generate2FASecret as jest.Mock).mockResolvedValue({
+        qrCodeUrl: 'url',
+      });
+      await resolver.generate2FASecret(
+        { user: { email: 'a@example.com' } } as any,
+        undefined,
+        'current-password',
+        '123456',
+      );
+      expect(authService.generate2FASecret).toHaveBeenCalledWith(
+        'a@example.com',
+        { password: 'current-password', code: '123456' },
       );
     });
   });

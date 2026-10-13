@@ -73,6 +73,43 @@ describe('AuthService', () => {
     });
   });
 
+  describe('validateSignIn', () => {
+    const member = (overrides: Partial<User> = {}) =>
+      ({ email: 'a@example.com', password: 'hashed', ...overrides }) as User;
+
+    it('returns the member when the password is right', async () => {
+      const user = member({ is_active: true });
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(user);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(
+        service.validateSignIn('A@Example.com', 'password'),
+      ).resolves.toBe(user);
+    });
+
+    it('refuses a deactivated member, and says why', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(
+        member({ is_active: false }),
+      );
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await expect(
+        service.validateSignIn('a@example.com', 'password'),
+      ).rejects.toThrow('Ce compte est désactivé');
+    });
+
+    it('does not tell a deactivated account from a wrong password', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(
+        member({ is_active: false }),
+      );
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.validateSignIn('a@example.com', 'wrong'),
+      ).resolves.toBeNull();
+    });
+  });
+
   describe('login', () => {
     it('signs JWT with correct payload', async () => {
       const user = {
@@ -126,6 +163,71 @@ describe('AuthService', () => {
         qrCodeUrl: 'data:image/png;base64,QR',
       });
     });
+
+    describe('when two-factor already protects the account', () => {
+      const protectedMember = {
+        email: 'a@example.com',
+        password: 'hashed',
+        twoFactorAuthSecret: 'ACTIVESECRET',
+      } as User;
+
+      beforeEach(() => {
+        (usersService.findOneByEmail as jest.Mock).mockResolvedValue(
+          protectedMember,
+        );
+        (speakeasy.generateSecret as jest.Mock).mockReturnValue({
+          base32: 'newsecret',
+          otpauth_url: 'otpauth://url',
+        });
+        (qrcode.toDataURL as jest.Mock).mockResolvedValue('QR');
+        (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+        (speakeasy.totp.verify as jest.Mock).mockReturnValue(false);
+      });
+
+      it('refuses to prepare a new secret with only an open session', async () => {
+        await expect(
+          service.generate2FASecret('a@example.com'),
+        ).rejects.toThrow('Pour remplacer la double authentification');
+        expect(usersService.set2FASecret).not.toHaveBeenCalled();
+      });
+
+      it('refuses a wrong password and a wrong code', async () => {
+        await expect(
+          service.generate2FASecret('a@example.com', {
+            password: 'wrong',
+            code: '000000',
+          }),
+        ).rejects.toThrow('Pour remplacer la double authentification');
+        expect(usersService.set2FASecret).not.toHaveBeenCalled();
+      });
+
+      it('accepts the current password', async () => {
+        (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+        await service.generate2FASecret('a@example.com', {
+          password: 'right',
+        });
+
+        expect(bcrypt.compare).toHaveBeenCalledWith('right', 'hashed');
+        expect(usersService.set2FASecret).toHaveBeenCalledWith(
+          'a@example.com',
+          'newsecret',
+        );
+      });
+
+      it('accepts a code of the current authenticator', async () => {
+        (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+
+        await service.generate2FASecret('a@example.com', { code: '123456' });
+
+        expect(speakeasy.totp.verify).toHaveBeenCalledWith({
+          secret: 'ACTIVESECRET',
+          encoding: 'base32',
+          token: '123456',
+        });
+        expect(usersService.set2FASecret).toHaveBeenCalled();
+      });
+    });
   });
 
   describe('verify2FACode', () => {
@@ -155,6 +257,22 @@ describe('AuthService', () => {
       const result = await service.verify2FAAndLogin('a@example.com', '123456');
 
       expect(result).toBe('jwt-token');
+    });
+
+    it('returns null for a deactivated member, even with a valid code', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        email: 'a@example.com',
+        id: 1,
+        role: { role_name: 'admin' },
+        twoFactorAuthSecret: 'base32secret',
+        is_active: false,
+      } as User);
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+
+      await expect(
+        service.verify2FAAndLogin('a@example.com', '123456'),
+      ).resolves.toBeNull();
+      expect(jwtService.sign).not.toHaveBeenCalled();
     });
 
     it('returns null when the OTP is invalid', async () => {
@@ -304,6 +422,17 @@ describe('AuthService', () => {
 
       expect(
         service.isValidTwoFactorChallenge('challenge-token', 'a@example.com'),
+      ).toBe(true);
+    });
+
+    it('accepts the address typed in another case at sign-in', () => {
+      (jwtService.verify as jest.Mock).mockReturnValue({
+        email: 'a@example.com',
+        purpose: '2fa',
+      });
+
+      expect(
+        service.isValidTwoFactorChallenge('challenge-token', ' A@Example.com'),
       ).toBe(true);
     });
 

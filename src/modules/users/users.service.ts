@@ -1,7 +1,14 @@
 import * as bcrypt from 'bcrypt';
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
-import { IsNull, Not, Repository } from 'typeorm';
+import { IsNull, Not, Raw, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
 import { UpdateUserInput } from './dto/update-user.input';
@@ -20,6 +27,12 @@ import {
   parseLanguage,
 } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
+import { localized } from '../../common/i18n/localized-exception';
+import { ROLE_ADMIN, ROLE_PILOT } from '../../common/auth/access';
+import { isEmailAddress, normalizeEmail } from '../../common/validation/email';
+import { Notification } from '../notifications/entity/notifications.entity';
+import { ReservationTemplate } from '../reservations/entity/reservation-template.entity';
+import { InstructionCourse } from '../instruction-courses/entity/instruction-courses.entity';
 
 const SELF_EDITABLE_FIELDS = [
   'first_name',
@@ -33,19 +46,35 @@ const SELF_EDITABLE_FIELDS = [
   'timezone',
 ] as const;
 
-const ADMIN_EDITABLE_FIELDS = [
-  'membership_start_date',
-  'membership_end_date',
-  'is_instructor',
-] as const;
-
 export const PASSWORD_RESET_VALIDITY_MINUTES = 60;
+// How long the link of an invitation works. An administrator can send a new
+// one at any time (resendInvitation).
+export const INVITATION_VALIDITY_DAYS = 7;
+// The one password rule, applied at activation, reset and change.
 export const PASSWORD_MIN_LENGTH = 8;
+
+export const assertAcceptablePassword = (password: string): void => {
+  if (!password || password.length < PASSWORD_MIN_LENGTH) {
+    throw localized(BadRequestException, 'error.auth.passwordTooShort', {
+      min: PASSWORD_MIN_LENGTH,
+    });
+  }
+};
 
 const hashResetToken = (token: string): string =>
   createHash('sha256').update(token).digest('hex');
 
-const DEFAULT_MEMBER_ROLE = 'Pilote';
+const invitationExpiry = (): Date =>
+  new Date(Date.now() + INVITATION_VALIDITY_DAYS * 24 * 60 * 60_000);
+
+const DEFAULT_MEMBER_ROLE = ROLE_PILOT;
+
+// What belongs to the account itself and goes with it when it is deleted.
+// Any other row pointing to a member is history, and forbids the deletion.
+const DELETED_WITH_MEMBER: (
+  | typeof Notification
+  | typeof ReservationTemplate
+)[] = [Notification, ReservationTemplate];
 
 @Injectable()
 export class UsersService {
@@ -75,11 +104,37 @@ export class UsersService {
     });
   }
 
-  findOneByEmail(email: string): Promise<User> {
-    return this.usersRepository.findOne({
-      where: { email },
-      relations: ['reservations', 'licenses', 'role'],
+  // The address is matched whatever its case. The exact spelling wins, for
+  // the old accounts that would differ only by case.
+  private async accountByEmail(
+    email: string,
+    relations: string[],
+  ): Promise<User | null> {
+    if (!email) {
+      return null;
+    }
+
+    const exact = await this.usersRepository.findOne({
+      where: { email: email.trim() },
+      relations,
     });
+    if (exact) {
+      return exact;
+    }
+
+    return this.usersRepository.findOne({
+      where: {
+        email: Raw((column) => `LOWER(${column}) = :email`, {
+          email: normalizeEmail(email),
+        }),
+      },
+      relations,
+      order: { id: 'ASC' },
+    });
+  }
+
+  findOneByEmail(email: string): Promise<User> {
+    return this.accountByEmail(email, ['reservations', 'licenses', 'role']);
   }
 
   // A new member is a pilot unless the administrator chose another role:
@@ -99,7 +154,31 @@ export class UsersService {
     return role;
   }
 
+  private async sendInvitation(user: User): Promise<void> {
+    const language = languageOf(user);
+    const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${user.validation_token}`;
+    await this.emailService.sendMail(
+      user.email,
+      translate(language, 'mail.welcome.subject'),
+      translate(language, 'mail.welcome.text'),
+      'confirmation-email',
+      { name: user.first_name, confirmationUrl },
+      language,
+    );
+  }
+
   async create(userData: Partial<User>, roleId?: number): Promise<User> {
+    const email = normalizeEmail(userData.email);
+    if (!isEmailAddress(email)) {
+      throw localized(BadRequestException, 'error.user.emailInvalid');
+    }
+    // Checked before anything is sent: nobody receives an invitation for an
+    // account that cannot be created.
+    if (await this.findOneByEmail(email)) {
+      throw localized(ConflictException, 'error.user.emailAlreadyUsed');
+    }
+    userData.email = email;
+
     const generatedPassword = uuidv4();
     const token = uuidv4();
     const hashedPassword = await bcrypt.hash(generatedPassword, 10);
@@ -113,17 +192,149 @@ export class UsersService {
       language,
       role: await this.roleOfNewMember(roleId),
       validation_token: token,
+      validationTokenExpiresAt: invitationExpiry(),
     });
-    const confirmationUrl = `${process.env.FRONTEND_URL}/auth/new-account?token=${token}`;
-    await this.emailService.sendMail(
-      newUser.email,
-      translate(language, 'mail.welcome.subject'),
-      translate(language, 'mail.welcome.text'),
-      'confirmation-email',
-      { name: newUser.first_name, confirmationUrl },
-      language,
-    );
+    await this.sendInvitation(newUser);
     return this.usersRepository.save(newUser);
+  }
+
+  // A new link for a member who has not activated their account yet. The
+  // previous one stops working.
+  async resendInvitation(id: number): Promise<boolean> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      throw localized(NotFoundException, 'error.user.notFound');
+    }
+    if (user.isEmailConfirmed) {
+      throw localized(BadRequestException, 'error.user.alreadyActivated');
+    }
+
+    user.validation_token = uuidv4();
+    user.validationTokenExpiresAt = invitationExpiry();
+    await this.usersRepository.save(user);
+    await this.sendInvitation(user);
+    return true;
+  }
+
+  // The club always keeps one administrator able to sign in: the last one
+  // can be neither demoted, deactivated nor deleted.
+  private async assertNotLastAdministrator(user: User): Promise<void> {
+    const administers =
+      user.role?.role_name === ROLE_ADMIN &&
+      user.is_active !== false &&
+      user.isEmailConfirmed;
+    if (!administers) {
+      return;
+    }
+
+    const others = await this.usersRepository.count({
+      where: {
+        id: Not(user.id),
+        is_active: true,
+        isEmailConfirmed: true,
+        role: { role_name: ROLE_ADMIN },
+      },
+    });
+    if (others === 0) {
+      throw localized(ForbiddenException, 'error.user.lastAdministrator');
+    }
+  }
+
+  private async memberOrFail(id: number): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      where: { id },
+      relations: ['role'],
+    });
+    if (!user) {
+      throw localized(NotFoundException, 'error.user.notFound');
+    }
+    return user;
+  }
+
+  // Deactivating keeps everything the member did and closes the account:
+  // no sign-in, and the sessions already open are refused.
+  async setActive(id: number, active: boolean): Promise<User> {
+    const user = await this.memberOrFail(id);
+    if (user.is_active === active) {
+      return user;
+    }
+
+    if (!active) {
+      await this.assertNotLastAdministrator(user);
+      user.sessionVersion = (user.sessionVersion ?? 0) + 1;
+      user.passwordResetTokenHash = null;
+      user.passwordResetExpiresAt = null;
+    }
+    user.is_active = active;
+    return this.usersRepository.save(user);
+  }
+
+  // Rows that keep a trace of what the member did, in any module.
+  private async hasHistory(userId: number): Promise<boolean> {
+    const { manager } = this.usersRepository;
+
+    for (const metadata of manager.connection.entityMetadatas) {
+      if ((DELETED_WITH_MEMBER as unknown[]).includes(metadata.target)) {
+        continue;
+      }
+      for (const relation of metadata.manyToOneRelations) {
+        if (relation.inverseEntityMetadata.target !== User) {
+          continue;
+        }
+        const rows = await manager.getRepository(metadata.target).count({
+          where: { [relation.propertyName]: { id: userId } },
+        });
+        if (rows > 0) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Only for an account created by mistake: a member with any history is
+  // deactivated instead.
+  async remove(id: number): Promise<boolean> {
+    const user = await this.memberOrFail(id);
+    await this.assertNotLastAdministrator(user);
+
+    if (await this.hasHistory(id)) {
+      throw localized(ConflictException, 'error.user.hasHistory');
+    }
+
+    try {
+      await this.usersRepository.manager.transaction(async (manager) => {
+        for (const entity of DELETED_WITH_MEMBER) {
+          await manager
+            .createQueryBuilder()
+            .delete()
+            .from(entity)
+            .where('"userId" = :id', { id })
+            .execute();
+        }
+        await manager.getRepository(User).delete(id);
+      });
+    } catch (error) {
+      // Foreign key violation: something still points to the member.
+      if (error?.code === '23503' || error?.driverError?.code === '23503') {
+        throw localized(ConflictException, 'error.user.hasHistory');
+      }
+      throw error;
+    }
+    return true;
+  }
+
+  // The instructor has, or had, a course with this student.
+  async isInstructorOf(
+    instructorId: number,
+    studentId: number,
+  ): Promise<boolean> {
+    const courses = await this.usersRepository.manager
+      .getRepository(InstructionCourse)
+      .count({
+        where: { instructor: { id: instructorId }, student: { id: studentId } },
+      });
+    return courses > 0;
   }
 
   // Stores the secret shown to the user. It only becomes active once
@@ -184,9 +395,35 @@ export class UsersService {
     imagePath: string | null,
     { asAdmin = false }: { asAdmin?: boolean } = {},
   ): Promise<User> {
-    const user = await this.usersRepository.findOneOrFail({
-      where: { email: targetEmail },
-    });
+    const user = await this.accountByEmail(targetEmail, ['role']);
+    if (!user) {
+      throw localized(NotFoundException, 'error.user.notFound');
+    }
+
+    if (
+      updateUserInput.id != null &&
+      Number(updateUserInput.id) !== Number(user.id)
+    ) {
+      throw new BadRequestException(
+        'The id does not match the account being updated',
+      );
+    }
+
+    // Decided before any file or field is touched.
+    const newRoleId =
+      asAdmin && updateUserInput.roleId ? Number(updateUserInput.roleId) : null;
+    let newRole: Role | null = null;
+    if (newRoleId && newRoleId !== user.role?.id) {
+      newRole = await this.usersRepository.manager
+        .getRepository(Role)
+        .findOne({ where: { id: newRoleId } });
+      if (!newRole) {
+        throw localized(BadRequestException, 'error.user.roleNotFound');
+      }
+      if (newRole.role_name !== ROLE_ADMIN) {
+        await this.assertNotLastAdministrator(user);
+      }
+    }
 
     const userDir = path.join(
       __dirname,
@@ -205,11 +442,7 @@ export class UsersService {
 
     // Only copy the fields the caller may change. The password has its own
     // mutation, and the picture only changes through an upload.
-    const editableFields = asAdmin
-      ? [...SELF_EDITABLE_FIELDS, ...ADMIN_EDITABLE_FIELDS]
-      : SELF_EDITABLE_FIELDS;
-
-    for (const field of editableFields) {
+    for (const field of SELF_EDITABLE_FIELDS) {
       if (updateUserInput[field] === undefined) {
         continue;
       }
@@ -222,8 +455,8 @@ export class UsersService {
       (user as any)[field] = updateUserInput[field];
     }
 
-    if (asAdmin && updateUserInput.roleId) {
-      user.role = { id: updateUserInput.roleId } as Role;
+    if (newRole) {
+      user.role = newRole;
     }
 
     const language = languageOf(user);
@@ -338,6 +571,7 @@ export class UsersService {
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) throw new Error('Invalid password');
+    assertAcceptablePassword(newPassword);
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
@@ -361,10 +595,8 @@ export class UsersService {
   // The answer is the same whether or not the address belongs to a member,
   // so that nobody can learn who has an account.
   async requestPasswordReset(email: string): Promise<void> {
-    const user = await this.usersRepository.findOne({
-      where: { email: email.trim() },
-    });
-    if (!user?.isEmailConfirmed) {
+    const user = await this.findOneByEmail(email);
+    if (!user?.isEmailConfirmed || user.is_active === false) {
       return;
     }
 
@@ -397,11 +629,7 @@ export class UsersService {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<boolean> {
-    if (!newPassword || newPassword.length < PASSWORD_MIN_LENGTH) {
-      throw new BadRequestException(
-        `Le mot de passe doit contenir au moins ${PASSWORD_MIN_LENGTH} caractères`,
-      );
-    }
+    assertAcceptablePassword(newPassword);
 
     const user = token
       ? await this.usersRepository.findOne({
@@ -409,7 +637,12 @@ export class UsersService {
         })
       : null;
     const expiresAt = user?.passwordResetExpiresAt;
-    if (!user || !expiresAt || expiresAt.getTime() < Date.now()) {
+    if (
+      !user ||
+      user.is_active === false ||
+      !expiresAt ||
+      expiresAt.getTime() < Date.now()
+    ) {
       throw new BadRequestException(
         'Ce lien de réinitialisation est invalide ou a expiré',
       );
@@ -451,12 +684,24 @@ export class UsersService {
           where: { validation_token: token },
         })
       : null;
-    if (!user) throw new Error('User not found');
+    // The same answer for an unknown, an already used and an expired link.
+    const expiresAt = user?.validationTokenExpiresAt;
+    if (
+      !user ||
+      user.is_active === false ||
+      !expiresAt ||
+      new Date(expiresAt).getTime() < Date.now()
+    ) {
+      throw localized(BadRequestException, 'error.auth.invitationInvalid');
+    }
+    assertAcceptablePassword(password);
 
     const hashedPassword = await bcrypt.hash(password, 10);
     user.password = hashedPassword;
     user.isEmailConfirmed = true;
+    // The link works once.
     user.validation_token = null;
+    user.validationTokenExpiresAt = null;
     // Like every password change: sessions opened before are closed.
     user.sessionVersion = (user.sessionVersion ?? 0) + 1;
 

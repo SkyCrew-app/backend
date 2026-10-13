@@ -37,10 +37,18 @@ export class EvalService {
       throw new Error('Evaluation not found');
     }
 
-    const correctCount = userAnswers.filter((ua) => {
-      const question = evaluation.questions.find((q) => q.id === ua.questionId);
-      return question && question.correct_answer === ua.answer;
-    }).length;
+    // One answer per question: sending the same question several times
+    // counts once, with the last answer given.
+    const answerByQuestion = new Map<number, string>();
+    for (const userAnswer of userAnswers) {
+      answerByQuestion.set(Number(userAnswer.questionId), userAnswer.answer);
+    }
+
+    const correctCount = evaluation.questions.filter(
+      (question) =>
+        answerByQuestion.has(Number(question.id)) &&
+        answerByQuestion.get(Number(question.id)) === question.correct_answer,
+    ).length;
 
     const totalQuestions = evaluation.questions.length;
     const score = calculateScore(correctCount, totalQuestions);

@@ -1,4 +1,5 @@
 import { InputType, Field, Int, Float } from '@nestjs/graphql';
+import { IsNumber, IsOptional, IsPositive } from 'class-validator';
 
 @InputType()
 export class UpdateExpenseInput {
@@ -9,6 +10,9 @@ export class UpdateExpenseInput {
   expense_date?: Date;
 
   @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
   amount?: number;
 
   @Field({ nullable: true })
