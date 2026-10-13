@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.14.0](https://github.com/SkyCrew-app/backend/compare/2.13.0...2.14.0) (2026-10-13)
+
+
+### Features
+
+* **i18n:** :globe_with_meridians: e-mails, notifications and refusals in the member's language ([#165](https://github.com/SkyCrew-app/backend/issues/165)) ([5723778](https://github.com/SkyCrew-app/backend/commit/57237781913f1db21e4df07d74ad1f29994f0f53))
+
+
+### Bug Fixes
+
+* **security:** :lock: checked uploads, production origins, and money and role defects ([#164](https://github.com/SkyCrew-app/backend/issues/164)) ([2a5ff9c](https://github.com/SkyCrew-app/backend/commit/2a5ff9ce1e696ca71ca6a1fd60d0d4afb9251a90))
+
 ## [2.13.0](https://github.com/SkyCrew-app/backend/compare/2.12.2...2.13.0) (2026-10-13)
 
 
