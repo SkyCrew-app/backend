@@ -1,4 +1,7 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { DataSource } from 'typeorm';
+import { isEssentialEmail } from './email-preferences';
 import { Transporter } from 'nodemailer';
 import * as Handlebars from 'handlebars';
 import { existsSync, readFileSync } from 'fs';
@@ -11,7 +14,33 @@ export class MailerService {
 
   constructor(
     @Inject('MAIL_TRANSPORT') private readonly transporter: Transporter,
+    // Looked up when an e-mail leaves, as AdminActionsService does: the
+    // mailer keeps no dependency on the users module.
+    @Optional() private readonly moduleRef?: ModuleRef,
   ) {}
+
+  // Whether the member at this address turned e-mail notifications off.
+  // An address that is no member's, or a lookup that fails, does not stop
+  // the e-mail.
+  private async declinesEmails(to: string): Promise<boolean> {
+    try {
+      const dataSource = this.moduleRef?.get(DataSource, { strict: false });
+      if (!dataSource) {
+        return false;
+      }
+      const rows: { email_notifications_enabled: boolean }[] =
+        await dataSource.query(
+          `SELECT "email_notifications_enabled" FROM "users" WHERE LOWER("email") = LOWER($1) ORDER BY "id" LIMIT 1`,
+          [to],
+        );
+      return rows?.[0]?.email_notifications_enabled === false;
+    } catch (error) {
+      this.logger.warn(
+        `E-mail preference of a recipient could not be read: ${(error as Error)?.message}`,
+      );
+      return false;
+    }
+  }
 
   // Sends an e-mail and says whether it left. It never throws: an e-mail that
   // cannot be sent must not undo the action it only reports (a reservation,
@@ -27,6 +56,13 @@ export class MailerService {
     if (!process.env.MAIL_HOST) {
       this.logger.warn(
         `E-mail "${templateName}" not sent: no mail server is configured (MAIL_HOST)`,
+      );
+      return false;
+    }
+
+    if (!isEssentialEmail(templateName) && (await this.declinesEmails(to))) {
+      this.logger.log(
+        `E-mail "${templateName}" not sent: the member turned e-mail notifications off`,
       );
       return false;
     }

@@ -9,25 +9,28 @@ export const fr = {
     "Votre réservation pour l'avion immatriculé {{registration}} a été modifiée.",
   'notification.reservationCancelled':
     "Votre réservation pour l'avion immatriculé {{registration}} a été annulée.",
-  'notification.withdrawal':
-    'Un paiement de {{amount}} a été effectué sur votre compte',
+  'notification.withdrawal': '{{amount}} ont été débités de votre solde.',
   'notification.invoiceCreated': 'Une facture de {{amount}} a été créée',
   'notification.paymentReceived':
     'Un ajout de {{amount}} a été effectué sur votre compte',
   'notification.paymentRefunded':
     'Un remboursement de {{amount}} a été effectué sur votre compte',
   'notification.courseCreatedForStudent':
-    "Votre cours avec l'instructeur {{instructorId}} a été créé.",
+    'Votre cours du {{date}} avec {{instructor}} est planifié.',
   'notification.courseCreatedForInstructor':
-    "Votre cours avec l'étudiant {{studentId}} a été créé.",
+    'Votre cours du {{date}} avec {{student}} est planifié.',
+  'notification.paymentFailed':
+    "Votre paiement de {{amount}} a été refusé : votre solde n'a pas été crédité.",
   'notification.competencyValidated':
     'Une compétence a été validée dans votre cours.',
   'notification.courseComment': 'Un commentaire a été ajouté à votre cours.',
   'notification.courseCompleted': 'Votre cours {{courseId}} est terminé.',
+  'notification.courseCancelledInstructorLeft':
+    "Votre cours du {{date}} avec {{instructor}} est annulé : cette personne n'est plus instructeur au club.",
   'notification.flightPlanCreated':
-    'Votre plan de vol de {{origin}} a {{destination}} a ete cree',
+    'Votre plan de vol de {{origin}} à {{destination}} a été créé.',
   'notification.flightPlanGenerated':
-    'Votre plan de vol de {{origin}} a {{destination}} a ete genere automatiquement',
+    'Votre plan de vol de {{origin}} à {{destination}} a été généré automatiquement.',
   'notification.licenceExpired': 'Votre licence {{licenceType}} est expirée.',
   'notification.licenceExpiringSoon':
     'Votre licence {{licenceType}} expirera bientôt, le {{date}}. Veuillez prendre les mesures nécessaires.',
@@ -112,6 +115,10 @@ export const fr = {
     'Le club doit garder au moins un administrateur actif : ce compte est le dernier.',
   'error.user.hasHistory':
     'Ce membre a un historique dans le club (réservations, vols, factures…) : il ne peut pas être supprimé. Désactivez son compte à la place.',
+  'error.user.instructorCommitments':
+    'Ce membre instruit encore {{bookings}} réservation(s) et {{courses}} cours à venir ({{list}}). Confirmez le changement de rôle pour les annuler : les élèves seront remboursés.',
+  'error.user.instructorBookingsNotCancelled':
+    "Le rôle n'a pas été changé : ces réservations n'ont pas pu être annulées ({{ids}}). Réglez-les d'abord.",
   'error.user.alreadyActivated': 'Ce membre a déjà activé son compte',
   'error.role.builtIn':
     "Le rôle « {{name}} » est nécessaire au fonctionnement de l'application : il ne peut être ni renommé ni supprimé.",
@@ -193,6 +200,7 @@ export const fr = {
     'La durée du vol doit être supérieure à 0 et ne pas dépasser {{max}} heures',
   'error.flight.closedNotDeletable':
     'Un vol clôturé ne peut être supprimé que par un administrateur',
+  'error.flight.notFound': "Ce vol n'existe pas ou a été supprimé",
   'error.flight.hasIncident':
     'Un incident est rattaché à ce vol : il ne peut pas être supprimé',
   'error.aircraft.upcomingBookings':
@@ -230,6 +238,8 @@ export const fr = {
     "La note et l'avis d'un cours sont donnés par l'élève",
   'error.course.participantsAdminOnly':
     "Seul un administrateur peut changer l'instructeur ou l'élève d'un cours",
+  'error.course.bookedParticipants':
+    "Un avion est réservé pour ce cours : annulez d'abord cette réservation pour changer d'instructeur ou d'élève.",
   'error.course.hasRecord':
     "Ce cours fait partie du dossier de formation de l'élève : il ne peut pas être supprimé. Passez-le au statut annulé si nécessaire.",
   'error.course.ratingOutOfRange':
@@ -279,6 +289,8 @@ export const fr = {
     'Un avion ne se réserve que pour un cours planifié',
   'error.reservation.courseAlreadyBooked':
     'Un avion est déjà réservé pour ce cours',
+  'error.reservation.weeklyMaintenance':
+    'Ce créneau tombe pendant la maintenance hebdomadaire du club ({{from}}–{{to}}) : choisissez un autre créneau.',
   'error.reservation.courseSlotMismatch':
     'Le créneau de la réservation doit recouvrir celui du cours',
 
@@ -286,6 +298,7 @@ export const fr = {
   // invoices).
   'error.incident.deleteNotAllowed':
     "Seul un administrateur peut supprimer un incident. Son auteur peut le retirer tant qu'il est ouvert et que personne ne l'a pris en charge.",
+  'error.licence.notYours': 'Vous ne pouvez modifier que vos propres licences',
   'error.licence.unknownStatus':
     'Statut de licence inconnu : choisissez active, expirée ou en attente',
   'error.licence.numberAlreadyUsed':

@@ -74,6 +74,49 @@ export const clubMoment = (date: Date): ClubMoment => {
   };
 };
 
+// Club wall-clock time of an instant, read as if it were UTC: the
+// difference with the instant is the club's offset from UTC at that time.
+const clubOffsetMs = (instant: number): number => {
+  const parts: Record<string, string> = {};
+  for (const { type, value } of clubPartsFormat.formatToParts(
+    new Date(instant),
+  )) {
+    parts[type] = value;
+  }
+  const seconds = new Date(instant).getUTCSeconds();
+  const wall = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    seconds,
+  );
+  return wall - (instant - new Date(instant).getUTCMilliseconds());
+};
+
+// The instant a calendar day at the club begins (midnight, club time).
+const clubMidnight = (year: number, month: number, day: number): Date => {
+  const wall = Date.UTC(year, month, day);
+  let instant = wall - clubOffsetMs(wall);
+  // Once more, in case the offset changed in between (summer time).
+  instant = wall - clubOffsetMs(instant);
+  return new Date(instant);
+};
+
+// Midnight at the club, `days` days after the club day of `date`.
+export const clubDayStart = (date: Date, days = 0): Date => {
+  const [year, month, day] = clubMoment(date).day.split('-').map(Number);
+  return clubMidnight(year, month - 1, day + days);
+};
+
+// The first day of a month at the club, `months` months after the club
+// month of `date`, at midnight.
+export const clubMonthStart = (date: Date, months = 0): Date => {
+  const [year, month] = clubMoment(date).day.split('-').map(Number);
+  return clubMidnight(year, month - 1 + months, 1);
+};
+
 // A date as written in an e-mail: club time, in the member's language.
 export const mailDate = (date: Date | string, language: Language): string => {
   const parts: Record<string, string> = {};
@@ -152,7 +195,75 @@ export interface ClubOpening {
   closureDays?: string[] | null;
   reservationStartTime?: string | null;
   reservationEndTime?: string | null;
+  // The weekly maintenance of the club's settings: a day name and a length
+  // in hours.
+  maintenanceDay?: string | null;
+  maintenanceDuration?: number | null;
 }
+
+// OWNER DECISION PENDING — the settings give the day and the length of the
+// weekly maintenance, not its start: it is taken to begin when bookings open
+// that day (reservationStartTime, midnight when none is set). Returns the
+// window in minutes of that day, or null when there is none.
+export const weeklyMaintenanceWindow = (
+  settings: ClubOpening,
+): { weekday: string; from: number; to: number } | null => {
+  const hours = Number(settings.maintenanceDuration);
+  if (!settings.maintenanceDay || !Number.isFinite(hours) || hours <= 0) {
+    return null;
+  }
+  const from = minutesOf(settings.reservationStartTime) ?? 0;
+  return {
+    weekday: weekdayOf(settings.maintenanceDay),
+    from,
+    to: Math.min(from + Math.round(hours * 60), 24 * 60),
+  };
+};
+
+const clock = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+// A new or moved booking stays out of the weekly maintenance. Bookings made
+// before the setting was changed are left as they are.
+const assertOutsideWeeklyMaintenance = (
+  settings: ClubOpening,
+  from: ClubMoment,
+  to: ClubMoment,
+): void => {
+  const window = weeklyMaintenanceWindow(settings);
+  if (!window) return;
+  // The minutes the booking takes on each club day it touches (a booking
+  // lasts 24 hours at most: one or two days).
+  const spans =
+    from.day === to.day
+      ? [
+          {
+            weekday: from.weekday,
+            start: from.minutesOfDay,
+            end: to.minutesOfDay + 1,
+          },
+        ]
+      : [
+          { weekday: from.weekday, start: from.minutesOfDay, end: 24 * 60 },
+          { weekday: to.weekday, start: 0, end: to.minutesOfDay + 1 },
+        ];
+  const clash = spans.some(
+    (span) =>
+      span.weekday === window.weekday &&
+      span.start < window.to &&
+      window.from < span.end,
+  );
+  if (clash) {
+    throw localized(
+      BadRequestException,
+      'error.reservation.weeklyMaintenance',
+      {
+        from: clock(window.from),
+        to: clock(window.to),
+      },
+    );
+  }
+};
 
 // The closure days and opening hours of the club, where its settings define
 // them. A booking then holds within the opening hours of a single day.
@@ -169,6 +280,7 @@ export const assertClubOpen = (
   if (closed.includes(from.weekday) || closed.includes(to.weekday)) {
     throw localized(BadRequestException, 'error.reservation.clubClosedDay');
   }
+  assertOutsideWeeklyMaintenance(settings, from, to);
 
   const opening = minutesOf(settings.reservationStartTime);
   const closing = minutesOf(settings.reservationEndTime);

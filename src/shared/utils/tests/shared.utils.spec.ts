@@ -211,7 +211,7 @@ describe('JwtStrategy', () => {
   let configService: ConfigService;
 
   const mockUsersService = {
-    findOneByEmail: jest.fn(),
+    findSessionUser: jest.fn(),
   };
 
   const mockConfigService = {
@@ -267,40 +267,40 @@ describe('JwtStrategy', () => {
         last_name: 'User',
       } as User;
 
-      mockUsersService.findOneByEmail.mockResolvedValue(mockUser);
+      mockUsersService.findSessionUser.mockResolvedValue(mockUser);
 
       const result = await strategy.validate(mockPayload);
 
-      expect(mockUsersService.findOneByEmail).toHaveBeenCalledWith(
+      expect(mockUsersService.findSessionUser).toHaveBeenCalledWith(
         'test@example.com',
       );
       expect(result).toEqual(mockUser);
     });
 
     it('should reject a single-purpose token used as a session token', async () => {
-      mockUsersService.findOneByEmail.mockResolvedValue({ id: 1 } as User);
+      mockUsersService.findSessionUser.mockResolvedValue({ id: 1 } as User);
 
       await expect(
         strategy.validate({ ...mockPayload, purpose: '2fa' }),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(mockUsersService.findOneByEmail).not.toHaveBeenCalled();
+      expect(mockUsersService.findSessionUser).not.toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException when user is not found', async () => {
-      mockUsersService.findOneByEmail.mockResolvedValue(null);
+      mockUsersService.findSessionUser.mockResolvedValue(null);
 
       await expect(strategy.validate(mockPayload)).rejects.toThrow(
         UnauthorizedException,
       );
 
-      expect(mockUsersService.findOneByEmail).toHaveBeenCalledWith(
+      expect(mockUsersService.findSessionUser).toHaveBeenCalledWith(
         'test@example.com',
       );
     });
 
     it('should throw UnauthorizedException when user is undefined', async () => {
-      mockUsersService.findOneByEmail.mockResolvedValue(undefined);
+      mockUsersService.findSessionUser.mockResolvedValue(undefined);
 
       await expect(strategy.validate(mockPayload)).rejects.toThrow(
         UnauthorizedException,
@@ -318,21 +318,21 @@ describe('JwtStrategy', () => {
       const mockUser = { id: 1, email: 'test@test.com' } as User;
 
       for (const email of testEmails) {
-        mockUsersService.findOneByEmail.mockResolvedValue(mockUser);
+        mockUsersService.findSessionUser.mockResolvedValue(mockUser);
 
         const payload = { ...mockPayload, email };
         const result = await strategy.validate(payload);
 
-        expect(mockUsersService.findOneByEmail).toHaveBeenCalledWith(email);
+        expect(mockUsersService.findSessionUser).toHaveBeenCalledWith(email);
         expect(result).toEqual(mockUser);
 
-        mockUsersService.findOneByEmail.mockClear();
+        mockUsersService.findSessionUser.mockClear();
       }
     });
 
     it('should handle service errors gracefully', async () => {
       const serviceError = new Error('Database connection failed');
-      mockUsersService.findOneByEmail.mockRejectedValue(serviceError);
+      mockUsersService.findSessionUser.mockRejectedValue(serviceError);
 
       await expect(strategy.validate(mockPayload)).rejects.toThrow(
         serviceError,
@@ -363,7 +363,7 @@ describe('JwtStrategy', () => {
         exp: Math.floor(Date.now() / 1000) + 3600,
       };
 
-      mockUsersService.findOneByEmail.mockResolvedValue(mockUser);
+      mockUsersService.findSessionUser.mockResolvedValue(mockUser);
 
       const result = await strategy.validate(payload);
 

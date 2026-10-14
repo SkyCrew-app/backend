@@ -27,6 +27,7 @@ export const ADMIN_ACTION = {
   AIRCRAFT_RETURNED_TO_SERVICE: 'aircraft.returned_to_service',
   AIRCRAFT_DELETED: 'aircraft.deleted',
   AIRCRAFT_RETIRED: 'aircraft.retired',
+  LICENCE_VALIDATED: 'licence.validated',
 } as const;
 
 export type AdminActionName = (typeof ADMIN_ACTION)[keyof typeof ADMIN_ACTION];

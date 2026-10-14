@@ -7,6 +7,7 @@ import { UsersModule } from '../users/users.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MailerModule } from '../mail/mailer.module';
 import { LicenceRemindersService } from './licence-reminders.service';
+import { AdminActionsModule } from '../../common/admin-actions/admin-actions.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { LicenceRemindersService } from './licence-reminders.service';
     UsersModule,
     NotificationsModule,
     MailerModule,
+    AdminActionsModule,
   ],
   providers: [LicensesService, LicensesResolver, LicenceRemindersService],
   exports: [LicensesService, LicenceRemindersService],

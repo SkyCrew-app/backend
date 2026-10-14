@@ -1,5 +1,11 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  Index,
+} from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { Incident } from '../../incidents/entity/incidents.entity';
@@ -7,6 +13,9 @@ import { LogbookRole } from '../logbook-role';
 
 @ObjectType()
 @Entity('flights')
+@Index('IDX_flights_user', ['user'])
+@Index('IDX_flights_instructor', ['instructor'])
+@Index('IDX_flights_reservation', ['reservation'])
 export class Flight {
   @Field(() => Int)
   @PrimaryGeneratedColumn()

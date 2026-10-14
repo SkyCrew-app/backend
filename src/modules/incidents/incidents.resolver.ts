@@ -135,7 +135,8 @@ export class IncidentsResolver {
     @Args('incident') incident: CreateIncidentInput,
     @CurrentUser() currentUser?: SessionUser,
   ) {
-    // A member reports in their own name, on their own flight. Technicians
+    // A member reports in their own name, on an aircraft (and on their own
+    // flight when one is given). Technicians
     // and administrators may record an incident on behalf of someone else.
     return this.incidentService.createIncident(incident, currentUser);
   }

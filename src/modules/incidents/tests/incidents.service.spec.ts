@@ -158,6 +158,56 @@ describe('IncidentsService', () => {
       }));
     });
 
+    it('records an incident on an aircraft without a flight', async () => {
+      aircraftRepo.findOneBy.mockResolvedValue(aircraft());
+
+      const res = await service.createIncident(
+        input({ flight_id: undefined, user_id: undefined }),
+        pilot,
+      );
+
+      expect(flightRepo.findOne).not.toHaveBeenCalled();
+      expect(aircraftRepo.findOneBy).toHaveBeenCalledWith({ id: 10 });
+      expect(res).toMatchObject({
+        aircraft: { id: 10 },
+        flight: null,
+        user: { id: pilot.id },
+      });
+    });
+
+    it('grounds the aircraft for a severe incident reported without a flight', async () => {
+      aircraftRepo.findOneBy.mockResolvedValue(aircraft());
+
+      await service.createIncident(
+        input({ flight_id: null, severity_level: 'Élevée' }),
+        pilot,
+      );
+
+      expect(aircraftRepo.update).toHaveBeenCalledWith(10, {
+        availability_status: AvailabilityStatus.UNAVAILABLE,
+      });
+    });
+
+    it("still refuses a flight that is not the reporter's", async () => {
+      flightRepo.findOne.mockResolvedValue({
+        id: 21,
+        user: { id: 31 },
+        reservation: { id: 41, aircraft: aircraft() },
+      });
+
+      await expect(
+        service.createIncident(input({ flight_id: 21 }), pilot),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('needs a known aircraft when there is no flight', async () => {
+      aircraftRepo.findOneBy.mockResolvedValue(null);
+
+      await expect(
+        service.createIncident(input({ flight_id: null }), pilot),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
     it('records the incident of a member on their own flight', async () => {
       const res = await service.createIncident(input(), pilot);
 
@@ -276,6 +326,13 @@ describe('IncidentsService', () => {
             'Aircraft F-GABC has been grounded after an incident. Your booking No. 52',
           ),
         }),
+      );
+      // The booking concerned is named with its day and time at the club.
+      expect(
+        notifications.create.mock.calls.find(([n]) => n.user_id === 8)[0]
+          .message,
+      ).toMatch(
+        /Votre réservation N°51 du \d{1,2} \S+ \d{4}, \d{2}:\d{2} est concernée/,
       );
       // The staff who can put it back is told too.
       expect(notifications.create).toHaveBeenCalledWith(

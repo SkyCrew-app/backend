@@ -23,7 +23,7 @@ import { User } from '../users/entity/users.entity';
 import { Invoice } from '../invoices/entity/invoices.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { isAdmin, SessionUser } from '../../common/auth/access';
-import { languageOf } from '../../common/i18n/languages';
+import { formatMoney, languageOf } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
 import { InvoiceLine, nextInvoiceNumber } from '../invoices/invoice-number';
@@ -229,7 +229,9 @@ export class PaymentsService {
         user_id: user.id,
         notification_type: type,
         notification_date: new Date(),
-        message: translate(languageOf(user), texts[type], { amount }),
+        message: translate(languageOf(user), texts[type], {
+          amount: formatMoney(languageOf(user), amount),
+        }),
         is_read: false,
       });
     } catch (error) {
@@ -547,11 +549,40 @@ export class PaymentsService {
   }
 
   // Records that an attempt failed. A payment already completed stays so.
+  // The member is told (a high-priority notification), once: only the
+  // attempt that was still pending changes.
   async markPaymentFailed(externalPaymentId: string): Promise<void> {
-    await this.paymentsRepository.update(
+    const result = await this.paymentsRepository.update(
       { external_payment_id: externalPaymentId, payment_status: 'pending' },
       { payment_status: 'failed' },
     );
+    if (!result?.affected) {
+      return;
+    }
+    try {
+      const payment = await this.paymentsRepository.findOne({
+        where: { external_payment_id: externalPaymentId },
+        relations: ['user'],
+      });
+      if (!payment?.user?.id) {
+        return;
+      }
+      await this.NotificationsService.create({
+        user_id: payment.user.id,
+        notification_type: 'PAYMENT_FAILED',
+        notification_date: new Date(),
+        message: translate(
+          languageOf(payment.user),
+          'notification.paymentFailed',
+          { amount: formatMoney(languageOf(payment.user), payment.amount) },
+        ),
+        is_read: false,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Notification PAYMENT_FAILED not sent: ${(error as Error)?.message}`,
+      );
+    }
   }
 
   async updatePaymentStatus(

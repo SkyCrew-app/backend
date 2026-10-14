@@ -50,6 +50,10 @@ const order = (value: unknown) =>
   value instanceof Date ? value.getTime() : (value as number);
 
 const matches = (actual: unknown, expected: unknown): boolean => {
+  // A list of conditions is a choice between them, as in TypeORM.
+  if (Array.isArray(expected)) {
+    return expected.some((condition) => matches(actual, condition));
+  }
   if (expected instanceof FindOperator) {
     const value = expected.value as any;
     switch (expected.type) {
@@ -88,8 +92,13 @@ export class FakeDatabase {
 
   // Bookings a checklist points to: [{ id, reservationId }].
   checklistSubmissions: { id: number; reservationId: number | null }[] = [];
-  flights: { id: number; reservationId: number; closed_at?: Date | null }[] =
-    [];
+  flights: {
+    id: number;
+    reservationId: number;
+    closed_at?: Date | null;
+    departure_time?: Date | null;
+    arrival_time?: Date | null;
+  }[] = [];
   // Last invoice number given, per year.
   invoiceSequences = new Map<number, number>();
   // Row locks asked for, in order: "aircraft:1", "users:2"…
@@ -202,6 +211,16 @@ export class FakeDatabase {
         (flight) => flight.reservationId === row.id,
       );
     }
+    if (entity === InstructionCourse) {
+      loaded.instructor = related(User, row.instructor);
+      loaded.student = related(User, row.student);
+      loaded.reservation = row.reservation
+        ? (this.rows(Reservation).find(
+            (item) => item.id === row.reservation.id,
+          ) ?? null)
+        : null;
+      if (loaded.reservation) loaded.reservation = { ...loaded.reservation };
+    }
     if (entity === Payment || entity === Invoice) {
       loaded.user = related(User, row.user);
     }
@@ -308,6 +327,20 @@ export class FakeDatabase {
       );
       attached.forEach((submission) => (submission.reservationId = null));
       return [[], attached.length];
+    }
+
+    if (sql.startsWith('UPDATE "flights" SET "departure_time" = ')) {
+      const [reservationId, shift] = parameters as [number, number];
+      const open = this.flights.filter(
+        (flight) => flight.reservationId === reservationId && !flight.closed_at,
+      );
+      const moved = (date?: Date | null) =>
+        date ? new Date(new Date(date).getTime() + shift) : date;
+      for (const flight of open) {
+        flight.departure_time = moved(flight.departure_time);
+        flight.arrival_time = moved(flight.arrival_time);
+      }
+      return [[], open.length];
     }
 
     // The year's invoice counter: created at 1, or raised by one.

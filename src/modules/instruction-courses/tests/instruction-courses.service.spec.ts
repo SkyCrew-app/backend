@@ -1,3 +1,4 @@
+import { ReservationsService } from '../../reservations/reservations.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DEFAULT_COURSE_MINUTES } from '../course-rules';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -79,6 +80,7 @@ describe('InstructionCoursesService', () => {
         { provide: UsersService, useValue: userService },
         { provide: NotificationsService, useValue: notifications },
         { provide: ELearningService, useValue: eLearningService },
+        { provide: ReservationsService, useValue: { update: jest.fn() } },
       ],
     }).compile();
 

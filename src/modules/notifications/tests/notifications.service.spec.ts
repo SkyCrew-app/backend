@@ -126,15 +126,30 @@ describe('NotificationsService', () => {
         { id: 2, message: 'Notification 2' },
       ];
 
-      mockRepository.find.mockResolvedValue(mockNotifications);
+      // Unread ones, then the latest read ones (see query-weight).
+      mockRepository.find
+        .mockResolvedValueOnce([
+          {
+            ...mockNotifications[0],
+            notification_date: new Date('2026-02-01'),
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            ...mockNotifications[1],
+            notification_date: new Date('2026-01-01'),
+          },
+        ]);
 
       const result = await service.findAllByUser(userId);
 
-      expect(mockRepository.find).toHaveBeenCalledWith({
-        where: { user: { id: userId } },
-        order: { notification_date: 'DESC' },
-      });
-      expect(result).toEqual(mockNotifications);
+      expect(mockRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { user: { id: userId }, is_read: false },
+          order: { notification_date: 'DESC' },
+        }),
+      );
+      expect(result.map((n) => n.id)).toEqual([1, 2]);
     });
   });
 

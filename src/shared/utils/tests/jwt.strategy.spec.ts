@@ -2,7 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from '../jwt.strategy';
 
 describe('JwtStrategy', () => {
-  const users = { findOneByEmail: jest.fn() };
+  const users = { findSessionUser: jest.fn() };
   const config = { get: () => 'test-secret' };
   let strategy: JwtStrategy;
 
@@ -18,7 +18,7 @@ describe('JwtStrategy', () => {
   });
 
   it('accepts a session opened with the current password', async () => {
-    users.findOneByEmail.mockResolvedValue(member(2));
+    users.findSessionUser.mockResolvedValue(member(2));
 
     await expect(
       strategy.validate({ email: 'p@example.com', sv: 2 }),
@@ -26,7 +26,7 @@ describe('JwtStrategy', () => {
   });
 
   it('refuses a session opened before the password changed', async () => {
-    users.findOneByEmail.mockResolvedValue(member(3));
+    users.findSessionUser.mockResolvedValue(member(3));
 
     await expect(
       strategy.validate({ email: 'p@example.com', sv: 2 }),
@@ -34,12 +34,12 @@ describe('JwtStrategy', () => {
   });
 
   it('accepts a session opened before sessions were versioned, until the password changes', async () => {
-    users.findOneByEmail.mockResolvedValue(member(0));
+    users.findSessionUser.mockResolvedValue(member(0));
     await expect(
       strategy.validate({ email: 'p@example.com' }),
     ).resolves.toMatchObject({ id: 3 });
 
-    users.findOneByEmail.mockResolvedValue(member(1));
+    users.findSessionUser.mockResolvedValue(member(1));
     await expect(strategy.validate({ email: 'p@example.com' })).rejects.toThrow(
       UnauthorizedException,
     );
@@ -50,7 +50,7 @@ describe('JwtStrategy', () => {
       strategy.validate({ email: 'p@example.com', purpose: '2fa' }),
     ).rejects.toThrow(UnauthorizedException);
 
-    users.findOneByEmail.mockResolvedValue(null);
+    users.findSessionUser.mockResolvedValue(null);
     await expect(
       strategy.validate({ email: 'ghost@example.com', sv: 0 }),
     ).rejects.toThrow(UnauthorizedException);

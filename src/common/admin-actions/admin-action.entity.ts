@@ -14,6 +14,9 @@ import {
 // foreign keys: the trace outlives what it is about.
 @ObjectType()
 @Entity('admin_actions')
+@Index('IDX_admin_actions_action_created', ['action', 'created_at'])
+// Created by a migration (an expression index).
+@Index('IDX_admin_actions_member', { synchronize: false })
 @Index('IDX_admin_actions_created_at', ['created_at'])
 @Index('IDX_admin_actions_actor', ['actor_id'])
 @Index('IDX_admin_actions_target', ['target_type', 'target_id'])

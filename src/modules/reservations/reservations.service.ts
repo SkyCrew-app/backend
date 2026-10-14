@@ -8,6 +8,7 @@ import {
   EntityManager,
   In,
   Not,
+  MoreThanOrEqual,
 } from 'typeorm';
 import { Reservation, ReservationStatus } from './entity/reservations.entity';
 import { ReservationTemplate } from './entity/reservation-template.entity';
@@ -46,6 +47,7 @@ import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
 import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NOTIFICATION_PRIORITY_HIGH } from '../notifications/notification-priority';
 import { fromCents, lockRow, toCents } from '../payments/money';
 import {
   assertAllowedToFly,
@@ -72,6 +74,13 @@ const databaseErrorCode = (error: any): string | undefined =>
 
 const MEMBER: BookingActor = { isAdmin: false };
 
+// How many past bookings a member's own list carries (all upcoming ones are).
+export const PAST_BOOKINGS_LISTED = 200;
+
+// The flight plans of a booking that are not closed yet keep their place in
+// it when the booking moves: their times shift by as much as its start.
+export const SHIFT_OPEN_FLIGHTS_SQL = `UPDATE "flights" SET "departure_time" = "departure_time" + $2::double precision * interval '1 millisecond', "arrival_time" = "arrival_time" + $2::double precision * interval '1 millisecond' WHERE "reservationId" = $1 AND "closed_at" IS NULL`;
+
 const sameMember = (a: unknown, b: unknown): boolean =>
   a != null && b != null && Number(a) === Number(b);
 
@@ -80,6 +89,15 @@ const fullName = (member: { first_name?: string; last_name?: string }) =>
 
 // What an instructor is told about a booking they instruct.
 type InstructorNotice = 'Booked' | 'Changed' | 'Cancelled';
+
+// A course moved together with its booking (see
+// InstructionCoursesService.updateCourse): the booking is checked against the
+// course's new times, and the course is written in the booking's transaction.
+export interface CourseMove {
+  start: Date;
+  end: Date;
+  save: (manager: EntityManager) => Promise<unknown>;
+}
 
 interface Slot {
   aircraftId: number;
@@ -533,6 +551,8 @@ export class ReservationsService {
       start_time: Date | string;
       end_time: Date | string;
     },
+    // A cancellation they did not make themselves.
+    { highPriority = notice === 'Cancelled' }: { highPriority?: boolean } = {},
   ): Promise<void> {
     const language: Language = languageOf(instructor);
     const details = {
@@ -572,6 +592,7 @@ export class ReservationsService {
         notification_type: `INSTRUCTION_${notice.toUpperCase()}`,
         notification_date: new Date(),
         message,
+        ...(highPriority && { priority: NOTIFICATION_PRIORITY_HIGH }),
         is_read: false,
       }),
     );
@@ -583,6 +604,7 @@ export class ReservationsService {
   async update(
     updateReservationInput: UpdateReservationInput,
     now: Date = new Date(),
+    courseMove?: CourseMove,
   ): Promise<Reservation> {
     const id = updateReservationInput.id;
 
@@ -707,6 +729,36 @@ export class ReservationsService {
         }
       }
 
+      // A booking made for a course keeps overlapping it: it is the
+      // aircraft of that course. A course is moved with its booking.
+      if (slotChanged && !instructorChanged) {
+        const course = courseMove
+          ? null
+          : await manager.findOne(InstructionCourse, {
+              where: {
+                reservation: { id: reservation.id },
+                status: Not(CourseStatus.CANCELED),
+              },
+              loadEagerRelations: false,
+            });
+        const courseSlot =
+          courseMove ??
+          (course && {
+            start: new Date(course.startTime),
+            end: courseEnd(course),
+          });
+        if (
+          courseSlot &&
+          (courseSlot.start.getTime() >= end.getTime() ||
+            courseSlot.end.getTime() <= start.getTime())
+        ) {
+          throw localized(
+            BadRequestException,
+            'error.reservation.courseSlotMismatch',
+          );
+        }
+      }
+
       if (instructorChanged) {
         reservation.instructor = instructor;
         // The course this booking was made for was the previous
@@ -719,6 +771,11 @@ export class ReservationsService {
       }
 
       const saved = await manager.save(Reservation, reservation);
+      const shift = start.getTime() - previous.start.getTime();
+      if (shift !== 0) {
+        await manager.query(SHIFT_OPEN_FLIGHTS_SQL, [reservation.id, shift]);
+      }
+      await courseMove?.save(manager);
       return { saved, previous, movedCents, previousInstructor };
     });
 
@@ -865,11 +922,18 @@ export class ReservationsService {
     const instructor = reservation.instructor ?? null;
     const declined =
       instructor !== null && sameMember(actor.userId, instructor.id);
+    // Cancelled by someone else than its holder: the member must not miss it.
+    const byHolder =
+      !declined &&
+      (actor.userId != null
+        ? sameMember(actor.userId, user.id)
+        : !actor.isAdmin);
     await this.announce('Booking cancellation notification', () =>
       this.notificationService.create({
         user_id: user.id,
         notification_type: 'RESERVATION_CANCELLED',
         notification_date: new Date(),
+        ...(!byHolder && { priority: NOTIFICATION_PRIORITY_HIGH }),
         message: declined
           ? translate(language, 'notification.instructionDeclined', {
               instructor: fullName(instructor),
@@ -883,7 +947,9 @@ export class ReservationsService {
       }),
     );
     if (instructor) {
-      await this.tellInstructor('Cancelled', instructor, reservation);
+      await this.tellInstructor('Cancelled', instructor, reservation, {
+        highPriority: !declined,
+      });
     }
   }
 
@@ -985,11 +1051,25 @@ export class ReservationsService {
     return await queryBuilder.getMany();
   }
 
-  async findUserReservations(userId: number): Promise<Reservation[]> {
-    return this.reservationRepository.find({
-      where: { user: { id: userId } },
-      relations: ['aircraft', 'user', 'flights'],
+  // Every booking still to come, and the latest ones that are over: a
+  // member with years of history does not get all of it on each screen.
+  async findUserReservations(
+    userId: number,
+    now: Date = new Date(),
+  ): Promise<Reservation[]> {
+    const relations = ['aircraft', 'user', 'flights'];
+    const upcoming = await this.reservationRepository.find({
+      where: { user: { id: userId }, end_time: MoreThanOrEqual(now) },
+      relations,
+      order: { start_time: 'ASC' },
     });
+    const past = await this.reservationRepository.find({
+      where: { user: { id: userId }, end_time: LessThan(now) },
+      relations,
+      order: { start_time: 'DESC' },
+      take: PAST_BOOKINGS_LISTED,
+    });
+    return [...past.reverse(), ...upcoming];
   }
 
   async findReservationsBetween(
@@ -1004,10 +1084,16 @@ export class ReservationsService {
     });
   }
 
-  async findFinishedReservations(): Promise<Reservation[]> {
+  // Bookings that ended after `since` (the hourly reminder only looks at
+  // the last few days, not at the club's whole history).
+  async findFinishedReservations(
+    since: Date,
+    now: Date = new Date(),
+  ): Promise<Reservation[]> {
     return this.reservationRepository.find({
       where: {
-        end_time: LessThan(new Date()),
+        end_time: Between(since, now),
+        status: Not(ReservationStatus.CANCELLED),
       },
       relations: ['user', 'flights'],
     });

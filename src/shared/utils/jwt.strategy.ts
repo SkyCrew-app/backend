@@ -31,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException();
     }
 
-    const user = await this.usersService.findOneByEmail(payload.email);
+    const user = await this.usersService.findSessionUser(payload.email);
     // Unknown user, or the password changed since this session was opened.
     if (!isCurrentSession(payload, user)) {
       throw new UnauthorizedException();

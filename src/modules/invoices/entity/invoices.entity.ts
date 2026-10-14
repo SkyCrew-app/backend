@@ -15,6 +15,7 @@ export const INVOICE_NUMBER_UNIQUE_INDEX = 'UQ_invoices_invoice_number';
 
 @ObjectType()
 @Entity('invoices')
+@Index('IDX_invoices_user', ['user'])
 @Index(INVOICE_NUMBER_UNIQUE_INDEX, { synchronize: false })
 export class Invoice {
   @Field(() => Int)

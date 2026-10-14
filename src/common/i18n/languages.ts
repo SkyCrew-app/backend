@@ -54,3 +54,10 @@ const DATE_LOCALES: Record<Language, string> = { fr: 'fr-FR', en: 'en-GB' };
 
 export const formatDate = (language: Language, date: Date | string): string =>
   new Date(date).toLocaleDateString(DATE_LOCALES[language]);
+
+// An amount of money as a member reads it: "150,50 €", "€150.50".
+export const formatMoney = (language: Language, amount: number | string) =>
+  new Intl.NumberFormat(DATE_LOCALES[language], {
+    style: 'currency',
+    currency: 'EUR',
+  }).format(Number(amount ?? 0));
