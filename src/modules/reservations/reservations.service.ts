@@ -845,10 +845,13 @@ export class ReservationsService {
 
   // Cancels a booking and gives back what was charged for it, once: both
   // happen in one transaction, on a row locked for its duration.
+  // `alongside` is written in the same transaction (the course cancelled with
+  // its booking): either both hold or neither does.
   async delete(
     id: number,
     actor: BookingActor = MEMBER,
     now: Date = new Date(),
+    alongside?: (manager: EntityManager) => Promise<unknown>,
   ): Promise<void> {
     const { reservation, cents } = await this.inTransaction(async (manager) => {
       const reservation = (await lockRow(manager, 'reservations', id))
@@ -889,6 +892,7 @@ export class ReservationsService {
       if (!removed.affected) {
         throw localized(NotFoundException, 'error.reservation.notFound');
       }
+      await alongside?.(manager);
       return { reservation, cents };
     });
 
@@ -980,6 +984,25 @@ export class ReservationsService {
           ownerId: reservation.user?.id ?? null,
           instructorId: reservation.instructor?.id ?? null,
         }
+      : null;
+  }
+
+  // The course a booking is the aircraft of, if it is not cancelled.
+  async findCourseOf(
+    reservationId: number,
+  ): Promise<Pick<InstructionCourse, 'id' | 'startTime' | 'endTime'> | null> {
+    const course = await this.reservationRepository.manager.findOne(
+      InstructionCourse,
+      {
+        where: {
+          reservation: { id: reservationId },
+          status: Not(CourseStatus.CANCELED),
+        },
+        loadEagerRelations: false,
+      },
+    );
+    return course
+      ? { id: course.id, startTime: course.startTime, endTime: course.endTime }
       : null;
   }
 

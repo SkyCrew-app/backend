@@ -52,7 +52,7 @@ const memberTarget = (
   id: number,
   user?: { first_name?: string; last_name?: string; email?: string } | null,
 ) => ({
-  type: 'member',
+  type: 'member' as const,
   id,
   label:
     [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||

@@ -2,6 +2,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { InstructionCoursesResolver } from '../instruction-courses.resolver';
 import { InstructionCoursesService } from '../instruction-courses.service';
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 
@@ -33,8 +34,10 @@ const course = { id: 10, instructor: { id: 4 }, student: { id: 3 } } as any;
 describe('InstructionCoursesResolver', () => {
   let resolver: InstructionCoursesResolver;
   let service: Record<string, jest.Mock>;
+  let adminActions: { record: jest.Mock };
 
   beforeEach(async () => {
+    adminActions = { record: jest.fn().mockResolvedValue(undefined) };
     service = {
       findAll: jest.fn().mockResolvedValue([course]),
       findOne: jest.fn().mockResolvedValue(course),
@@ -57,6 +60,7 @@ describe('InstructionCoursesResolver', () => {
       providers: [
         InstructionCoursesResolver,
         { provide: InstructionCoursesService, useValue: service },
+        { provide: AdminActionsService, useValue: adminActions },
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -198,6 +202,59 @@ describe('InstructionCoursesResolver', () => {
         expect(service.validateCompetency).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('cancelling a course with its aircraft booking', () => {
+    const booked = {
+      ...course,
+      reservation: {
+        id: 77,
+        user: { id: 3, first_name: 'Emma', last_name: 'Girard' },
+        aircraft: { registration_number: 'F-GABC' },
+        start_time: new Date('2027-01-12T09:00:00Z'),
+        end_time: new Date('2027-01-12T10:00:00Z'),
+        charged_amount: 150,
+      },
+    };
+    const cancel = { id: 10, status: 'CANCELED', cancelBooking: true } as any;
+
+    beforeEach(() => {
+      service.findOne.mockResolvedValue(booked);
+      service.updateCourse.mockResolvedValue({
+        ...booked,
+        status: 'CANCELED',
+        reservation: null,
+      });
+    });
+
+    it('leaves a line in the log when an administrator cancels the booking of a member', async () => {
+      await resolver.updateCourse(cancel, admin);
+
+      expect(service.updateCourse).toHaveBeenCalledWith(10, cancel, admin);
+      expect(adminActions.record).toHaveBeenCalledWith(
+        admin,
+        'reservation.cancelled_for_member',
+        { type: 'reservation', id: 77, label: 'F-GABC, Emma Girard' },
+        expect.objectContaining({ memberId: 3, refundedAmount: 150 }),
+      );
+    });
+
+    it('passes the choice on when the course is deleted, and leaves the same line', async () => {
+      await resolver.deleteCourse(10, admin, true);
+
+      expect(service.deleteCourse).toHaveBeenCalledWith(10, true, admin);
+      expect(adminActions.record).toHaveBeenCalledWith(
+        admin,
+        'reservation.cancelled_for_member',
+        expect.objectContaining({ id: 77 }),
+        expect.objectContaining({ refundedAmount: 150 }),
+      );
+    });
+
+    it('leaves no line when the instructor of the course cancels it', async () => {
+      await resolver.updateCourse(cancel, instructor);
+      expect(adminActions.record).not.toHaveBeenCalled();
+    });
   });
 
   describe('rating a course', () => {

@@ -11,4 +11,9 @@ export class UpdateCourseInstructionInput extends PartialType(
 
   @Field(() => CourseStatus, { nullable: true })
   status?: CourseStatus;
+
+  // With a cancellation: also cancel the aircraft booking of the course,
+  // refunded to the student, as cancelling the booking itself would.
+  @Field(() => Boolean, { nullable: true })
+  cancelBooking?: boolean;
 }

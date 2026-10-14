@@ -339,7 +339,14 @@ export class InstructionCoursesService {
 
     // The id comes from the argument; who gives and takes the course, and
     // its rating, are handled apart.
-    const { instructorId, studentId, rating, feedback, ...fields } = input;
+    const {
+      instructorId,
+      studentId,
+      rating,
+      feedback,
+      cancelBooking,
+      ...fields
+    } = input;
     delete (fields as { id?: number }).id;
 
     if (
@@ -368,6 +375,15 @@ export class InstructionCoursesService {
     const nextEnd =
       fields.endTime ?? course.endTime ?? defaultCourseEnd(nextStart);
     const nextStatus = fields.status ?? course.status;
+    const cancels =
+      course.status !== CourseStatus.CANCELED &&
+      nextStatus === CourseStatus.CANCELED;
+    if (cancelBooking && !cancels) {
+      throw localized(
+        BadRequestException,
+        'error.course.cancelBookingWithoutCancelling',
+      );
+    }
 
     this.assertCoherent(nextInstructorId, nextStudentId, nextStart, nextEnd);
 
@@ -438,6 +454,21 @@ export class InstructionCoursesService {
       course.student = { id: studentId } as User;
     }
 
+    // Cancelled with its aircraft booking: the booking goes through its own
+    // cancellation (rules, refund, notices) and the course is saved in the
+    // same transaction. If the booking cannot be cancelled, neither is the
+    // course, and the refusal says why.
+    if (cancels && cancelBooking && booking) {
+      course.reservation = null;
+      await this.reservationsService.delete(
+        booking.id,
+        { isAdmin: isAdmin(requester), userId: requester?.id },
+        new Date(),
+        (manager) => manager.save(InstructionCourse, course),
+      );
+      return this.findOne(id);
+    }
+
     // A course moved in time takes its aircraft booking along, by as much
     // as its start and its end moved, through the booking rules and their
     // pricing. If the booking cannot move (taken slot, flight already
@@ -474,7 +505,13 @@ export class InstructionCoursesService {
   // Supprimer un cours. Only a course that left no trace is deleted: once it
   // took place or carries competencies, comments or a rating, it is part of
   // the student's training record and can only be cancelled.
-  async deleteCourse(id: number): Promise<boolean> {
+  // With `cancelBooking`, its aircraft booking is cancelled (and refunded)
+  // in the same transaction; if it cannot be, the course stays too.
+  async deleteCourse(
+    id: number,
+    cancelBooking = false,
+    requester?: SessionUser | null,
+  ): Promise<boolean> {
     const course = await this.findOne(id);
 
     const hasRecord =
@@ -486,6 +523,20 @@ export class InstructionCoursesService {
       !!course.feedback;
     if (hasRecord) {
       throw localized(ConflictException, 'error.course.hasRecord');
+    }
+
+    if (cancelBooking && course.reservation) {
+      let affected = 0;
+      await this.reservationsService.delete(
+        course.reservation.id,
+        { isAdmin: isAdmin(requester), userId: requester?.id },
+        new Date(),
+        async (manager) => {
+          affected =
+            (await manager.delete(InstructionCourse, { id })).affected ?? 0;
+        },
+      );
+      return affected > 0;
     }
 
     const result = await this.courseRepository.delete(id);

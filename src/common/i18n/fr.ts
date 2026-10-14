@@ -244,6 +244,8 @@ export const fr = {
     "Ce cours fait partie du dossier de formation de l'élève : il ne peut pas être supprimé. Passez-le au statut annulé si nécessaire.",
   'error.course.ratingOutOfRange':
     'La note doit être un nombre entier entre {{min}} et {{max}}',
+  'error.course.cancelBookingWithoutCancelling':
+    "Seule l'annulation d'un cours peut annuler aussi sa réservation d'avion",
   'error.course.notStarted': "Ce cours est annulé ou n'a pas encore commencé",
   'error.checklist.templateInactive':
     "Ce modèle de checklist n'est plus utilisé",

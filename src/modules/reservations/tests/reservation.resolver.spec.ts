@@ -46,6 +46,7 @@ describe('ReservationsResolver', () => {
     findFilteredReservations: jest.fn(),
     findUserReservations: jest.fn(),
     findRecentReservations: jest.fn(),
+    findCourseOf: jest.fn(),
   };
 
   const trace = { record: jest.fn() };
@@ -470,6 +471,33 @@ describe('ReservationsResolver', () => {
 
       expect(spy).toHaveBeenCalledTimes(1);
       spy.mockRestore();
+    });
+  });
+
+  describe('the course of a booking', () => {
+    const course = { id: 5, startTime: new Date('2027-01-12T09:00:00Z') };
+    const booked = {
+      id: 10,
+      user: { id: holder.id },
+      instructor: { id: 20 },
+    } as any;
+
+    beforeEach(() => mockService.findCourseOf.mockResolvedValue(course));
+
+    it.each([
+      ['its holder', holder],
+      ['its instructor', { id: 20, role: { role_name: 'Instructeur' } }],
+      ['an administrator', admin],
+    ])('is told to %s', async (_label, reader) => {
+      await expect(resolver.course(booked, reader as any)).resolves.toBe(
+        course,
+      );
+      expect(mockService.findCourseOf).toHaveBeenCalledWith(10);
+    });
+
+    it('is not told to anyone else', async () => {
+      await expect(resolver.course(booked, stranger)).resolves.toBeNull();
+      expect(mockService.findCourseOf).not.toHaveBeenCalled();
     });
   });
 

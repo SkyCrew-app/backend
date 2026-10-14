@@ -41,7 +41,7 @@ describe('seedDemoReservations', () => {
 
   it('fixes the price of every booking that holds, with its payment line', async () => {
     const { bookings, payments, invoices } = await seed();
-    const held = bookings.filter((booking) => booking.status !== 'cancelled');
+    const held = bookings;
     expect(held.length).toBeGreaterThan(0);
 
     for (const booking of held) {
@@ -109,17 +109,13 @@ describe('seedDemoReservations', () => {
     }
   });
 
-  it('charges nothing for a cancelled booking', async () => {
-    const { bookings, payments } = await seed();
-    const cancelled = bookings.filter(
-      (booking) => booking.status === 'cancelled',
-    );
-    expect(cancelled.length).toBeGreaterThan(0);
-    for (const booking of cancelled) {
-      expect(booking.charged_amount).toBeNull();
-      expect(
-        payments.some((payment) => payment.reservation_id === booking.id),
-      ).toBe(false);
+  // The API confirms a booking when it is made and deletes it when it is
+  // cancelled: the demo shows no other state.
+  it('only creates confirmed bookings, as the API does', async () => {
+    const { bookings } = await seed();
+    expect(bookings.length).toBeGreaterThan(0);
+    for (const booking of bookings) {
+      expect(booking.status).toBe('confirmed');
     }
   });
 

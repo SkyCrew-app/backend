@@ -25,8 +25,12 @@ import { User } from '../users/entity/users.entity';
 import { assertSelfOrRole, isAdmin } from '../../common/auth/access';
 import { FlightsService } from '../flights/flights.service';
 import { Flight } from '../flights/entity/flights.entity';
+import { ReservationCourse } from './dto/reservation-course.dto';
 import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
-import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
+import {
+  ADMIN_ACTION,
+  AdminActionName,
+} from '../../common/admin-actions/admin-actions';
 
 // Who may read whose flights, asked once per request and per pilot.
 const flightReaders = new WeakMap<object, Map<number, Promise<boolean>>>();
@@ -55,7 +59,7 @@ export class ReservationsResolver {
 
   private traceBooking(
     currentUser: User | undefined,
-    action: string,
+    action: AdminActionName,
     booking: Partial<Reservation> | null | undefined,
     reservationId: number,
     ownerId: number | null,
@@ -137,6 +141,31 @@ export class ReservationsResolver {
       );
     }
     return (await asked.get(key)) ? reservation.flights : [];
+  }
+
+  // The course a booking is the aircraft of, for those who fly or manage it
+  // (its holder, its instructor, an administrator); null for anyone else.
+  // The edit panel warns before a change of instructor detaches it.
+  @ResolveField(() => ReservationCourse, { name: 'course', nullable: true })
+  async course(
+    @Parent() reservation: Reservation,
+    @CurrentUser() currentUser?: User,
+  ): Promise<ReservationCourse | null> {
+    const crew =
+      reservation.user?.id != null
+        ? {
+            ownerId: reservation.user.id,
+            instructorId: reservation.instructor?.id ?? null,
+          }
+        : await this.reservationService.findCrewIds(reservation.id);
+    const concerned =
+      isAdmin(currentUser) ||
+      [crew?.ownerId, crew?.instructorId].some(
+        (id) => id != null && Number(id) === Number(currentUser?.id),
+      );
+    return concerned
+      ? this.reservationService.findCourseOf(reservation.id)
+      : null;
   }
 
   // Everyone sees the schedule, but only the holder of a reservation or an
