@@ -1,4 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import {
+  LICENCE_REMINDER_HIGH_PRIORITY_DAYS,
+  NOTIFICATION_PRIORITY_HIGH,
+} from '../notifications/notification-priority';
 import { License } from './entity/licenses.entity';
 import { LicensesService } from './licenses.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -111,6 +115,9 @@ export class LicenceRemindersService {
       notification_date: now,
       expiration_date: licence.expiration_date,
       is_read: false,
+      ...(daysLeft <= LICENCE_REMINDER_HIGH_PRIORITY_DAYS && {
+        priority: NOTIFICATION_PRIORITY_HIGH,
+      }),
     });
     await this.mailerService.sendMail(
       member.email,

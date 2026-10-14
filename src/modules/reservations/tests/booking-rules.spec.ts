@@ -13,6 +13,7 @@ import {
   hasValidLicence,
   mailDate,
   priceCents,
+  weeklyMaintenanceWindow,
 } from '../booking-rules';
 
 const keyOf = (run: () => void) => {
@@ -69,6 +70,57 @@ describe('booking rules', () => {
     expect(open('2027-07-18T08:00:00Z', '2027-07-18T09:00:00Z')).toBe(
       'error.reservation.clubClosedDay',
     );
+  });
+
+  it('keeps new bookings out of the weekly maintenance, from opening time for its length', () => {
+    // Monday 12 July 2027, 08:00-12:00 at the club (06:00-10:00 UTC).
+    const weekly = {
+      ...settings,
+      maintenanceDay: 'Lundi',
+      maintenanceDuration: 4,
+    };
+    const open = (start: string, end: string) =>
+      keyOf(() => assertClubOpen(weekly, new Date(start), new Date(end)));
+
+    expect(weeklyMaintenanceWindow(weekly)).toEqual({
+      weekday: 'monday',
+      from: 8 * 60,
+      to: 12 * 60,
+    });
+    expect(open('2027-07-12T09:00:00Z', '2027-07-12T10:30:00Z')).toBe(
+      'error.reservation.weeklyMaintenance',
+    );
+    expect(open('2027-07-12T06:00:00Z', '2027-07-12T07:00:00Z')).toBe(
+      'error.reservation.weeklyMaintenance',
+    );
+    // Right after it, and on another day.
+    expect(open('2027-07-12T10:00:00Z', '2027-07-12T11:00:00Z')).toBeNull();
+    expect(open('2027-07-13T07:00:00Z', '2027-07-13T08:00:00Z')).toBeNull();
+    // An English day name works too; no length, no window.
+    expect(
+      keyOf(() =>
+        assertClubOpen(
+          { ...weekly, maintenanceDay: 'Monday' },
+          new Date('2027-07-12T07:00:00Z'),
+          new Date('2027-07-12T08:00:00Z'),
+        ),
+      ),
+    ).toBe('error.reservation.weeklyMaintenance');
+    expect(
+      weeklyMaintenanceWindow({ ...weekly, maintenanceDuration: 0 }),
+    ).toBeNull();
+    const refusal = (() => {
+      try {
+        assertClubOpen(
+          weekly,
+          new Date('2027-07-12T07:00:00Z'),
+          new Date('2027-07-12T08:00:00Z'),
+        );
+      } catch (error) {
+        return translationOf(error);
+      }
+    })();
+    expect(refusal?.params).toEqual({ from: '08:00', to: '12:00' });
   });
 
   it('applies no opening hours when the settings define none', () => {

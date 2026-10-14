@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CronService } from '../cron.service';
+import { CronService, FINISHED_REMINDER_MAX_AGE_DAYS } from '../cron.service';
 import { InstructionCoursesService } from '../../instruction-courses/instruction-courses.service';
 import { LicensesService } from '../../licenses/licenses.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -385,11 +385,14 @@ describe('CronService', () => {
     });
 
     it('reports the month that just ended, to its last instant', async () => {
-      // Run on the 1st of November, shortly after midnight.
-      await service.generateMonthlyFinancialReport(new Date(2026, 10, 1, 0, 0));
+      // Run on the 1st of November, shortly after midnight at the club (Paris),
+      // whatever the clock of the machine running the test.
+      await service.generateMonthlyFinancialReport(
+        new Date('2026-11-01T00:05:00+01:00'),
+      );
 
-      const start = new Date(2026, 9, 1);
-      const end = new Date(new Date(2026, 10, 1).getTime() - 1);
+      const start = new Date('2026-10-01T00:00:00+02:00');
+      const end = new Date(new Date('2026-11-01T00:00:00+01:00').getTime() - 1);
       expect(financialService.aggregateRevenuesForPeriod).toHaveBeenCalledWith(
         start,
         end,
@@ -399,17 +402,21 @@ describe('CronService', () => {
         end,
       );
       // The 31st is inside the period.
-      expect(end.getDate()).toBe(31);
+      expect(end.toISOString()).toBe('2026-10-31T22:59:59.999Z');
       expect(financialService.createFinancialReport).toHaveBeenCalledWith(
         expect.objectContaining({ report_date: start }),
       );
     });
 
     it('goes back to December when run in January', async () => {
-      await service.generateMonthlyFinancialReport(new Date(2027, 0, 1));
+      await service.generateMonthlyFinancialReport(
+        new Date('2027-01-01T00:00:00+01:00'),
+      );
 
       expect(financialService.createFinancialReport).toHaveBeenCalledWith(
-        expect.objectContaining({ report_date: new Date(2026, 11, 1) }),
+        expect.objectContaining({
+          report_date: new Date('2026-12-01T00:00:00+01:00'),
+        }),
       );
     });
 
@@ -464,6 +471,23 @@ describe('CronService', () => {
           message: expect.stringContaining('réservation N°7'),
         }),
       );
+    });
+
+    it('only asks for the bookings that ended within the reminder window', async () => {
+      (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mockResolvedValue([]);
+      const before = Date.now();
+
+      await service.notificationFinishReservation();
+
+      const [since] = (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mock.calls.at(-1);
+      const windowMs = FINISHED_REMINDER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+      expect(since).toBeInstanceOf(Date);
+      expect(before - since.getTime()).toBeGreaterThanOrEqual(windowMs - 1000);
+      expect(before - since.getTime()).toBeLessThanOrEqual(windowMs + 1000);
     });
 
     it('should not notify twice for the same reservation', async () => {

@@ -10,3 +10,6 @@ export const RECENT_FLIGHTS_MAX = 50;
 // total of flight hours (they are in the aircraft), besides appearing in
 // their logbook as instruction given.
 export const INSTRUCTION_COUNTS_IN_INSTRUCTOR_TOTAL = true;
+
+// How many flights a member's own list carries (newest first).
+export const FLIGHTS_OF_MEMBER_LISTED = 200;

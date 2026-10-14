@@ -1534,6 +1534,35 @@ describe('UsersService', () => {
     });
   });
 
+  describe('getCompletedLessonIds', () => {
+    it('lit en une seule requête les leçons terminées d’un cours', async () => {
+      userProgressRepository.find.mockResolvedValue([
+        { lesson: { id: 3 }, completed: true },
+        { lesson: { id: 5 }, completed: true },
+        // Two rows for one lesson are counted once.
+        { lesson: { id: 5 }, completed: true },
+      ] as UserProgress[]);
+
+      await expect(
+        service.getCompletedLessonIds(8, [3, 4, 5]),
+      ).resolves.toEqual([3, 5]);
+      expect(userProgressRepository.find).toHaveBeenCalledTimes(1);
+      expect(userProgressRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            user: { id: 8 },
+            completed: true,
+          }),
+        }),
+      );
+    });
+
+    it('ne demande rien pour une liste vide', async () => {
+      await expect(service.getCompletedLessonIds(8, [])).resolves.toEqual([]);
+      expect(userProgressRepository.find).not.toHaveBeenCalled();
+    });
+  });
+
   describe('countCompletedLessons', () => {
     it('compte les leçons terminées, pas les évaluations', async () => {
       userProgressRepository.count = jest.fn().mockResolvedValue(4);

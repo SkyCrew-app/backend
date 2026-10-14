@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +11,10 @@ import { localized } from '../../common/i18n/localized-exception';
 import { normaliseLicenceNumber, settleLicenceState } from './licence-rules';
 import { CreateLicenseInput } from './dto/create-license.input';
 import { UpdateLicenseInput } from './dto/update-license.input';
+import {
+  AddMyLicenseInput,
+  UpdateMyLicenseInput,
+} from './dto/my-license.input';
 import { FileUpload } from 'graphql-upload-ts';
 import { UsersService } from '../users/users.service';
 import { saveUploadTo } from '../../common/uploads/save-upload';
@@ -31,6 +36,9 @@ export const holdersOfLicenceDocument = async (
     .map((licence) => licence.user?.id)
     .filter((id): id is number => id != null);
 };
+
+// The status of a licence a member entered or changed themselves.
+export const MEMBER_LICENCE_STATUS = 'pending';
 
 @Injectable()
 export class LicensesService {
@@ -143,6 +151,58 @@ export class LicensesService {
       await this.assertNumberFree(license);
     }
     return this.save(license);
+  }
+
+  // A member's own licences, the most recent first.
+  async findOfMember(userId: number): Promise<License[]> {
+    return this.licenseRepository.find({
+      where: { user: { id: userId } },
+      order: { id: 'DESC' },
+    });
+  }
+
+  // A licence a member enters for themselves waits for an administrator:
+  // pending, not valid, until validate().
+  async addForMember(
+    userId: number,
+    input: AddMyLicenseInput,
+    documentsUrl: string[] | null,
+  ): Promise<License> {
+    return this.create({
+      ...input,
+      user_id: userId,
+      status: MEMBER_LICENCE_STATUS,
+      ...(documentsUrl && { documents_url: documentsUrl }),
+    } as CreateLicenseInput);
+  }
+
+  // A member changes their own licence only. Whatever it was, it waits for
+  // an administrator again (an expired date stays expired).
+  async updateForMember(
+    userId: number,
+    input: UpdateMyLicenseInput,
+    documentsUrl: string[] | null,
+  ): Promise<License> {
+    const licence = await this.findOne(input.id);
+    if (Number(licence.user?.id) !== Number(userId)) {
+      throw localized(ForbiddenException, 'error.licence.notYours');
+    }
+    return this.update({
+      ...input,
+      status: MEMBER_LICENCE_STATUS,
+      ...(documentsUrl && { documents_url: documentsUrl }),
+    } as UpdateLicenseInput);
+  }
+
+  // An administrator validates a licence a member entered. Returns the
+  // licence and its status before.
+  async validate(
+    id: number,
+  ): Promise<{ licence: License; previousStatus: string }> {
+    const licence = await this.findOne(id);
+    const previousStatus = licence.status;
+    Object.assign(licence, settleLicenceState(licence, { status: 'active' }));
+    return { licence: await this.save(licence), previousStatus };
   }
 
   async remove(id: number): Promise<boolean> {

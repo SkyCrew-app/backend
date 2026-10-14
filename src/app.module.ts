@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { withHttpErrorCode } from './common/graphql/error-codes';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
@@ -121,6 +122,7 @@ import { MemberDepartureModule } from './modules/users/member-departure.module';
         path: process.env.GRAPHQL_ENDPOINT || '/graphql',
         resolvers: { JSON: GraphQLJSON },
         plugins: [metricsPlugin],
+        formatError: withHttpErrorCode,
         validationRules: [
           queryLimitsRule({
             // Only the development explorer reads the schema.

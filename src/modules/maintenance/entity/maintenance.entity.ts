@@ -1,11 +1,18 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  Index,
+} from 'typeorm';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
 import { MaintenanceType } from './maintenance-type.enum';
 
 @ObjectType()
 @Entity('maintenance')
+@Index('IDX_maintenance_aircraft', ['aircraft'])
 export class Maintenance {
   @Field(() => Int)
   @PrimaryGeneratedColumn()

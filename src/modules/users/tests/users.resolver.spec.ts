@@ -237,7 +237,7 @@ describe('UsersResolver', () => {
         'foo@bar.com',
         updateInput,
         null,
-        { asAdmin: true },
+        expect.objectContaining({ asAdmin: true }),
       );
       expect(result).toBe(updatedUser);
     });
@@ -260,7 +260,7 @@ describe('UsersResolver', () => {
         'foo@bar.com',
         updateInput,
         '/app/uploads/tmp/photo-0a1b2c3d4e5f.png',
-        { asAdmin: true },
+        expect.objectContaining({ asAdmin: true }),
       );
       expect(result).toBe(updatedUser);
     });

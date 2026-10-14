@@ -30,6 +30,13 @@ export const chargedRevenue = (
     0,
   ) / 100;
 
+// Revenue only needs what each booking was charged: neither its member nor
+// its aircraft (both eager) are loaded for a year of bookings.
+const ONLY_CHARGED_AMOUNT = {
+  select: { id: true, charged_amount: true },
+  loadEagerRelations: false,
+} as const;
+
 // Manual entries that are money handed to the club. A "correction" moves a
 // balance without any money coming in.
 export const CASH_METHODS = ['cash', 'cheque', 'transfer'];
@@ -225,6 +232,7 @@ export class FinancialService {
         status: ReservationStatus.CONFIRMED,
         start_time: Between(start, end),
       },
+      ...ONLY_CHARGED_AMOUNT,
     });
 
     return chargedRevenue(reservations);
@@ -282,6 +290,7 @@ export class FinancialService {
         status: ReservationStatus.CONFIRMED,
         start_time: Between(startDate, endDate),
       },
+      ...ONLY_CHARGED_AMOUNT,
     });
 
     const revenueForecast = chargedRevenue(reservations);

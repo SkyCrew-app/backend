@@ -20,6 +20,7 @@ import {
   INSTRUCTION_COUNTS_IN_INSTRUCTOR_TOTAL,
   MAX_FLIGHT_HOURS,
   RECENT_FLIGHTS_MAX,
+  FLIGHTS_OF_MEMBER_LISTED,
 } from './flight-rules';
 import { CreateFlightInput } from './dto/create-flight.input';
 import { UpdateFlightInput } from './dto/update-flight.input';
@@ -408,7 +409,7 @@ export class FlightsService {
       relations: ['user', 'reservation', 'reservation.aircraft'],
     });
     if (!flight) {
-      throw new NotFoundException(`Flight with ID ${id} not found`);
+      throw localized(NotFoundException, 'error.flight.notFound');
     }
     if (
       !isAdmin(requester) &&
@@ -425,7 +426,7 @@ export class FlightsService {
       relations: ['user', 'instructor', 'reservation'],
     });
     if (!flight) {
-      throw new NotFoundException(`Flight with ID ${id} not found`);
+      throw localized(NotFoundException, 'error.flight.notFound');
     }
     return flight;
   }
@@ -600,7 +601,7 @@ export class FlightsService {
       relations: FLIGHT_RELATIONS,
     });
     if (!flight) {
-      throw new NotFoundException(`Flight with ID ${id} not found`);
+      throw localized(NotFoundException, 'error.flight.notFound');
     }
 
     const {
@@ -712,7 +713,7 @@ export class FlightsService {
     });
 
     if (!flight) {
-      throw new NotFoundException(`Flight with ID ${id} not found`);
+      throw localized(NotFoundException, 'error.flight.notFound');
     }
 
     if (!isAdmin(requester)) {
@@ -839,10 +840,13 @@ export class FlightsService {
     );
   }
 
+  // The member's latest flights and flight plans, newest first.
   async getFlightsByUser(user_id: number): Promise<Flight[]> {
     return this.flightsRepository.find({
       where: { user: { id: user_id } },
       relations: ['user', 'instructor', 'reservation'],
+      order: { id: 'DESC' },
+      take: FLIGHTS_OF_MEMBER_LISTED,
     });
   }
 

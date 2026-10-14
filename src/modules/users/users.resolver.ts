@@ -43,6 +43,10 @@ import { normalizeEmail } from '../../common/validation/email';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
 import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
+import {
+  InstructorRoleChangeOutcome,
+  InstructorRoleChangeService,
+} from './instructor-role-change.service';
 
 const memberTarget = (
   id: number,
@@ -62,6 +66,7 @@ export class UsersResolver {
   constructor(
     private readonly usersService: UsersService,
     private readonly adminActions: AdminActionsService,
+    private readonly instructorRoleChange?: InstructorRoleChangeService,
   ) {}
 
   @Query(() => [User])
@@ -212,21 +217,44 @@ export class UsersResolver {
         ? await this.usersService.findOneByEmail(targetEmail)
         : null;
 
+    // An instructor's bookings and courses do not outlive the role: the
+    // change is refused while they exist, or settles them when confirmed.
+    let settled: InstructorRoleChangeOutcome | null = null;
     const updated = await this.usersService.updateUser(
       targetEmail,
       updateUserInput,
       imagePath,
-      { asAdmin },
+      {
+        asAdmin,
+        beforeRoleChange: async (member, role) => {
+          if (!this.instructorRoleChange) {
+            return;
+          }
+          settled = await this.instructorRoleChange.settle(
+            member,
+            role,
+            updateUserInput.cancelInstructionCommitments === true,
+          );
+        },
+      },
     );
 
     const previousRole = previous?.role?.role_name ?? null;
     const newRole = updated?.role?.role_name ?? null;
     if (previous && newRole !== previousRole) {
+      const outcome = settled as InstructorRoleChangeOutcome | null;
       await this.adminActions.record(
         currentUser,
         ADMIN_ACTION.MEMBER_ROLE_CHANGED,
         memberTarget(updated.id, updated),
-        { from: previousRole, to: newRole },
+        {
+          from: previousRole,
+          to: newRole,
+          ...(outcome &&
+            (outcome.cancelledInstructionReservations > 0 ||
+              outcome.cancelledCourses > 0) &&
+            outcome),
+        },
       );
     }
     return updated;
@@ -523,5 +551,17 @@ export class UserProgressResolver {
   ): Promise<boolean> {
     await this.assertMayReadProgress(currentUser, userId);
     return this.usersService.getUserProgress(userId, lessonId);
+  }
+
+  // The lessons of a list (a course) the member completed, in one request.
+  @Query(() => [Int], { name: 'getCompletedLessons' })
+  @UseGuards(JwtAuthGuard)
+  async getCompletedLessons(
+    @Args('userId', { type: () => Int }) userId: number,
+    @Args('lessonIds', { type: () => [Int] }) lessonIds: number[],
+    @CurrentUser() currentUser?: User,
+  ): Promise<number[]> {
+    await this.assertMayReadProgress(currentUser, userId);
+    return this.usersService.getCompletedLessonIds(userId, lessonIds);
   }
 }

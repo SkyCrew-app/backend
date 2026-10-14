@@ -5,11 +5,14 @@ export class CreateIncidentInput {
   @Field(() => Int)
   aircraft_id: number;
 
-  @Field(() => Int)
-  flight_id: number;
+  // Optional: an incident may be seen on the ground, without a flight. When
+  // given, it is a flight of the member reporting (staff: anybody's).
+  @Field(() => Int, { nullable: true })
+  flight_id?: number | null;
 
-  @Field(() => Int)
-  user_id: number;
+  // Staff only: who the incident is recorded for. Ignored for a member.
+  @Field(() => Int, { nullable: true })
+  user_id?: number | null;
 
   @Field()
   incident_date: Date;

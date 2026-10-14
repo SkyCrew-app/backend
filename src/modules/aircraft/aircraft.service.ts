@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Not, Repository } from 'typeorm';
+import { MoreThan, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import { Aircraft } from './entity/aircraft.entity';
 import { CreateAircraftInput } from './dto/create-aircraft.input';
 import { AvailabilityStatus } from './entity/aircraft.entity';
@@ -21,6 +21,16 @@ import {
   groundsAircraftAt,
 } from '../maintenance/maintenance-rules';
 import { localized } from '../../common/i18n/localized-exception';
+
+// The fleet history shows the bookings of the last months (and those to
+// come), not the club's whole history.
+export const FLEET_HISTORY_MONTHS = 12;
+
+export const fleetHistoryStart = (now: Date = new Date()): Date => {
+  const start = new Date(now);
+  start.setMonth(start.getMonth() - FLEET_HISTORY_MONTHS);
+  return start;
+};
 
 // An aircraft held by a maintenance is unavailable whatever its stored
 // status says. Nothing is written: the status comes back when the
@@ -48,9 +58,10 @@ export class AircraftService {
     private readonly aircraftRepository: Repository<Aircraft>,
   ) {}
 
+  // Without the bookings: the resolver loads them when they are asked for.
   async findAll(): Promise<Aircraft[]> {
     const aircraft = await this.aircraftRepository.find({
-      relations: ['reservations', 'maintenances'],
+      relations: ['maintenances'],
     });
     return aircraft.map((item) => withEffectiveAvailability(item));
   }
@@ -58,7 +69,14 @@ export class AircraftService {
   findOne(aircraftId: number): Promise<Aircraft> {
     return this.aircraftRepository.findOneOrFail({
       where: { id: aircraftId },
-      relations: ['reservations', 'maintenances'],
+      relations: ['maintenances'],
+    });
+  }
+
+  reservationsOf(aircraftId: number): Promise<Reservation[]> {
+    return this.aircraftRepository.manager.find(Reservation, {
+      where: { aircraft: { id: aircraftId } },
+      order: { start_time: 'ASC' },
     });
   }
 
@@ -208,8 +226,26 @@ export class AircraftService {
     return this.aircraftRepository.save(aircraft);
   }
 
-  async aircraftHistory(options?: any): Promise<Aircraft[]> {
-    const aircraft = await this.aircraftRepository.find(options);
+  // With `bookingsSince`, each aircraft comes with its bookings from that
+  // date on (and their member), loaded in one query.
+  async aircraftHistory(
+    options: { relations?: string[]; bookingsSince?: Date } = {},
+  ): Promise<Aircraft[]> {
+    const { bookingsSince, ...findOptions } = options;
+    const aircraft = await this.aircraftRepository.find(findOptions);
+    if (bookingsSince) {
+      const bookings = await this.aircraftRepository.manager.find(Reservation, {
+        where: { start_time: MoreThanOrEqual(bookingsSince) },
+        relations: ['aircraft', 'user'],
+        loadEagerRelations: false,
+        order: { start_time: 'ASC' },
+      });
+      for (const item of aircraft) {
+        item.reservations = bookings.filter(
+          (booking) => Number(booking.aircraft?.id) === Number(item.id),
+        );
+      }
+    }
     return aircraft.map((item) => withEffectiveAvailability(item));
   }
 

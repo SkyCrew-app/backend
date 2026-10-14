@@ -1,5 +1,14 @@
-import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
-import { AircraftService } from './aircraft.service';
+import {
+  Resolver,
+  Query,
+  Mutation,
+  Args,
+  Int,
+  Parent,
+  ResolveField,
+} from '@nestjs/graphql';
+import { Reservation } from '../reservations/entity/reservations.entity';
+import { AircraftService, fleetHistoryStart } from './aircraft.service';
 import { Aircraft, AvailabilityStatus } from './entity/aircraft.entity';
 import { CreateAircraftInput } from './dto/create-aircraft.input';
 import { FileUpload, GraphQLUpload } from 'graphql-upload-ts';
@@ -66,6 +75,15 @@ export class AircraftResolver {
       },
       { from, to },
     );
+  }
+
+  // The bookings of an aircraft are loaded only when a query asks for them:
+  // the fleet list does not, and they are the whole history.
+  @ResolveField('reservations', () => [Reservation])
+  reservations(@Parent() aircraft: Aircraft): Promise<Reservation[]> {
+    return aircraft.reservations
+      ? Promise.resolve(aircraft.reservations)
+      : this.aircraftService.reservationsOf(aircraft.id);
   }
 
   @Query(() => [Aircraft], { name: 'getAircrafts' })
@@ -146,12 +164,8 @@ export class AircraftResolver {
   @UseGuards(JwtAuthGuard)
   async getHistoryAircraft(): Promise<Aircraft[]> {
     return this.aircraftService.aircraftHistory({
-      relations: [
-        'reservations',
-        'maintenances',
-        'reservations.user',
-        'maintenances.technician',
-      ],
+      relations: ['maintenances', 'maintenances.technician'],
+      bookingsSince: fleetHistoryStart(),
     });
   }
 

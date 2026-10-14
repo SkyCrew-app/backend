@@ -46,7 +46,8 @@ describe('AircraftService', () => {
   it('findAll devrait récupérer toutes les entités', async () => {
     await expect(service.findAll()).resolves.toEqual([]);
     expect(repo.find).toHaveBeenCalledWith({
-      relations: ['reservations', 'maintenances'],
+      // Bookings are resolved on demand (AircraftResolver.reservations).
+      relations: ['maintenances'],
     });
   });
 

@@ -11,6 +11,7 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { User } from '../../users/entity/users.entity';
@@ -51,6 +52,10 @@ export const RESERVATION_TIME_ORDER_CHECK = 'CHK_reservations_time_order';
 
 @ObjectType()
 @Entity('reservations')
+@Index('IDX_reservations_user_start', ['user', 'start_time'])
+@Index('IDX_reservations_instructor_start', ['instructor', 'start_time'])
+@Index('IDX_reservations_start_time', ['start_time'])
+@Index('IDX_reservations_end_time', ['end_time'])
 export class Reservation {
   @Field(() => Int)
   @PrimaryGeneratedColumn()

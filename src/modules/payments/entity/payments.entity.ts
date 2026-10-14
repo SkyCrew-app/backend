@@ -1,5 +1,11 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  Index,
+} from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Invoice } from '../../invoices/entity/invoices.entity';
 
@@ -38,6 +44,10 @@ const asNumber = {
 
 @ObjectType()
 @Entity('payments')
+@Index('IDX_payments_user_date', ['user', 'payment_date'])
+@Index('IDX_payments_date', ['payment_date'])
+@Index('IDX_payments_reservation', ['reservation_id'])
+@Index('IDX_payments_invoice', ['invoice'])
 export class Payment {
   @Field(() => Int)
   @PrimaryGeneratedColumn()

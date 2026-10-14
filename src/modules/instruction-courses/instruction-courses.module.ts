@@ -10,6 +10,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { UserProgress } from '../users/entity/user-progress.entity';
 import { ELearningModule } from '../e-learning/e-learning.module';
 import { Lesson } from '../e-learning/entity/lesson.entity';
+import { ReservationsModule } from '../reservations/reservations.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { Lesson } from '../e-learning/entity/lesson.entity';
     UsersModule,
     NotificationsModule,
     ELearningModule,
+    ReservationsModule,
   ],
   providers: [InstructionCoursesService, InstructionCoursesResolver],
   exports: [InstructionCoursesService],

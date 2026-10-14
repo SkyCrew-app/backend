@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { InstructorRoleChangeService } from '../instructor-role-change.service';
 import { UsersResolver, UserProgressResolver } from '../users.resolver';
 import { UsersService } from '../users.service';
 import { EvalService } from '../../eval/eval.service';
@@ -56,6 +57,7 @@ describe('Users authorization', () => {
       markLessonCompleted: jest.fn(),
       getEvaluationResults: jest.fn().mockResolvedValue([]),
       getUserProgress: jest.fn().mockResolvedValue(true),
+      getCompletedLessonIds: jest.fn().mockResolvedValue([1]),
       // By default the instructor has no course with the member read.
       isInstructorOf: jest.fn().mockResolvedValue(false),
       setActive: jest.fn().mockResolvedValue({}),
@@ -69,6 +71,10 @@ describe('Users authorization', () => {
         {
           provide: AdminActionsService,
           useValue: { record: jest.fn() },
+        },
+        {
+          provide: InstructorRoleChangeService,
+          useValue: { settle: jest.fn() },
         },
         UsersResolver,
         UserProgressResolver,
@@ -133,7 +139,7 @@ describe('Users authorization', () => {
         'pilot@example.com',
         { first_name: 'X' },
         null,
-        { asAdmin: false },
+        expect.objectContaining({ asAdmin: false }),
       );
     });
 
@@ -148,7 +154,7 @@ describe('Users authorization', () => {
         'marie@example.com',
         { email: 'marie@example.com', roleId: 2 },
         null,
-        { asAdmin: true },
+        expect.objectContaining({ asAdmin: true }),
       );
     });
   });
@@ -200,6 +206,10 @@ describe('Users authorization', () => {
         (caller) => progress.getUserEvaluationResults(7, caller),
       ],
       ['getUserProgress', (caller) => progress.getUserProgress(7, 1, caller)],
+      [
+        'getCompletedLessons',
+        (caller) => progress.getCompletedLessons(7, [1, 2], caller),
+      ],
     ];
 
     it.each(progressReads)('%s refuses another member', async (_name, call) => {

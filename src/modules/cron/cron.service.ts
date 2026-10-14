@@ -13,9 +13,18 @@ import {
 } from '../reservations/entity/reservations.entity';
 import { languageOf } from '../../common/i18n/languages';
 import {
+  CLUB_TIME_ZONE,
+  clubDayStart,
+  clubMoment,
+  clubMonthStart,
+} from '../reservations/booking-rules';
+import {
   translate,
   translateInEveryLanguage,
 } from '../../common/i18n/translate';
+
+// The jobs run on the club's clock (midnight in Paris), not the server's.
+const CLUB_SCHEDULE = { timeZone: CLUB_TIME_ZONE };
 
 // A deactivated member is no longer written to: no reminder, no e-mail.
 // Their bookings and licences are left as they are.
@@ -39,7 +48,7 @@ export class CronService {
   ) {}
 
   // Vérification quotidienne des statuts des cours
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, CLUB_SCHEDULE)
   async handleCourseStatusUpdate() {
     this.logger.log('Vérification quotidienne des statuts des cours...');
     let expiredCourses: InstructionCourse[];
@@ -90,7 +99,7 @@ export class CronService {
 
   // Vérification quotidienne des licences : celles dont la date est passée
   // sont marquées expirées, puis les rappels avant expiration sont envoyés.
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, CLUB_SCHEDULE)
   async handleLicenseExpiration(now: Date = new Date()) {
     try {
       // Only the licences whose date has passed: 0 days ahead.
@@ -148,7 +157,7 @@ export class CronService {
 
   // Le 1er du mois à 8 h : la liste des licences qui expirent bientôt,
   // envoyée aux administrateurs.
-  @Cron('0 8 1 * *')
+  @Cron('0 8 1 * *', CLUB_SCHEDULE)
   async sendLicenceDigest(now: Date = new Date()) {
     try {
       const sent = await this.licenceReminders.sendAdminDigest(now);
@@ -164,16 +173,14 @@ export class CronService {
   }
 
   // Vérification quotidienne des réservations pour demain
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, CLUB_SCHEDULE)
   async handleReservationNotifications() {
     this.logger.log('Début de la vérification des réservations pour demain...');
 
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const startOfTomorrow = new Date(tomorrow);
-    startOfTomorrow.setHours(0, 0, 0, 0);
-    const endOfTomorrow = new Date(tomorrow);
-    endOfTomorrow.setHours(23, 59, 59, 999);
+    // Tomorrow at the club, whatever the server's time zone.
+    const now = new Date();
+    const startOfTomorrow = clubDayStart(now, 1);
+    const endOfTomorrow = new Date(clubDayStart(now, 2).getTime() - 1);
 
     const reservations: Reservation[] =
       await this.reservationsService.findReservationsBetween(
@@ -252,12 +259,13 @@ export class CronService {
   // Agrégation financière mensuelle : le mois qui vient de se terminer.
   // Running it again for the same month refreshes its report instead of
   // adding a second one.
-  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_1ST_DAY_OF_MONTH_AT_MIDNIGHT, CLUB_SCHEDULE)
   async generateMonthlyFinancialReport(now: Date = new Date()) {
     this.logger.log('Démarrage de l’agrégation financière mensuelle.');
 
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    // The month that just ended at the club.
+    const startOfMonth = clubMonthStart(now, -1);
+    const startOfNextMonth = clubMonthStart(now, 0);
     // The aggregations take both bounds in: the last instant of the month.
     const endOfMonth = new Date(startOfNextMonth.getTime() - 1);
 
@@ -275,8 +283,8 @@ export class CronService {
     const existing = (reports ?? []).find((report) => {
       const date = new Date(report.report_date);
       return (
-        date.getFullYear() === startOfMonth.getFullYear() &&
-        date.getMonth() === startOfMonth.getMonth()
+        clubMoment(date).day.slice(0, 7) ===
+        clubMoment(startOfMonth).day.slice(0, 7)
       );
     });
 
@@ -302,12 +310,12 @@ export class CronService {
   }
 
   // Notification de fin de réservation
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_HOUR, CLUB_SCHEDULE)
   async notificationFinishReservation() {
-    const reservations =
-      await this.reservationsService.findFinishedReservations();
     const oldest =
       Date.now() - FINISHED_REMINDER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+    const reservations =
+      await this.reservationsService.findFinishedReservations(new Date(oldest));
 
     for (const reservation of reservations) {
       if (!reservation.user || isDeactivated(reservation.user)) continue;

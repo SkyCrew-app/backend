@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, Between, LessThan, MoreThan } from 'typeorm';
+import { Repository, Between, LessThan, MoreThan, Not } from 'typeorm';
 import { ReservationsService } from '../reservations.service';
 import {
   Reservation,
@@ -219,16 +219,20 @@ describe('ReservationsService', () => {
 
   describe('findUserReservations', () => {
     it('should return reservations for a specific user', async () => {
-      const mockReservations = [{ id: 1, user: { id: 1 } }];
-      mockReservationRepository.find.mockResolvedValue(mockReservations);
+      // Upcoming bookings, then the latest past ones (see query-weight).
+      mockReservationRepository.find
+        .mockResolvedValueOnce([{ id: 2, user: { id: 1 } }])
+        .mockResolvedValueOnce([{ id: 1, user: { id: 1 } }]);
 
       const result = await service.findUserReservations(1);
 
-      expect(mockReservationRepository.find).toHaveBeenCalledWith({
-        where: { user: { id: 1 } },
-        relations: ['aircraft', 'user', 'flights'],
-      });
-      expect(result).toEqual(mockReservations);
+      expect(mockReservationRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ user: { id: 1 } }),
+          relations: ['aircraft', 'user', 'flights'],
+        }),
+      );
+      expect(result.map((r) => r.id)).toEqual([1, 2]);
     });
   });
 
@@ -257,11 +261,15 @@ describe('ReservationsService', () => {
       const mockReservations = [{ id: 1 }];
       mockReservationRepository.find.mockResolvedValue(mockReservations);
 
-      const result = await service.findFinishedReservations();
+      const since = new Date('2026-10-01T00:00:00Z');
+      const now = new Date('2026-10-08T00:00:00Z');
+      const result = await service.findFinishedReservations(since, now);
 
+      // Only the bookings that ended since then, not the whole history.
       expect(mockReservationRepository.find).toHaveBeenCalledWith({
         where: {
-          end_time: LessThan(expect.any(Date)),
+          end_time: Between(since, now),
+          status: Not(ReservationStatus.CANCELLED),
         },
         relations: ['user', 'flights'],
       });

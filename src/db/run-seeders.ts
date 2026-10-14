@@ -11,7 +11,10 @@ import { seedDemoFlights } from './demo/demo-flights.seeder';
 import { seedDemoMaintenance } from './demo/demo-maintenance.seeder';
 import { seedDemoIncidents } from './demo/demo-incidents.seeder';
 import { seedDemoLicenses } from './demo/demo-licenses.seeder';
-import { seedDemoInvoicesAndPayments } from './demo/demo-invoices.seeder';
+import {
+  numberDemoInvoices,
+  seedDemoInvoicesAndPayments,
+} from './demo/demo-invoices.seeder';
 import { seedDemoArticles } from './demo/demo-articles.seeder';
 import { seedDemoELearning } from './demo/demo-elearning.seeder';
 import { seedDemoNotifications } from './demo/demo-notifications.seeder';
@@ -72,12 +75,18 @@ async function bootstrap() {
 
       const users = await seedDemoUsers(dataSource);
       const aircraft = await seedDemoAircraft(dataSource);
-      const reservations = await seedDemoReservations(dataSource, users, aircraft);
+      const reservations = await seedDemoReservations(
+        dataSource,
+        users,
+        aircraft,
+      );
       await seedDemoFlights(dataSource, flightsService, reservations);
       await seedDemoMaintenance(dataSource, users, aircraft);
       await seedDemoIncidents(dataSource, users, aircraft);
       await seedDemoLicenses(dataSource, users);
       await seedDemoInvoicesAndPayments(dataSource, users);
+      // Booking and demo invoices alike, once they are all written.
+      await numberDemoInvoices(dataSource);
       await seedDemoArticles(dataSource);
       await seedDemoELearning(dataSource);
       await seedDemoNotifications(dataSource, users);

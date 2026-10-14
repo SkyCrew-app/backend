@@ -394,6 +394,38 @@ describe('Bookings and money', () => {
       return { world, booking, change };
     };
 
+    it('takes the flight plans not closed yet along when the booking moves', async () => {
+      const { world, booking, change } = await booked();
+      const planned = {
+        departure_time: SLOT.start_time,
+        arrival_time: new Date(SLOT.start_time.getTime() + 0.5 * HOUR),
+      };
+      world.database.flights.push(
+        { id: 5, reservationId: booking.id, ...planned },
+        { id: 6, reservationId: 999, ...planned },
+      );
+
+      await change({
+        start_time: new Date(SLOT.start_time.getTime() + 2 * HOUR),
+        end_time: new Date(SLOT.end_time.getTime() + 2 * HOUR),
+      });
+
+      const [moved, other] = world.database.flights;
+      expect(moved.departure_time).toEqual(
+        new Date(SLOT.start_time.getTime() + 2 * HOUR),
+      );
+      expect(moved.arrival_time).toEqual(
+        new Date(SLOT.start_time.getTime() + 2.5 * HOUR),
+      );
+      expect(other.departure_time).toEqual(SLOT.start_time);
+
+      // Made longer only: the plan stays where it was.
+      await change({ end_time: new Date(SLOT.end_time.getTime() + 3 * HOUR) });
+      expect(world.database.flights[0].departure_time).toEqual(
+        new Date(SLOT.start_time.getTime() + 2 * HOUR),
+      );
+    });
+
     it('charges the difference when the booking is made longer', async () => {
       const { world, change } = await booked();
 

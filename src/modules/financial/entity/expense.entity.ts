@@ -1,9 +1,16 @@
 import { ObjectType, Field, Int, Float } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  Index,
+} from 'typeorm';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 
 @ObjectType()
 @Entity('expenses')
+@Index('IDX_expenses_date', ['expense_date'])
 export class Expense {
   @Field(() => Int)
   @PrimaryGeneratedColumn()
