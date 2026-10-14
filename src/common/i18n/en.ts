@@ -232,6 +232,8 @@ export const en: Record<TranslationKey, string> = {
     "This course is part of the student's training record: it cannot be deleted. Set it to cancelled if needed.",
   'error.course.ratingOutOfRange':
     'The rating must be a whole number between {{min}} and {{max}}',
+  'error.course.cancelBookingWithoutCancelling':
+    'Only cancelling a course can also cancel its aircraft booking',
   'error.course.notStarted': 'This course is cancelled or has not started yet',
   'error.checklist.templateInactive':
     'This checklist template is no longer in use',

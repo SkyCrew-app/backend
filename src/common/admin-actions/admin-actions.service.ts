@@ -5,6 +5,8 @@ import { AdminAction } from './admin-action.entity';
 import {
   ADMIN_ACTIONS_MAX_PAGE_SIZE,
   ADMIN_ACTIONS_PAGE_SIZE,
+  AdminActionName,
+  AdminTargetType,
   sanitizeSummary,
 } from './admin-actions';
 
@@ -16,8 +18,7 @@ export interface AdminActor {
 }
 
 export interface AdminActionTarget {
-  // 'member', 'payment', 'settings', 'incident', 'role'…
-  type: string;
+  type: AdminTargetType;
   id?: number | string | null;
   label?: string | null;
 }
@@ -65,7 +66,7 @@ export class AdminActionsService {
   // and does not undo what the administrator did.
   async record(
     actor: AdminActor | null | undefined,
-    action: string,
+    action: AdminActionName,
     target: AdminActionTarget,
     summary?: Record<string, unknown> | null,
   ): Promise<void> {

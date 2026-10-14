@@ -22,7 +22,10 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { isAdmin, SessionUser } from '../../common/auth/access';
 import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
-import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
+import {
+  ADMIN_ACTION,
+  AdminActionName,
+} from '../../common/admin-actions/admin-actions';
 import { languageOf } from '../../common/i18n/languages';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
@@ -60,7 +63,7 @@ export class FlightsResolver {
   // the administrators' log, on top of the flight's own amendment trail.
   private traceClosedFlight(
     currentUser: SessionUser | undefined,
-    action: string,
+    action: AdminActionName,
     flight: Flight,
   ): Promise<void> {
     const pilot = [flight.user?.first_name, flight.user?.last_name]

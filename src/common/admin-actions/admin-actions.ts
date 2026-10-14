@@ -34,6 +34,22 @@ export type AdminActionName = (typeof ADMIN_ACTION)[keyof typeof ADMIN_ACTION];
 
 export const ADMIN_ACTION_NAMES: string[] = Object.values(ADMIN_ACTION);
 
+// What an action is about. The interface names each action and each target
+// (frontend/src/lib/admin-actions.ts): a new one needs its wording there.
+export const ADMIN_TARGET_TYPES = [
+  'member',
+  'payment',
+  'settings',
+  'incident',
+  'role',
+  'reservation',
+  'flight',
+  'aircraft',
+  'licence',
+] as const;
+
+export type AdminTargetType = (typeof ADMIN_TARGET_TYPES)[number];
+
 export const ADMIN_ACTIONS_PAGE_SIZE = 25;
 export const ADMIN_ACTIONS_MAX_PAGE_SIZE = 100;
 
