@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.17.0](https://github.com/SkyCrew-app/backend/compare/2.16.0...2.17.0) (2026-10-14)
+
+
+### Features
+
+* **licences:** :sparkles: members' own licences, incidents without a flight and faster queries ([#182](https://github.com/SkyCrew-app/backend/issues/182)) ([fb55207](https://github.com/SkyCrew-app/backend/commit/fb55207c3acbd8caf251afa57f9030162820bb37))
+
 ## [2.16.0](https://github.com/SkyCrew-app/backend/compare/2.15.1...2.16.0) (2026-10-13)
 
 
