@@ -14,6 +14,7 @@ export const LICENCE_NUMBER_UNIQUE_INDEX = 'UQ_licenses_type_number';
 
 @ObjectType()
 @Entity('licenses')
+@Index('IDX_licenses_user', ['user'])
 @Index(LICENCE_NUMBER_UNIQUE_INDEX, { synchronize: false })
 export class License {
   @Field(() => Int)

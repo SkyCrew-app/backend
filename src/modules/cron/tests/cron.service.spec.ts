@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { CronService } from '../cron.service';
+import { CronService, FINISHED_REMINDER_MAX_AGE_DAYS } from '../cron.service';
 import { InstructionCoursesService } from '../../instruction-courses/instruction-courses.service';
 import { LicensesService } from '../../licenses/licenses.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -464,6 +464,23 @@ describe('CronService', () => {
           message: expect.stringContaining('réservation N°7'),
         }),
       );
+    });
+
+    it('only asks for the bookings that ended within the reminder window', async () => {
+      (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mockResolvedValue([]);
+      const before = Date.now();
+
+      await service.notificationFinishReservation();
+
+      const [since] = (
+        reservationsService.findFinishedReservations as jest.Mock
+      ).mock.calls.at(-1);
+      const windowMs = FINISHED_REMINDER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+      expect(since).toBeInstanceOf(Date);
+      expect(before - since.getTime()).toBeGreaterThanOrEqual(windowMs - 1000);
+      expect(before - since.getTime()).toBeLessThanOrEqual(windowMs + 1000);
     });
 
     it('should not notify twice for the same reservation', async () => {

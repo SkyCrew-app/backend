@@ -1,3 +1,4 @@
+import { AdminActionsService } from '../../../common/admin-actions/admin-actions.service';
 import { ForbiddenException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LicensesResolver } from '../licenses.resolver';
@@ -22,6 +23,7 @@ describe('LicensesResolver', () => {
       providers: [
         LicensesResolver,
         { provide: LicensesService, useValue: service },
+        { provide: AdminActionsService, useValue: { record: jest.fn() } },
       ],
     }).compile();
 

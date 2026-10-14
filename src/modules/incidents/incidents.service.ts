@@ -33,7 +33,8 @@ import {
   ROLE_TECHNICIAN,
   SessionUser,
 } from '../../common/auth/access';
-import { formatDate, languageOf } from '../../common/i18n/languages';
+import { languageOf } from '../../common/i18n/languages';
+import { mailDate } from '../reservations/booking-rules';
 import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
 import { groundsAircraft, incidentLevel } from './incident-rules';
@@ -130,9 +131,10 @@ export class IncidentsService {
     });
   }
 
-  // A member reports an incident on one of their own flights; technicians
-  // and administrators record one for anybody. It always starts open, on the
-  // aircraft of the flight, and a severe one grounds that aircraft.
+  // A member reports an incident on an aircraft, on one of their own flights
+  // or without a flight; technicians and administrators record one for
+  // anybody. It always starts open, on the aircraft of the flight when there
+  // is one, and a severe one grounds that aircraft.
   async createIncident(
     createIncidentInput: CreateIncidentInput,
     requester: SessionUser | undefined | null,
@@ -143,23 +145,29 @@ export class IncidentsService {
       throw localized(BadRequestException, 'error.incident.unknownSeverity');
     }
 
-    const flight = await this.flightRepository.findOne({
-      where: { id: createIncidentInput.flight_id },
-      relations: ['user', 'reservation', 'reservation.aircraft'],
-    });
-    if (!flight) {
+    // Without a flight the incident is on the aircraft named.
+    const flight =
+      createIncidentInput.flight_id != null
+        ? await this.flightRepository.findOne({
+            where: { id: createIncidentInput.flight_id },
+            relations: ['user', 'reservation', 'reservation.aircraft'],
+          })
+        : null;
+    if (createIncidentInput.flight_id != null && !flight) {
       throw localized(NotFoundException, 'error.incident.flightNotFound');
     }
-    if (!staff && !sameId(flight.user?.id, requester?.id)) {
+    if (flight && !staff && !sameId(flight.user?.id, requester?.id)) {
       throw localized(ForbiddenException, 'error.incident.notOwnFlight');
     }
 
     // The aircraft is the one the flight was made on, when it is known.
     const aircraft =
-      flight.reservation?.aircraft ??
-      (await this.aircraftRepository.findOneBy({
-        id: createIncidentInput.aircraft_id,
-      }));
+      flight?.reservation?.aircraft ??
+      (createIncidentInput.aircraft_id != null
+        ? await this.aircraftRepository.findOneBy({
+            id: createIncidentInput.aircraft_id,
+          })
+        : null);
     if (!aircraft) {
       throw localized(NotFoundException, 'error.incident.aircraftNotFound');
     }
@@ -182,7 +190,7 @@ export class IncidentsService {
     incident.priority = createIncidentInput.priority;
     incident.category = createIncidentInput.category;
     incident.aircraft = aircraft;
-    incident.flight = flight;
+    incident.flight = flight ?? null;
     incident.user = author;
 
     const saved = await this.incidentRepository.save(incident);
@@ -252,7 +260,8 @@ export class IncidentsService {
           message: translate(language, texts.member, {
             registration,
             reservationId: reservation.id,
-            date: formatDate(language, reservation.start_time),
+            // Day and time at the club: the member sees which booking it is.
+            date: mailDate(reservation.start_time, language),
           }),
           is_read: false,
         });

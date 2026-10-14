@@ -1,5 +1,6 @@
 import {
   CanActivate,
+  ConflictException,
   INestApplication,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { GraphQLModule, Query, Resolver } from '@nestjs/graphql';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
+import { withHttpErrorCode } from '../graphql/error-codes';
 
 @Injectable()
 class DenyGuard implements CanActivate {
@@ -28,6 +30,11 @@ class ProbeResolver {
   @Query(() => String)
   missing(): string {
     throw new NotFoundException('Aircraft not found');
+  }
+
+  @Query(() => String)
+  taken(): string {
+    throw new ConflictException('Already taken');
   }
 
   @Query(() => String)
@@ -55,6 +62,8 @@ describe('GraphQL exception handling', () => {
         GraphQLModule.forRoot<ApolloDriverConfig>({
           driver: ApolloDriver,
           autoSchemaFile: true,
+          // As in the application module.
+          formatError: withHttpErrorCode,
         }),
       ],
       providers: [ProbeResolver, DenyGuard],
@@ -80,6 +89,20 @@ describe('GraphQL exception handling', () => {
 
     expect(body.errors).toHaveLength(1);
     expect(body.errors[0].message).toBe('Aircraft not found');
+  });
+
+  it('names a missing item NOT_FOUND, not an internal error', async () => {
+    const body = await query('missing');
+
+    expect(body.errors[0].extensions.code).toBe('NOT_FOUND');
+    expect(body.errors[0].extensions.originalError.statusCode).toBe(404);
+  });
+
+  it('names a conflict CONFLICT, keeping its status for the clients', async () => {
+    const body = await query('taken');
+
+    expect(body.errors[0].extensions.code).toBe('CONFLICT');
+    expect(body.errors[0].extensions.originalError.statusCode).toBe(409);
   });
 
   it('reports a rejected guard as unauthenticated', async () => {

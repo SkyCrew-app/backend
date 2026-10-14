@@ -9,21 +9,24 @@ export const en: Record<TranslationKey, string> = {
     'Your booking for aircraft {{registration}} has been changed.',
   'notification.reservationCancelled':
     'Your booking for aircraft {{registration}} has been cancelled.',
-  'notification.withdrawal':
-    'A payment of {{amount}} has been taken from your account',
+  'notification.withdrawal': '{{amount}} has been debited from your balance.',
   'notification.invoiceCreated': 'An invoice of {{amount}} has been created',
   'notification.paymentReceived':
     'A top-up of {{amount}} has been added to your account',
   'notification.paymentRefunded':
     'A refund of {{amount}} has been made to your account',
   'notification.courseCreatedForStudent':
-    'Your course with instructor {{instructorId}} has been created.',
+    'Your course of {{date}} with {{instructor}} is scheduled.',
   'notification.courseCreatedForInstructor':
-    'Your course with student {{studentId}} has been created.',
+    'Your course of {{date}} with {{student}} is scheduled.',
+  'notification.paymentFailed':
+    'Your payment of {{amount}} was declined: your balance has not been credited.',
   'notification.competencyValidated':
     'A skill has been validated in your course.',
   'notification.courseComment': 'A comment has been added to your course.',
   'notification.courseCompleted': 'Your course {{courseId}} is complete.',
+  'notification.courseCancelledInstructorLeft':
+    'Your course of {{date}} with {{instructor}} is cancelled: they are no longer an instructor at the club.',
   'notification.flightPlanCreated':
     'Your flight plan from {{origin}} to {{destination}} has been created',
   'notification.flightPlanGenerated':
@@ -107,6 +110,10 @@ export const en: Record<TranslationKey, string> = {
     'The club must keep at least one active administrator: this account is the last one.',
   'error.user.hasHistory':
     'This member has a history in the club (bookings, flights, invoices…) and cannot be deleted. Deactivate the account instead.',
+  'error.user.instructorCommitments':
+    'This member still instructs {{bookings}} upcoming booking(s) and {{courses}} upcoming course(s) ({{list}}). Confirm the role change to cancel them: the students will be refunded.',
+  'error.user.instructorBookingsNotCancelled':
+    'The role was not changed: these bookings could not be cancelled ({{ids}}). Settle them first.',
   'error.user.alreadyActivated':
     'This member has already activated their account',
   'error.role.builtIn':
@@ -182,6 +189,7 @@ export const en: Record<TranslationKey, string> = {
     'The flight time must be more than 0 and no more than {{max}} hours',
   'error.flight.closedNotDeletable':
     'A closed flight can only be deleted by an administrator',
+  'error.flight.notFound': 'This flight does not exist or was deleted',
   'error.flight.hasIncident':
     'An incident is attached to this flight: it cannot be deleted',
   'error.aircraft.upcomingBookings':
@@ -218,6 +226,8 @@ export const en: Record<TranslationKey, string> = {
     'The rating and feedback of a course are given by the student',
   'error.course.participantsAdminOnly':
     'Only an administrator can change the instructor or the student of a course',
+  'error.course.bookedParticipants':
+    'An aircraft is booked for this course: cancel that booking first to change its instructor or student.',
   'error.course.hasRecord':
     "This course is part of the student's training record: it cannot be deleted. Set it to cancelled if needed.",
   'error.course.ratingOutOfRange':
@@ -267,6 +277,8 @@ export const en: Record<TranslationKey, string> = {
     'An aircraft can only be booked for a scheduled course',
   'error.reservation.courseAlreadyBooked':
     'An aircraft is already booked for this course',
+  'error.reservation.weeklyMaintenance':
+    "This slot falls during the club's weekly maintenance ({{from}}–{{to}}): choose another slot.",
   'error.reservation.courseSlotMismatch':
     'The booking slot must overlap the course',
 
@@ -274,6 +286,7 @@ export const en: Record<TranslationKey, string> = {
   // invoices).
   'error.incident.deleteNotAllowed':
     'Only an administrator can delete an incident. Its author can withdraw it while it is open and nobody has taken it up.',
+  'error.licence.notYours': 'You can only change your own licences',
   'error.licence.unknownStatus':
     'Unknown licence status: choose active, expired or pending',
   'error.licence.numberAlreadyUsed':

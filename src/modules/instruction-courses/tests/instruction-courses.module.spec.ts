@@ -15,16 +15,44 @@ import { Answer } from '../../eval/entity/answer.entity';
 import { Module } from '../../e-learning/entity/module.entity';
 import { Notification } from '../../notifications/entity/notifications.entity';
 import { Course } from '../../e-learning/entity/course.entity';
+import { Reservation } from '../../reservations/entity/reservations.entity';
+import { ReservationTemplate } from '../../reservations/entity/reservation-template.entity';
+import { Aircraft } from '../../aircraft/entity/aircraft.entity';
+import { Administration } from '../../administration/entity/admin.entity';
+import { Flight } from '../../flights/entity/flights.entity';
+import { FlightAmendment } from '../../flights/entity/flight-amendment.entity';
+import { Incident } from '../../incidents/entity/incidents.entity';
+import { Payment } from '../../payments/entity/payments.entity';
+import { Invoice } from '../../invoices/entity/invoices.entity';
+
+// Brought in by the bookings, which the courses move with them.
+const BOOKING_ENTITIES = [
+  Reservation,
+  ReservationTemplate,
+  Aircraft,
+  Administration,
+  Flight,
+  FlightAmendment,
+  Incident,
+  Payment,
+  Invoice,
+];
 
 describe('InstructionCoursesModule', () => {
   let module: TestingModule;
 
   beforeEach(async () => {
-    module = await Test.createTestingModule({
+    let builder = Test.createTestingModule({
       // The users module rate-limits some operations; the limiter is
       // registered by the application module.
       imports: [ThrottlerModule.forRoot([]), InstructionCoursesModule],
-    })
+    });
+    for (const entity of BOOKING_ENTITIES) {
+      builder = builder
+        .overrideProvider(getRepositoryToken(entity))
+        .useValue({});
+    }
+    module = await builder
       .overrideProvider(getRepositoryToken(InstructionCourse))
       .useValue({})
       .overrideProvider(getRepositoryToken(CourseCompetency))

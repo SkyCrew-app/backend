@@ -1,9 +1,20 @@
 import { ObjectType, Field, Int } from '@nestjs/graphql';
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  ManyToOne,
+  Index,
+} from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 
 @ObjectType()
 @Entity('notifications')
+@Index('IDX_notifications_user_read_date', [
+  'user',
+  'is_read',
+  'notification_date',
+])
 export class Notification {
   @Field(() => Int)
   @PrimaryGeneratedColumn()

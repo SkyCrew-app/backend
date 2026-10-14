@@ -42,4 +42,10 @@ export class UpdateUserInput {
 
   @Field({ nullable: true })
   roleId?: number;
+
+  // The administrator confirms that taking the instructor role away cancels
+  // the bookings and courses the member still instructs (students refunded).
+  // Without it such a change is refused, naming them.
+  @Field({ nullable: true })
+  cancelInstructionCommitments?: boolean;
 }

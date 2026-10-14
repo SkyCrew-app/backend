@@ -19,6 +19,7 @@ import { User } from '../../users/entity/users.entity';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { FlightAmendment } from '../entity/flight-amendment.entity';
 import { MAX_FLIGHT_HOURS } from '../flight-rules';
+import { translationOf } from '../../../common/i18n/localized-exception';
 
 describe('FlightsService', () => {
   let service: FlightsService;
@@ -457,6 +458,38 @@ describe('FlightsService', () => {
       repo.findOne.mockResolvedValue(stored);
 
       await expect(service.findOneFor(5, caller as any)).resolves.toBe(stored);
+    });
+
+    it('answers a missing flight with a localized not-found refusal', async () => {
+      repo.findOne.mockResolvedValue(null);
+
+      const refusal = await service
+        .findOneFor(999, {
+          id: 3,
+          email: 'p@example.com',
+          role: 'Pilote',
+        } as any)
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(NotFoundException);
+      expect(translationOf(refusal)).toEqual({ key: 'error.flight.notFound' });
+    });
+
+    it('answers a missing flight to close with the same refusal', async () => {
+      repo.findOne.mockResolvedValue(null);
+
+      const refusal = await service
+        .updateFlight(
+          999,
+          { id: 999, closed: true } as any,
+          {
+            id: 3,
+            email: 'p@example.com',
+            role: 'Pilote',
+          } as any,
+        )
+        .catch((error: unknown) => error);
+      expect(refusal).toBeInstanceOf(NotFoundException);
+      expect(translationOf(refusal)).toEqual({ key: 'error.flight.notFound' });
     });
 
     it.each([

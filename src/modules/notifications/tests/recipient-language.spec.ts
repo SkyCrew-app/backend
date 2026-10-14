@@ -1,3 +1,4 @@
+import { formatMoney } from '../../../common/i18n/languages';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { translationOf } from '../../../common/i18n/localized-exception';
 import { FlightsService } from '../../flights/flights.service';
@@ -49,7 +50,7 @@ describe('notifications in the language of their recipient', () => {
       await service.createFlightByUser(input(), caller);
 
       expect(sent()).toEqual([
-        [2, 'FLIGHT_CREATED', 'Votre plan de vol de LFPG a EGLL a ete cree'],
+        [2, 'FLIGHT_CREATED', 'Votre plan de vol de LFPG à EGLL a été créé.'],
       ]);
     });
 
@@ -107,8 +108,8 @@ describe('notifications in the language of their recipient', () => {
     });
 
     it.each([
-      ['fr', 'Une facture de 50 a été créée'],
-      ['en', 'An invoice of 50 has been created'],
+      ['fr', `Une facture de ${formatMoney('fr', 50)} a été créée`],
+      ['en', 'An invoice of €50.00 has been created'],
     ])(
       'announces an invoice to a member whose language is %s',
       async (language, message) => {
@@ -130,7 +131,11 @@ describe('notifications in the language of their recipient', () => {
       );
 
       expect(sent()).toEqual([
-        [4, 'PAYMENT_REFUNDED', 'A refund of 30 has been made to your account'],
+        [
+          4,
+          'PAYMENT_REFUNDED',
+          'A refund of €30.00 has been made to your account',
+        ],
       ]);
     });
 
@@ -197,6 +202,7 @@ describe('notifications in the language of their recipient', () => {
         usersService as any,
         notifications as any,
         {} as any,
+        {} as any,
       );
     });
 
@@ -204,20 +210,35 @@ describe('notifications in the language of their recipient', () => {
       courseRepository.findOne.mockResolvedValue(null);
       usersService.findOneById.mockImplementation(async (id: number) =>
         id === 20
-          ? { id: 20, language: 'en', role: { role_name: 'Instructeur' } }
-          : { id: 10, language: 'fr' },
+          ? {
+              id: 20,
+              first_name: 'Irene',
+              last_name: 'Morel',
+              language: 'en',
+              role: { role_name: 'Instructeur' },
+            }
+          : { id: 10, first_name: 'Jean', last_name: 'Dupont', language: 'fr' },
       );
 
       await service.createCourse({
         instructorId: 20,
         studentId: 10,
-        startTime: new Date(2026, 5, 1, 8),
-        endTime: new Date(2026, 5, 1, 10),
+        startTime: new Date('2026-06-01T06:00:00Z'),
+        endTime: new Date('2026-06-01T08:00:00Z'),
       } as any);
 
       expect(sent()).toEqual([
-        [10, 'COURSE_CREATED', "Votre cours avec l'instructeur 20 a été créé."],
-        [20, 'COURSE_CREATED', 'Your course with student 10 has been created.'],
+        // Named, with the date at the club (it used to give ids).
+        [
+          10,
+          'COURSE_CREATED',
+          'Votre cours du 1 juin 2026, 08:00 avec Irene Morel est planifié.',
+        ],
+        [
+          20,
+          'COURSE_CREATED',
+          'Your course of 1 June 2026, 08:00 with Jean Dupont is scheduled.',
+        ],
       ]);
     });
 

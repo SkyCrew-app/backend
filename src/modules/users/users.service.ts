@@ -8,7 +8,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
-import { IsNull, Not, Raw, Repository } from 'typeorm';
+import { In, IsNull, Not, Raw, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './entity/users.entity';
 import { UpdateUserInput } from './dto/update-user.input';
@@ -140,6 +140,13 @@ export class UsersService {
 
   findOneByEmail(email: string): Promise<User> {
     return this.accountByEmail(email, ['reservations', 'licenses', 'role']);
+  }
+
+  // The account behind a session, looked up on every authenticated request:
+  // its role decides what it may do, nothing else is loaded (a member's
+  // whole booking history used to come along each time).
+  findSessionUser(email: string): Promise<User> {
+    return this.accountByEmail(email, ['role']);
   }
 
   // A new member is a pilot unless the administrator chose another role:
@@ -422,7 +429,15 @@ export class UsersService {
     targetEmail: string,
     updateUserInput: UpdateUserInput,
     imagePath: string | null,
-    { asAdmin = false }: { asAdmin?: boolean } = {},
+    {
+      asAdmin = false,
+      beforeRoleChange,
+    }: {
+      asAdmin?: boolean;
+      // Runs once the role change is known to be valid, before anything is
+      // written; it may refuse the change by throwing.
+      beforeRoleChange?: (user: User, newRole: Role) => Promise<void>;
+    } = {},
   ): Promise<User> {
     const user = await this.accountByEmail(targetEmail, ['role']);
     if (!user) {
@@ -452,6 +467,7 @@ export class UsersService {
       if (newRole.role_name !== ROLE_ADMIN) {
         await this.assertNotLastAdministrator(user);
       }
+      await beforeRoleChange?.(user, newRole);
     }
 
     const userDir = path.join(
@@ -824,6 +840,34 @@ export class UsersService {
 
     // A lesson never opened has no progress row: it is simply not completed.
     return progress?.completed ?? false;
+  }
+
+  // Of the given lessons, the ones the member completed: one query for a
+  // whole course instead of one per lesson.
+  async getCompletedLessonIds(
+    userId: number,
+    lessonIds: number[],
+  ): Promise<number[]> {
+    // A course holds far fewer lessons; the cap keeps the request small.
+    const ids = lessonIds.slice(0, 500);
+    if (ids.length === 0) {
+      return [];
+    }
+    const rows = await this.userProgressRepository.find({
+      where: {
+        user: { id: userId },
+        lesson: { id: In(ids) },
+        completed: true,
+      },
+      relations: ['lesson'],
+    });
+    return [
+      ...new Set(
+        rows
+          .map((row) => row.lesson?.id)
+          .filter((id): id is number => id != null),
+      ),
+    ];
   }
 
   countCompletedLessons(userId: number): Promise<number> {

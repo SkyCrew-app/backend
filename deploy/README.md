@@ -134,7 +134,10 @@ docker compose restart backend    # after changing .env, use: docker compose up 
 ```
 
 `https://<address>/health` answers with the state of the API and of its
-database.
+database, memory and disk: it answers 503 when one of them is short, even
+while the site still works. The watcher checks `/health/ready` (the API
+answers and reaches its database), so that a busy moment does not raise a
+"site down" alert.
 
 ## Notes
 

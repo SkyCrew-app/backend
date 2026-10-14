@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   ManyToOne,
   OneToMany,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entity/users.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
@@ -14,6 +15,9 @@ import { CourseCompetency } from './course-competency.entity';
 
 @ObjectType()
 @Entity('instruction_courses')
+@Index('IDX_courses_instructor_start', ['instructor', 'startTime'])
+@Index('IDX_courses_student_start', ['student', 'startTime'])
+@Index('IDX_courses_reservation', ['reservation'])
 export class InstructionCourse {
   @Field(() => Int)
   @PrimaryGeneratedColumn()

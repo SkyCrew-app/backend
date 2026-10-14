@@ -5,6 +5,11 @@ import { Notification } from './entity/notifications.entity';
 import { CreateNotificationInput } from './dto/create-notification.input';
 import { UpdateNotificationInput } from './dto/update-notification.input';
 import { NotificationsGateway } from './notifications.gateway';
+import { priorityOf } from './notification-priority';
+
+// How many notifications already read a member's list carries (all unread
+// ones are).
+export const READ_NOTIFICATIONS_LISTED = 100;
 
 @Injectable()
 export class NotificationsService {
@@ -17,8 +22,13 @@ export class NotificationsService {
   async create(
     createNotificationInput: CreateNotificationInput,
   ): Promise<Notification> {
+    const priority = priorityOf(
+      createNotificationInput.notification_type,
+      createNotificationInput.priority,
+    );
     const notification = this.notificationRepository.create({
       ...createNotificationInput,
+      ...(priority && { priority }),
       user: { id: createNotificationInput.user_id },
       notification_date:
         createNotificationInput.notification_date || new Date(),
@@ -53,11 +63,22 @@ export class NotificationsService {
     return count > 0;
   }
 
+  // Every unread notification, and the latest ones already read.
   async findAllByUser(userId: number): Promise<Notification[]> {
-    return await this.notificationRepository.find({
-      where: { user: { id: userId } },
+    const unread = await this.notificationRepository.find({
+      where: { user: { id: userId }, is_read: false },
       order: { notification_date: 'DESC' },
     });
+    const read = await this.notificationRepository.find({
+      where: { user: { id: userId }, is_read: true },
+      order: { notification_date: 'DESC' },
+      take: READ_NOTIFICATIONS_LISTED,
+    });
+    return [...(unread ?? []), ...(read ?? [])].sort(
+      (a, b) =>
+        new Date(b.notification_date).getTime() -
+        new Date(a.notification_date).getTime(),
+    );
   }
 
   async findOne(id: number): Promise<Notification> {

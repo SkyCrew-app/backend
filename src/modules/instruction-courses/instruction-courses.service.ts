@@ -17,7 +17,7 @@ import {
 } from 'typeorm';
 import { InstructionCourse } from './entity/instruction-courses.entity';
 import { CourseStatus } from './enum/course-status.enum';
-import { defaultCourseEnd } from './course-rules';
+import { courseEnd, defaultCourseEnd } from './course-rules';
 import { CourseCompetency } from './entity/course-competency.entity';
 import { CourseComment } from './entity/course-comment.entity';
 import { CreateCourseInstructionInput } from './dto/create-course.input';
@@ -26,6 +26,8 @@ import { AddCompetencyInput } from './dto/add-competency.input';
 import { AddCommentInput } from './dto/add-comment.input';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ReservationsService } from '../reservations/reservations.service';
+import { mailDate } from '../reservations/booking-rules';
 import { ELearningService } from '../e-learning/e-learning.service';
 import { UserProgress } from '../users/entity/user-progress.entity';
 import { Lesson } from '../e-learning/entity/lesson.entity';
@@ -49,6 +51,15 @@ import {
 export const COURSE_RATING_MIN = 1;
 export const COURSE_RATING_MAX = 5;
 
+const fullName = (member: {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+}) =>
+  [member?.first_name, member?.last_name].filter(Boolean).join(' ') ||
+  member?.email ||
+  '';
+
 const differs = (value: unknown, current: unknown): boolean =>
   value != null && Number(value) !== Number(current);
 
@@ -68,6 +79,7 @@ export class InstructionCoursesService {
     private readonly userService: UsersService,
     private readonly notificationsService: NotificationsService,
     private readonly eLearningService: ELearningService,
+    private readonly reservationsService: ReservationsService,
   ) {}
 
   // Two courses conflict when they share time for the same instructor or the
@@ -226,7 +238,10 @@ export class InstructionCoursesService {
       message: translate(
         languageOf(student),
         'notification.courseCreatedForStudent',
-        { instructorId },
+        {
+          instructor: fullName(instructor),
+          date: mailDate(startTime, languageOf(student)),
+        },
       ),
       is_read: false,
     });
@@ -238,7 +253,10 @@ export class InstructionCoursesService {
       message: translate(
         languageOf(instructor),
         'notification.courseCreatedForInstructor',
-        { studentId },
+        {
+          student: fullName(student),
+          date: mailDate(startTime, languageOf(instructor)),
+        },
       ),
       is_read: false,
     });
@@ -336,6 +354,11 @@ export class InstructionCoursesService {
     if ((movesInstructor || movesStudent) && !isAdmin(requester)) {
       throw localized(ForbiddenException, 'error.course.participantsAdminOnly');
     }
+    // The aircraft booking of a course is flown by its student with its
+    // instructor: they cannot change under it.
+    if ((movesInstructor || movesStudent) && course.reservation) {
+      throw localized(ConflictException, 'error.course.bookedParticipants');
+    }
 
     const nextInstructorId = movesInstructor
       ? instructorId
@@ -399,6 +422,10 @@ export class InstructionCoursesService {
       throw localized(ConflictException, 'error.course.memberAlreadyBooked');
     }
 
+    const previousStart = new Date(course.startTime);
+    const previousEnd = courseEnd(course);
+    const booking = course.reservation ?? null;
+
     Object.assign(course, fields);
     course.endTime = nextEnd;
 
@@ -409,6 +436,36 @@ export class InstructionCoursesService {
     }
     if (movesStudent) {
       course.student = { id: studentId } as User;
+    }
+
+    // A course moved in time takes its aircraft booking along, by as much
+    // as its start and its end moved, through the booking rules and their
+    // pricing. If the booking cannot move (taken slot, flight already
+    // started…), the course does not move either: one transaction.
+    const startShift = new Date(nextStart).getTime() - previousStart.getTime();
+    const endShift = new Date(nextEnd).getTime() - previousEnd.getTime();
+    if (
+      booking &&
+      nextStatus !== CourseStatus.CANCELED &&
+      (startShift !== 0 || endShift !== 0)
+    ) {
+      await this.reservationsService.update(
+        {
+          id: booking.id,
+          flight_category: booking.flight_category,
+          start_time: new Date(
+            new Date(booking.start_time).getTime() + startShift,
+          ),
+          end_time: new Date(new Date(booking.end_time).getTime() + endShift),
+        },
+        new Date(),
+        {
+          start: new Date(nextStart),
+          end: new Date(nextEnd),
+          save: (manager) => manager.save(InstructionCourse, course),
+        },
+      );
+      return this.findOne(id);
     }
 
     return this.courseRepository.save(course);

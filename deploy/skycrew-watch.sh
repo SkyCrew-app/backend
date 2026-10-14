@@ -2,9 +2,12 @@
 # Tells you when SkyCrew stops answering, and when it answers again.
 # Meant for cron, every two minutes, on the server or on another machine:
 #
-#   */2 * * * * root HEALTH_URL=https://skycrew.example/health ALERT_WEBHOOK_URL=https://… /usr/local/sbin/skycrew-watch
+#   */2 * * * * root HEALTH_URL=https://skycrew.example/health/ready ALERT_WEBHOOK_URL=https://… /usr/local/sbin/skycrew-watch
 #
-#   HEALTH_URL          address checked                     (default http://127.0.0.1:8100/health)
+#   HEALTH_URL          address checked                     (default http://127.0.0.1:8100/health/ready)
+#                       /health/ready says whether the API answers and reaches its
+#                       database. /health also fails (503) when memory or disk run
+#                       high, which is worth a look but is not the site being down.
 #   ALERT_WEBHOOK_URL   where the message is posted as JSON; works with Slack,
 #                       Discord and most chat webhooks ("text" and "content" are both sent)
 #   ALERT_EMAIL         address written to with the local `mail` command, if there is one
@@ -13,7 +16,7 @@
 #   MESSAGE_DOWN, MESSAGE_UP   wording of the two messages, to write them in your language
 set -eu
 
-HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:8100/health}
+HEALTH_URL=${HEALTH_URL:-http://127.0.0.1:8100/health/ready}
 THRESHOLD=${FAILURES_BEFORE_ALERT:-2}
 STATE_FILE=${STATE_FILE:-/var/tmp/skycrew-watch.state}
 MESSAGE_DOWN=${MESSAGE_DOWN:-SkyCrew does not answer}
