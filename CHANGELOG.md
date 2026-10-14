@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.17.1](https://github.com/SkyCrew-app/backend/compare/2.17.0...2.17.1) (2026-10-14)
+
+
+### Bug Fixes
+
+* **courses:** :bug: cancel a course with its booking, label every logged action ([#186](https://github.com/SkyCrew-app/backend/issues/186)) ([1870b62](https://github.com/SkyCrew-app/backend/commit/1870b62e66b4b316eb54733c9adfa046aed2f3c5))
+
 ## [2.17.0](https://github.com/SkyCrew-app/backend/compare/2.16.0...2.17.0) (2026-10-14)
 
 
