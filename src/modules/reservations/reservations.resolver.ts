@@ -31,6 +31,8 @@ import {
   ADMIN_ACTION,
   AdminActionName,
 } from '../../common/admin-actions/admin-actions';
+import { RequiresPlanFeature } from '../../common/plan/plan-feature.guard';
+import { PlanFeature } from '../../common/plan/plan';
 
 // Who may read whose flights, asked once per request and per pilot.
 const flightReaders = new WeakMap<object, Map<number, Promise<boolean>>>();
@@ -300,6 +302,7 @@ export class ReservationsResolver {
   // The bookings the caller instructs.
   @Query(() => [Reservation], { name: 'myInstructionReservations' })
   @UseGuards(JwtAuthGuard)
+  @RequiresPlanFeature(PlanFeature.INSTRUCTION)
   getMyInstructionReservations(
     @CurrentUser() currentUser: User,
   ): Promise<Reservation[]> {
@@ -309,12 +312,15 @@ export class ReservationsResolver {
   // The members who can be chosen as the instructor of a booking.
   @Query(() => [User], { name: 'bookableInstructors' })
   @UseGuards(JwtAuthGuard)
+  @RequiresPlanFeature(PlanFeature.INSTRUCTION)
   getBookableInstructors(): Promise<User[]> {
     return this.reservationService.findBookableInstructors();
   }
 
   // Whether the caller may book without an instructor (a valid licence
-  // until `until`, now by default). The booking itself decides again.
+  // until `until`, now by default). The booking itself decides again. Kept
+  // in every plan: without instruction, it tells whether the member may
+  // book at all.
   @Query(() => Boolean, { name: 'mayBookWithoutInstructor' })
   @UseGuards(JwtAuthGuard)
   getMayBookWithoutInstructor(

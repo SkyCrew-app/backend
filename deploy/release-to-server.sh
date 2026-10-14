@@ -2,7 +2,7 @@
 # Puts released versions of SkyCrew on a server, in one command, and goes back
 # to the previous versions by itself if the new ones do not come up healthy.
 #
-#   deploy/release-to-server.sh <ssh-host> [--backend 2.13.0] [--frontend 2.10.0]
+#   deploy/release-to-server.sh <ssh-host> [--club <slug>] [--backend 2.13.0] [--frontend 2.10.0]
 #   deploy/release-to-server.sh --dry-run  [--backend 2.13.0] [--frontend 2.10.0]
 #
 # The images are built here from the version tags and copied over SSH, so the
@@ -10,20 +10,26 @@
 # With --dry-run the images are built and nothing else happens: the server is
 # never contacted. The script stops at the first step that fails, shows the
 # end of what that step printed and exits with a status other than 0.
+# With --club, the installation of that club (made by new-club.sh) is updated,
+# and only it: /opt/skycrew-<slug>, backed up by skycrew-backup-<slug>. The
+# images are shared by the clubs of a server; each club keeps its versions.
 # Settings, through the environment:
 #   FRONTEND_DIR   checkout of the frontend repository   (default ../frontend)
 #   FRONTEND_ENV   file holding the NEXT_PUBLIC_* keys    (default $FRONTEND_DIR/.env)
-#   DEPLOY_DIR     folder of the deployment on the server (default /opt/skycrew)
-#   BACKUP_CMD     backup run on the server first         (default /usr/local/sbin/skycrew-backup; set to `none` to go without)
+#   DEPLOY_DIR     folder of the deployment on the server (default /opt/skycrew, or /opt/skycrew-<slug> with --club)
+#   BACKUP_CMD     backup run on the server first         (default /usr/local/sbin/skycrew-backup, or
+#                  /usr/local/sbin/skycrew-backup-<slug> with --club; set to `none` to go without)
+#   SSH            command used to reach the server       (default ssh)
 #   PLATFORM       platform of the server                 (default linux/amd64)
 #   LOG_LINES      lines shown of a step that failed      (default 40)
 set -eu
 
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 64; }
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 64; }
 
-HOST=""; BACKEND_VERSION=""; FRONTEND_VERSION=""; DRY_RUN=0
+HOST=""; BACKEND_VERSION=""; FRONTEND_VERSION=""; DRY_RUN=0; CLUB=""
 while [ $# -gt 0 ]; do
   case $1 in
+    --club) [ $# -ge 2 ] || usage; CLUB=$2; shift 2 ;;
     --backend) [ $# -ge 2 ] || usage; BACKEND_VERSION=$2; shift 2 ;;
     --frontend) [ $# -ge 2 ] || usage; FRONTEND_VERSION=$2; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
@@ -33,12 +39,14 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$BACKEND_VERSION$FRONTEND_VERSION" ] || usage
 [ -n "$HOST" ] || [ $DRY_RUN -eq 1 ] || usage
+[ -z "$CLUB" ] || printf '%s' "$CLUB" | grep -Eq '^[a-z][a-z0-9-]{1,29}[a-z0-9]$' || usage
 
 BACKEND_DIR=$(cd "$(dirname "$0")/.." && pwd)
 FRONTEND_DIR=${FRONTEND_DIR:-$BACKEND_DIR/../frontend}
 FRONTEND_ENV=${FRONTEND_ENV:-$FRONTEND_DIR/.env}
-DEPLOY_DIR=${DEPLOY_DIR:-/opt/skycrew}
-BACKUP_CMD=${BACKUP_CMD:-/usr/local/sbin/skycrew-backup}
+DEPLOY_DIR=${DEPLOY_DIR:-/opt/skycrew${CLUB:+-$CLUB}}
+BACKUP_CMD=${BACKUP_CMD:-/usr/local/sbin/skycrew-backup${CLUB:+-$CLUB}}
+SSH=${SSH:-ssh}
 PLATFORM=${PLATFORM:-linux/amd64}
 LOG_LINES=${LOG_LINES:-40}
 REGISTRY=ghcr.io/skycrew-app
@@ -121,7 +129,7 @@ if [ "$BACKUP_CMD" = none ]; then
   echo "skipped on request"
 else
   # shellcheck disable=SC2029
-  ssh "$HOST" "if sudo test -x '$BACKUP_CMD'; then sudo '$BACKUP_CMD' && echo 'backup done'; else echo 'no backup command at $BACKUP_CMD: stopping' >&2; exit 1; fi" ||
+  $SSH "$HOST" "if sudo test -x '$BACKUP_CMD'; then sudo '$BACKUP_CMD' && echo 'backup done'; else echo 'no backup command at $BACKUP_CMD: stopping' >&2; exit 1; fi" ||
     fail "the backup on $HOST did not complete: the versions were not changed"
 fi
 
@@ -132,15 +140,16 @@ for image in ${BACKEND_VERSION:+backend:$BACKEND_VERSION} ${FRONTEND_VERSION:+fr
   docker save "$REGISTRY/$image" >"$WORK/image.tar" || fail "the image $image could not be exported"
   gzip -c "$WORK/image.tar" >"$archive" || fail "the image $image could not be compressed"
   rm -f "$WORK/image.tar"
-  ssh "$HOST" 'gunzip | sudo docker load' <"$archive" ||
+  $SSH "$HOST" 'gunzip | sudo docker load' <"$archive" ||
     fail "the image $image could not be loaded on $HOST: the versions were not changed"
   rm -f "$archive"
 done
 
 say "Switching versions"
 # shellcheck disable=SC2029
-ssh "$HOST" "sudo sh -s -- '$DEPLOY_DIR' '$BACKEND_VERSION' '$FRONTEND_VERSION'" <<'REMOTE' || fail "the new versions are not running on the server: read the lines above"
+$SSH "$HOST" "sudo sh -s -- '$DEPLOY_DIR' '$BACKEND_VERSION' '$FRONTEND_VERSION'" <<'REMOTE' || fail "the new versions are not running on the server: read the lines above"
 set -eu
+[ -f "$1/.env" ] || { echo "no installation in $1 (no .env there)" >&2; exit 1; }
 cd "$1"; new_backend=$2; new_frontend=$3
 
 current() { grep "^$1=" .env | cut -d= -f2-; }

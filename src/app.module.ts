@@ -50,6 +50,8 @@ import { DemoModeGuard } from './common/guards/demo-mode.guard';
 import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-default.guard';
 import { AdminActionsModule } from './common/admin-actions/admin-actions.module';
 import { MemberDepartureModule } from './modules/users/member-departure.module';
+import { PlanModule } from './common/plan/plan.module';
+import { PlanFeatureGuard } from './common/plan/plan-feature.guard';
 
 @Module({
   imports: [
@@ -136,6 +138,8 @@ import { MemberDepartureModule } from './modules/users/member-departure.module';
       }),
     }),
 
+    PlanModule,
+
     MailerModule,
 
     AdminActionsModule,
@@ -216,6 +220,11 @@ import { MemberDepartureModule } from './modules/users/member-departure.module';
     {
       provide: APP_GUARD,
       useClass: DemoModeGuard,
+    },
+    // Then refuse what the plan of the installation does not include.
+    {
+      provide: APP_GUARD,
+      useClass: PlanFeatureGuard,
     },
   ],
 })

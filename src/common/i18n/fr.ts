@@ -271,6 +271,14 @@ export const fr = {
   'mail.instruction.greeting': 'Bonjour {{name}},',
   'mail.instruction.start': 'Début :',
   'mail.instruction.end': 'Fin :',
+  'error.plan.featureNotIncluded':
+    "Cette fonction fait partie de la formule Club + École, que votre club n'a pas choisie.",
+  'error.plan.aircraftLimit':
+    'Votre formule permet {{max}} avion(s) en service et ce nombre est atteint. Mettez un avion hors service ou contactez votre fournisseur SkyCrew pour changer de formule.',
+  'error.plan.memberLimit':
+    'Votre formule permet {{max}} membre(s) actif(s) et ce nombre est atteint. Désactivez le compte d’un membre parti ou contactez votre fournisseur SkyCrew pour changer de formule.',
+  'error.reservation.licenceRequired':
+    "Sans licence valide jusqu'à la fin de ce vol, vous ne pouvez pas réserver : ajoutez votre licence dans votre profil ou demandez à l'administrateur du club de la valider.",
   'error.reservation.instructorRequired':
     "Sans licence valide, vous ne pouvez réserver qu'avec un instructeur : choisissez l'instructeur de ce vol",
   'error.reservation.instructorNoValidLicence':

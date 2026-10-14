@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   Repository,
@@ -49,6 +49,8 @@ import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NOTIFICATION_PRIORITY_HIGH } from '../notifications/notification-priority';
 import { fromCents, lockRow, toCents } from '../payments/money';
+import { PlanService } from '../../common/plan/plan.service';
+import { PlanFeature } from '../../common/plan/plan';
 import {
   assertAllowedToFly,
   assertCancellable,
@@ -127,6 +129,7 @@ export class ReservationsService {
     private readonly administrationService: AdministrationService,
     private readonly paymentService: PaymentsService,
     private readonly notificationService: NotificationsService,
+    @Optional() private readonly plan: PlanService = new PlanService(),
   ) {}
 
   // A booking and the money that goes with it change in one transaction.
@@ -313,6 +316,7 @@ export class ReservationsService {
       withInstructor: instructor !== null,
       acceptedTypes: settings.pilotLicenses,
       flightEnd: slot.end,
+      instructionOffered: this.plan.includes(PlanFeature.INSTRUCTION),
     });
 
     return { aircraft, user, instructor };
@@ -421,6 +425,11 @@ export class ReservationsService {
       await this.inTransaction(async (manager) => {
         let userId = createReservationInput.user_id;
         let instructorId = createReservationInput.instructor_id ?? null;
+        // Flying with an instructor is part of instruction, which some
+        // plans do not include.
+        if (instructorId != null || createReservationInput.course_id != null) {
+          this.plan.assertIncludes(PlanFeature.INSTRUCTION);
+        }
 
         // A booking made for a course is flown by its student with its
         // instructor, whoever of the two asks for it.
@@ -648,6 +657,11 @@ export class ReservationsService {
           : updateReservationInput.instructor_id;
       const instructorChanged =
         Number(instructorId ?? 0) !== Number(previousInstructor?.id ?? 0);
+      // A booking made before the plan changed keeps its instructor; only a
+      // new one is refused.
+      if (instructorChanged && instructorId != null) {
+        this.plan.assertIncludes(PlanFeature.INSTRUCTION);
+      }
       const flightCategory =
         instructorId != null
           ? INSTRUCTION_FLIGHT_CATEGORY

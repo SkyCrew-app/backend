@@ -22,6 +22,8 @@ import {
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
 import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
+import { RequiresPlanFeature } from '../../common/plan/plan-feature.guard';
+import { PlanFeature } from '../../common/plan/plan';
 
 const isSameUser = (
   user: SessionUser | undefined,
@@ -36,6 +38,7 @@ const forbidden = () =>
 @Resolver(() => InstructionCourse)
 @UseGuards(JwtAuthGuard)
 @UseFilters(LocalizedExceptionFilter)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
 export class InstructionCoursesResolver {
   constructor(
     private readonly courseService: InstructionCoursesService,

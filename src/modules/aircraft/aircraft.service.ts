@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThan, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import { Aircraft } from './entity/aircraft.entity';
@@ -21,6 +26,11 @@ import {
   groundsAircraftAt,
 } from '../maintenance/maintenance-rules';
 import { localized } from '../../common/i18n/localized-exception';
+import { PlanService } from '../../common/plan/plan.service';
+import {
+  countAircraftInService,
+  usesAircraftPlace,
+} from '../../common/plan/plan-usage';
 
 // The fleet history shows the bookings of the last months (and those to
 // come), not the club's whole history.
@@ -56,7 +66,28 @@ export class AircraftService {
   constructor(
     @InjectRepository(Aircraft)
     private readonly aircraftRepository: Repository<Aircraft>,
+    @Optional() private readonly plan: PlanService = new PlanService(),
   ) {}
+
+  // An aircraft about to take a place in the plan (added, or put back in
+  // service): refused once the plan's places are all used. What is already
+  // in service above the limit stays as it is.
+  private async assertPlaceFor(
+    from: AvailabilityStatus | null,
+    to: AvailabilityStatus | null | undefined,
+  ): Promise<void> {
+    if (
+      this.plan.maxAircraft === null ||
+      to == null ||
+      !usesAircraftPlace(to) ||
+      (from !== null && usesAircraftPlace(from))
+    ) {
+      return;
+    }
+    this.plan.assertRoomForAircraft(
+      await countAircraftInService(this.aircraftRepository.manager),
+    );
+  }
 
   // Without the bookings: the resolver loads them when they are asked for.
   async findAll(): Promise<Aircraft[]> {
@@ -85,6 +116,10 @@ export class AircraftService {
     filePaths: string[],
     imagePath: string | null,
   ): Promise<Aircraft> {
+    await this.assertPlaceFor(
+      null,
+      createAircraftInput.availability_status ?? AvailabilityStatus.AVAILABLE,
+    );
     const newAircraft = this.aircraftRepository.create(createAircraftInput);
 
     await this.aircraftRepository.save(newAircraft);
@@ -129,6 +164,10 @@ export class AircraftService {
       where: { id: aircraftId },
     });
     const input = await this.withoutHeldStatus(aircraftId, updateAircraftInput);
+    await this.assertPlaceFor(
+      aircraft.availability_status,
+      input.availability_status,
+    );
 
     const aircraftDir = path.join(
       __dirname,
@@ -222,6 +261,7 @@ export class AircraftService {
     const aircraft = await this.aircraftRepository.findOneOrFail({
       where: { id: aircraftId },
     });
+    await this.assertPlaceFor(aircraft.availability_status, availabilityStatus);
     aircraft.availability_status = availabilityStatus;
     return this.aircraftRepository.save(aircraft);
   }

@@ -67,6 +67,11 @@ services:
       PAYPAL_MODE: ${PAYPAL_MODE:-sandbox}
       OPENWEATHERMAP_API_KEY: ${OPENWEATHERMAP_API_KEY:-}
       API_NINJAS_KEY: ${API_NINJAS_KEY:-}
+      # Plan of the club (see README): club or ecole, and optional limits.
+      # Left empty: everything, no limit.
+      SKYCREW_PLAN: ${SKYCREW_PLAN:-}
+      SKYCREW_MAX_AIRCRAFT: ${SKYCREW_MAX_AIRCRAFT:-}
+      SKYCREW_MAX_MEMBERS: ${SKYCREW_MAX_MEMBERS:-}
     volumes:
       - uploads:/usr/src/app/dist/src/uploads
     depends_on:

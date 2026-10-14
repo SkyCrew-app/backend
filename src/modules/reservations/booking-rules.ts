@@ -334,7 +334,8 @@ export const hasValidLicence = (
 // OWNER DECISION — who may fly.
 // Alone, the pilot needs a valid licence. With an instructor on board, the
 // licence that must be valid is the instructor's: a member without a licence
-// (a student pilot) therefore flies with an instructor, never alone.
+// (a student pilot) therefore flies with an instructor, never alone, and
+// cannot book at all where the plan does not include instruction.
 export const assertAllowedToFly = (crew: {
   pilotLicences: PilotLicence[] | null | undefined;
   // Null or undefined when nobody instructs.
@@ -342,6 +343,9 @@ export const assertAllowedToFly = (crew: {
   withInstructor: boolean;
   acceptedTypes: string[] | null | undefined;
   flightEnd: Date;
+  // False when the plan of the club does not include instruction: a pilot
+  // without a licence then cannot book at all.
+  instructionOffered?: boolean;
 }): void => {
   if (crew.withInstructor) {
     if (
@@ -363,7 +367,9 @@ export const assertAllowedToFly = (crew: {
   ) {
     throw localized(
       BadRequestException,
-      'error.reservation.instructorRequired',
+      crew.instructionOffered === false
+        ? 'error.reservation.licenceRequired'
+        : 'error.reservation.instructorRequired',
     );
   }
 };
