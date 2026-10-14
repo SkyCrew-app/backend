@@ -20,6 +20,8 @@ import {
   SessionUser,
 } from '../../common/auth/access';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
+import { AdminActionsService } from '../../common/admin-actions/admin-actions.service';
+import { ADMIN_ACTION } from '../../common/admin-actions/admin-actions';
 
 const isSameUser = (
   user: SessionUser | undefined,
@@ -35,7 +37,10 @@ const forbidden = () =>
 @UseGuards(JwtAuthGuard)
 @UseFilters(LocalizedExceptionFilter)
 export class InstructionCoursesResolver {
-  constructor(private readonly courseService: InstructionCoursesService) {}
+  constructor(
+    private readonly courseService: InstructionCoursesService,
+    private readonly adminActions: AdminActionsService,
+  ) {}
 
   private assertParticipant(user: SessionUser, course: InstructionCourse) {
     if (
@@ -163,11 +168,17 @@ export class InstructionCoursesResolver {
     @Args('input') input: UpdateCourseInstructionInput,
     @CurrentUser() currentUser?: SessionUser,
   ): Promise<InstructionCourse> {
-    this.assertInstructorOf(
+    const before = await this.courseService.findOne(input.id);
+    this.assertInstructorOf(currentUser, before);
+    const updated = await this.courseService.updateCourse(
+      input.id,
+      input,
       currentUser,
-      await this.courseService.findOne(input.id),
     );
-    return this.courseService.updateCourse(input.id, input, currentUser);
+    if (input.cancelBooking && !updated.reservation) {
+      await this.traceBookingCancelled(currentUser, before);
+    }
+    return updated;
   }
 
   // Supprimer un cours
@@ -175,9 +186,58 @@ export class InstructionCoursesResolver {
   async deleteCourse(
     @Args('id', { type: () => Int }) id: number,
     @CurrentUser() currentUser?: SessionUser,
+    // Also cancel the aircraft booking of the course, refunded to the student.
+    @Args('cancelBooking', { type: () => Boolean, nullable: true })
+    cancelBooking?: boolean,
   ): Promise<boolean> {
-    this.assertInstructorOf(currentUser, await this.courseService.findOne(id));
-    return this.courseService.deleteCourse(id);
+    const before = await this.courseService.findOne(id);
+    this.assertInstructorOf(currentUser, before);
+    const deleted = await this.courseService.deleteCourse(
+      id,
+      cancelBooking ?? false,
+      currentUser,
+    );
+    if (deleted && cancelBooking) {
+      await this.traceBookingCancelled(currentUser, before);
+    }
+    return deleted;
+  }
+
+  // An administrator cancelling the booking of another member with its
+  // course leaves the same line as cancelling it from the calendar.
+  private async traceBookingCancelled(
+    currentUser: SessionUser | undefined,
+    course: InstructionCourse,
+  ): Promise<void> {
+    const booking = course.reservation;
+    if (
+      !booking ||
+      !isAdmin(currentUser) ||
+      isSameUser(currentUser, booking.user?.id)
+    ) {
+      return;
+    }
+    const holder = [booking.user?.first_name, booking.user?.last_name]
+      .filter(Boolean)
+      .join(' ');
+    await this.adminActions.record(
+      currentUser,
+      ADMIN_ACTION.RESERVATION_CANCELLED_FOR_MEMBER,
+      {
+        type: 'reservation',
+        id: booking.id,
+        label:
+          [booking.aircraft?.registration_number, holder]
+            .filter(Boolean)
+            .join(', ') || null,
+      },
+      {
+        memberId: booking.user?.id ?? null,
+        start: booking.start_time ?? null,
+        end: booking.end_time ?? null,
+        refundedAmount: Number(booking.charged_amount ?? 0),
+      },
+    );
   }
 
   // Ajouter une compétence à un cours

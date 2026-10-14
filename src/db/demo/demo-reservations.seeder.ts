@@ -110,7 +110,7 @@ export const seedDemoReservations = async (
       end_time: makeDate(5, 15, 0),
       estimated_flight_hours: 7.0,
       purpose: 'Navigation longue Paris - Marseille AR',
-      status: ReservationStatus.PENDING,
+      status: ReservationStatus.CONFIRMED,
       flight_category: FlightCategory.PRIVATE,
       notes: 'Escale prévue à LFML',
       number_of_passengers: 1,
@@ -180,19 +180,6 @@ export const seedDemoReservations = async (
       status: ReservationStatus.CONFIRMED,
       flight_category: FlightCategory.TRAINING,
     },
-    // Reservation annulee
-    {
-      aircraft: aircraft[4], // Cirrus SR22
-      user: pilotes[0], // Jean
-      reservation_date: makeDate(-1, 0),
-      start_time: makeDate(-1, 8, 0),
-      end_time: makeDate(-1, 12, 0),
-      estimated_flight_hours: 4.0,
-      purpose: 'Navigation long courrier annulée - météo',
-      status: ReservationStatus.CANCELLED,
-      flight_category: FlightCategory.CROSS_COUNTRY,
-      notes: 'Annulé : SIGMET orage violent sur la route',
-    },
     // Reservations futures
     {
       aircraft: aircraft[0], // Cessna 172
@@ -242,7 +229,7 @@ export const seedDemoReservations = async (
       end_time: makeDate(4, 14, 0),
       estimated_flight_hours: 6.0,
       purpose: 'Vol Paris-Nice aller-retour',
-      status: ReservationStatus.PENDING,
+      status: ReservationStatus.CONFIRMED,
       flight_category: FlightCategory.PRIVATE,
       notes: 'Déplacement professionnel',
       number_of_passengers: 1,
@@ -278,15 +265,16 @@ export const seedDemoReservations = async (
   for (const data of demoReservations) {
     // As the API does when it books: the price is fixed on the booking and
     // recorded as a line of the member's account. Without it a demo booking
-    // could be neither moved nor refunded. A cancelled booking holds nothing.
-    const cancelled = data.status === ReservationStatus.CANCELLED;
-    const cents = cancelled
-      ? 0
-      : priceCents(data.aircraft.hourly_cost, data.start_time, data.end_time);
+    // could be neither moved nor refunded.
+    const cents = priceCents(
+      data.aircraft.hourly_cost,
+      data.start_time,
+      data.end_time,
+    );
 
     const reservation = reservationRepository.create({
       ...data,
-      charged_amount: cancelled ? null : fromCents(cents),
+      charged_amount: fromCents(cents),
     });
     const saved = await reservationRepository.save(reservation);
     savedReservations.push(saved);

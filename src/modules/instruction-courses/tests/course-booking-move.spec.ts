@@ -230,3 +230,175 @@ describe('Moving a course that has an aircraft booking', () => {
     expect(new Date(bookingRow().start_time)).toEqual(SLOT.start_time);
   });
 });
+
+describe('The course of a booking', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('is found from the booking until a change of instructor detaches it', async () => {
+    const { world, course, booking } = await courseWithBooking();
+    expect(await world.reservations.findCourseOf(booking.id)).toEqual(
+      expect.objectContaining({ id: course.id }),
+    );
+
+    const other = world.database.insert(tables.User, {
+      first_name: 'Otto',
+      last_name: 'Blanc',
+      email: 'otto@test.com',
+      is_active: true,
+      user_account_balance: 0,
+      role: { role_name: 'Instructeur' },
+      licenses: [
+        {
+          license_type: 'PPL',
+          is_valid: true,
+          status: 'active',
+          expiration_date: new Date('2028-01-01T00:00:00Z'),
+        },
+      ],
+    });
+    await world.reservations.update(
+      { id: booking.id, instructor_id: other.id } as any,
+      NOW,
+    );
+
+    expect(await world.reservations.findCourseOf(booking.id)).toBeNull();
+  });
+});
+
+describe('Cancelling a course that has an aircraft booking', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('cancels the booking too when asked, refunded once, with its notices', async () => {
+    const { world, course, courses, asInstructor, bookingRow, courseRow } =
+      await courseWithBooking();
+    expect(world.balance()).toBeLessThan(500);
+    world.notifications.create.mockClear();
+    world.mailer.sendMail.mockClear();
+
+    const cancelled = await courses.updateCourse(
+      course.id,
+      { id: course.id, status: 'CANCELED' as any, cancelBooking: true },
+      asInstructor,
+    );
+
+    expect(cancelled.status).toBe('CANCELED');
+    expect(courseRow().status).toBe('CANCELED');
+    expect(courseRow().reservation).toBeNull();
+    expect(bookingRow()).toBeUndefined();
+    // Everything the student paid for the booking comes back, once.
+    expect(world.balance()).toBeCloseTo(500, 2);
+    expect(world.notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({ notification_type: 'RESERVATION_CANCELLED' }),
+    );
+    expect(world.mailer.sendMail).toHaveBeenCalled();
+
+    // Cancelling again cannot refund a second time.
+    expect(
+      await refusal(
+        courses.updateCourse(
+          course.id,
+          { id: course.id, status: 'CANCELED' as any, cancelBooking: true },
+          asInstructor,
+        ),
+      ),
+    ).toBe('error.course.cancelBookingWithoutCancelling');
+    expect(world.balance()).toBeCloseTo(500, 2);
+  });
+
+  it('keeps the booking, still paid, when not asked to cancel it', async () => {
+    const { world, course, courses, asInstructor, bookingRow, courseRow } =
+      await courseWithBooking();
+    const balance = world.balance();
+
+    await courses.updateCourse(
+      course.id,
+      { id: course.id, status: 'CANCELED' as any },
+      asInstructor,
+    );
+
+    expect(courseRow().status).toBe('CANCELED');
+    expect(bookingRow()).toBeDefined();
+    expect(world.balance()).toBe(balance);
+  });
+
+  it('refuses the whole cancellation when the booking can no longer be cancelled, with the reason', async () => {
+    const { world, course, courses, asInstructor, bookingRow, courseRow } =
+      await courseWithBooking();
+    const balance = world.balance();
+    // The flight has started: only an administrator cancels the booking now.
+    jest.setSystemTime(at(SLOT.start_time, 0.5));
+
+    expect(
+      await refusal(
+        courses.updateCourse(
+          course.id,
+          { id: course.id, status: 'CANCELED' as any, cancelBooking: true },
+          asInstructor,
+        ),
+      ),
+    ).toBe('error.reservation.cancelAfterStart');
+
+    expect(courseRow().status).toBe('SCHEDULED');
+    expect(courseRow().reservation).toEqual({ id: bookingRow().id });
+    expect(world.balance()).toBe(balance);
+  });
+
+  it('refuses to cancel a booking along with anything but a cancellation', async () => {
+    const { course, courses, asInstructor, bookingRow } =
+      await courseWithBooking();
+
+    expect(
+      await refusal(
+        courses.updateCourse(
+          course.id,
+          { id: course.id, status: 'IN_PROGRESS' as any, cancelBooking: true },
+          asInstructor,
+        ),
+      ),
+    ).toBe('error.course.cancelBookingWithoutCancelling');
+    expect(bookingRow()).toBeDefined();
+  });
+});
+
+describe('Deleting a course that has an aircraft booking', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it('cancels the booking too when asked, refunded', async () => {
+    const { world, course, courses, asInstructor, bookingRow } =
+      await courseWithBooking();
+
+    await expect(
+      courses.deleteCourse(course.id, true, asInstructor),
+    ).resolves.toBe(true);
+
+    expect(world.database.rows(tables.InstructionCourse)).toHaveLength(0);
+    expect(bookingRow()).toBeUndefined();
+    expect(world.balance()).toBeCloseTo(500, 2);
+  });
+
+  it('keeps the booking, still paid, when not asked to cancel it', async () => {
+    const { world, course, courses, bookingRow } = await courseWithBooking();
+    const balance = world.balance();
+
+    // (The fake repository does not delete by id: the course row itself is
+    // covered by the service tests.)
+    await courses.deleteCourse(course.id);
+
+    expect(bookingRow()).toBeDefined();
+    expect(world.balance()).toBe(balance);
+  });
+
+  it('deletes nothing when the booking can no longer be cancelled, and says why', async () => {
+    const { world, course, courses, asInstructor, bookingRow } =
+      await courseWithBooking();
+    const balance = world.balance();
+    jest.setSystemTime(at(SLOT.start_time, 0.5));
+
+    expect(
+      await refusal(courses.deleteCourse(course.id, true, asInstructor)),
+    ).toBe('error.reservation.cancelAfterStart');
+    expect(world.database.rows(tables.InstructionCourse)).toHaveLength(1);
+    expect(bookingRow()).toBeDefined();
+    expect(world.balance()).toBe(balance);
+  });
+});
