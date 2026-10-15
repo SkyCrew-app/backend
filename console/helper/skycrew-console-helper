@@ -1,0 +1,328 @@
+#!/bin/sh
+# The only program the SkyCrew console may run as root (through sudo, see
+# deploy/sudoers). It does a fixed list of things to the club installations
+# of this server and checks every argument itself, whatever the console
+# checked before:
+#
+#   version                                   protocol version of this helper
+#   status                                    state of every club and of the server (read only)
+#   list                                      one line per club (read only)
+#   images                                    versions of the images present on this server (read only)
+#   backup <club>                             runs the backup of that club now
+#   create <club> <domain> <admin e-mail> <club|ecole> <max aircraft|-> <max members|-> <backend> <frontend>
+#                                             installs a new club (new-club.sh); the alert webhook,
+#                                             if any, is read from the first line of the standard input
+#   enable-site <club>                        enables the nginx site of the club, then asks certbot for HTTPS
+#   set-plan <club> <club|ecole> <max aircraft|-> <max members|->
+#   suspend <club> | resume <club>            members see "service suspendu" / everything back
+#   update <club> <backend|-> <frontend|->    backup, switch, health wait, automatic return (release-lib.sh)
+#
+# Settings: /etc/skycrew-console/helper.conf (owned by root), see
+# helper.conf.example. Exit status: 0 done, 1 failed, 2 new AND previous
+# versions unhealthy, 3 nothing changed, 4 suspension without effect (version
+# too old), 5 image missing, 64 refused argument, 75 club busy.
+set -eu
+umask 077
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+NL='
+'
+CR=$(printf '\r')
+TAB=$(printf '\t')
+
+die() { code=$1; shift; printf 'ÉCHEC : %s\n' "$*" >&2; exit "$code"; }
+say() { printf '\n== %s\n' "$*"; }
+fail() { die 1 "$*"; }
+
+# --- Settings -----------------------------------------------------------------------
+# Under sudo the environment is reset; a test run by an ordinary user (never
+# root) may point to another settings file.
+CONF=/etc/skycrew-console/helper.conf
+if [ "$(id -u)" != 0 ] && [ -z "${SUDO_USER:-}" ] && [ -n "${SKYCREW_HELPER_CONF:-}" ]; then
+  CONF=$SKYCREW_HELPER_CONF
+fi
+# Read, never sourced: only these keys, one per line, KEY=value.
+conf() { # <key> <default>
+  value=""
+  [ -f "$CONF" ] && value=$(grep "^$1=" "$CONF" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\"'") || true
+  printf '%s' "${value:-$2}"
+}
+matches() { # <value> <extended regex>: the whole value, on one line
+  case $1 in *"$NL"* | *"$CR"*) return 1 ;; esac
+  printf '%s\n' "$1" | grep -Eq "$2"
+}
+
+KIT=$(conf KIT_DIR /usr/local/lib/skycrew-console/kit)
+ROOT=$(conf SERVER_ROOT "")
+REGISTRY=$(conf REGISTRY ghcr.io/skycrew-app)
+IMAGE_SOURCE=$(conf IMAGE_SOURCE preloaded)
+HEALTH_WAIT=$(conf HEALTH_WAIT 120)
+LOCK_DIR=$(conf LOCK_DIR /run/lock/skycrew-console)
+NGINX_BIN=$(conf NGINX_BIN nginx)
+SYSTEMCTL_BIN=$(conf SYSTEMCTL_BIN systemctl)
+CERTBOT_BIN=$(conf CERTBOT_BIN certbot)
+NGINX_DIR=$(conf NGINX_DIR /etc/nginx)
+
+matches "$KIT" '^/[A-Za-z0-9._/-]+$' || die 64 "KIT_DIR invalide dans $CONF"
+[ -z "$ROOT" ] || matches "$ROOT" '^/[A-Za-z0-9._/-]+$' || die 64 "SERVER_ROOT invalide dans $CONF"
+matches "$REGISTRY" '^[a-z0-9.-]+(:[0-9]+)?(/[a-z0-9._-]+)*$' || die 64 "REGISTRY invalide dans $CONF"
+case $IMAGE_SOURCE in preloaded | pull) ;; *) die 64 "IMAGE_SOURCE vaut preloaded ou pull dans $CONF" ;; esac
+matches "$HEALTH_WAIT" '^[0-9]{2,4}$' || die 64 "HEALTH_WAIT invalide dans $CONF"
+for value in "$LOCK_DIR" "$NGINX_DIR"; do matches "$value" '^/[A-Za-z0-9._/-]+$' || die 64 "chemin invalide dans $CONF"; done
+for value in "$NGINX_BIN" "$SYSTEMCTL_BIN" "$CERTBOT_BIN"; do matches "$value" '^[A-Za-z0-9._/-]+$' || die 64 "commande invalide dans $CONF"; done
+[ -f "$KIT/clubs-remote.sh" ] || die 1 "kit de déploiement absent de $KIT (relancez console/deploy/install.sh)"
+
+# --- Checks of the arguments (the same rules as the console) --------------------------
+SLUG_RE='^[a-z][a-z0-9-]{1,29}[a-z0-9]$'
+check_slug() { [ "$1" = skycrew ] || matches "$1" "$SLUG_RE" || die 64 "nom de club refusé"; }
+check_new_slug() { [ "$1" != skycrew ] && matches "$1" "$SLUG_RE" || die 64 "nom de club refusé"; }
+check_version() { matches "$1" '^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,6}$' || die 64 "version refusée"; }
+check_optional_version() { [ "$1" = - ] || check_version "$1"; }
+check_plan() { case $1 in club | ecole) ;; *) die 64 "formule refusée" ;; esac; }
+check_cap() { [ "$1" = - ] || matches "$1" '^[1-9][0-9]{0,4}$' || die 64 "limite refusée"; }
+check_domain() { matches "$1" '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$' && [ ${#1} -le 253 ] || die 64 "adresse refusée"; }
+check_email() { matches "$1" '^[A-Za-z0-9._%+-]{1,64}@([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$' || die 64 "e-mail refusé"; }
+# (BSD grep refuses repetitions above 255: lengths are checked apart.)
+check_webhook() { [ -z "$1" ] || { [ ${#1} -le 500 ] && matches "$1" '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/[A-Za-z0-9._~/?=&%+-]*$'; } || die 64 "webhook refusé"; }
+nargs() { [ "$1" -eq "$2" ] || die 64 "nombre d’arguments incorrect pour $ACTION"; }
+
+# --- Clubs ---------------------------------------------------------------------------
+env_value() { [ -f "$1" ] && grep "^$2=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\"'$TAB\r" || true; }
+
+club_dir() { # <slug>: the folder of an existing club, or stops
+  if [ "$1" = skycrew ]; then d=$ROOT/opt/skycrew; else d=$ROOT/opt/skycrew-$1; fi
+  [ -f "$d/.env" ] && [ -f "$d/docker-compose.yml" ] || die 3 "aucun club « $1 » sur ce serveur"
+  printf '%s' "$d"
+}
+backup_cmd_of() { if [ "$1" = skycrew ]; then printf '%s' "$ROOT/usr/local/sbin/skycrew-backup"; else printf '%s' "$ROOT/usr/local/sbin/skycrew-backup-$1"; fi; }
+
+# One action at a time on a club, whoever asks (the console, or clubs.sh by hand
+# does not take it, but two consoles would).
+LOCKED=""
+lock() { # <name>
+  mkdir -p "$LOCK_DIR"
+  l=$LOCK_DIR/$1.lock
+  if ! mkdir "$l" 2>/dev/null; then
+    pid=$(cat "$l/pid" 2>/dev/null || echo "")
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then die 75 "une autre opération est en cours sur $1"; fi
+    rm -rf "$l"; mkdir "$l" || die 75 "une autre opération est en cours sur $1"
+  fi
+  echo $$ >"$l/pid"
+  LOCKED="$LOCKED $l"
+  trap 'for x in $LOCKED; do rm -rf "$x"; done' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+}
+
+# Rewrites one KEY=value of a .env in place: same file, same owner, same rights.
+set_env() { # <file> <key> <value>
+  awk -v k="$2" -v v="$3" 'index($0, k "=") == 1 { if (!done) print k "=" v; done = 1; next } { print } END { if (!done) print k "=" v }' "$1" >"$1.console"
+  cat "$1.console" >"$1"
+  rm -f "$1.console"
+}
+
+healthy() { # <folder>: waits for the API and the web application
+  i=0
+  while [ $i -lt $((HEALTH_WAIT / 3)) ]; do
+    ok=1
+    for service in backend frontend; do
+      id=$(cd "$1" && docker compose ps -q "$service" </dev/null 2>/dev/null || true)
+      [ -n "$id" ] && [ "$(docker inspect -f '{{.State.Health.Status}}' "$id" 2>/dev/null)" = healthy ] || ok=0
+    done
+    [ $ok -eq 1 ] && return 0
+    i=$((i + 1)); sleep 3
+  done
+  return 1
+}
+
+restart_club() { # <folder>
+  (cd "$1" && docker compose config -q </dev/null) || return 3
+  (cd "$1" && docker compose up -d </dev/null >/dev/null 2>&1) || true
+  healthy "$1"
+}
+
+ensure_images() { # <backend|-> <frontend|->
+  for pair in "backend:$1" "frontend:$2"; do
+    case $pair in *:-) continue ;; esac
+    if docker image inspect "$REGISTRY/$pair" >/dev/null 2>&1; then
+      echo "image $REGISTRY/$pair présente"
+    elif [ "$IMAGE_SOURCE" = pull ]; then
+      say "Téléchargement de $REGISTRY/$pair"
+      docker pull -q "$REGISTRY/$pair" || die 5 "image $REGISTRY/$pair introuvable au registre (accès GHCR ? voir le README de la console)"
+    else
+      die 5 "image $REGISTRY/$pair absente de ce serveur (IMAGE_SOURCE=preloaded : chargez-la d’abord)"
+    fi
+  done
+}
+
+# The compose file of the club must hand SKYCREW_SUSPENDED to the API. Clubs
+# installed before that existed get the files of the kit (the old ones kept).
+ensure_suspend_support() { # <folder>
+  grep -q SKYCREW_SUSPENDED "$1/docker-compose.yml" && return 0
+  grep -q SKYCREW_SUSPENDED "$KIT/docker-compose.yml" || die 1 "le kit de $KIT ne connaît pas la suspension"
+  stamp=$(date +%Y%m%d-%H%M%S)
+  say "Mise à jour du fichier docker-compose.yml du club (ancien gardé en .bak-$stamp)"
+  cp -p "$1/docker-compose.yml" "$1/docker-compose.yml.bak-$stamp"
+  cat "$KIT/docker-compose.yml" >"$1/docker-compose.yml"
+  if ! (cd "$1" && docker compose config -q </dev/null); then
+    cat "$1/docker-compose.yml.bak-$stamp" >"$1/docker-compose.yml"
+    die 3 "le nouveau fichier docker-compose.yml n’est pas valide pour ce club : rien n’a été changé"
+  fi
+}
+
+# What the API of the club says: true, false, or unknown (version too old).
+suspended_answer() { # <folder>
+  port=$(env_value "$1/.env" LOCAL_PORT); port=${port:-8100}
+  answer=$(curl -s -m 10 -H 'Content-Type: application/json' -d '{"query":"{ serviceSuspended }"}' \
+    "http://127.0.0.1:$port/graphql" 2>/dev/null || true)
+  case $answer in
+    *'"serviceSuspended":true'*) echo true ;;
+    *'"serviceSuspended":false'*) echo false ;;
+    *) echo unknown ;;
+  esac
+}
+
+# --- Actions -------------------------------------------------------------------------
+do_create() {
+  nargs $# 8
+  slug=$1; domain=$2; email=$3; plan=$4; max_aircraft=$5; max_members=$6; backend=$7; frontend=$8
+  check_new_slug "$slug"; check_domain "$domain"; check_email "$email"; check_plan "$plan"
+  check_cap "$max_aircraft"; check_cap "$max_members"; check_version "$backend"; check_version "$frontend"
+  webhook=""
+  IFS= read -r webhook 2>/dev/null || true
+  check_webhook "$webhook"
+  lock "create"
+  lock "$slug"
+  ensure_images "$backend" "$frontend"
+  set -- "$slug" --domain "$domain" --admin-email "$email" --plan "$plan" --backend "$backend" --frontend "$frontend"
+  [ "$max_aircraft" = - ] || set -- "$@" --max-aircraft "$max_aircraft"
+  [ "$max_members" = - ] || set -- "$@" --max-members "$max_members"
+  [ -z "$webhook" ] || set -- "$@" --alert-webhook "$webhook"
+  SSH=$KIT/local-ssh SERVER_ROOT=$ROOT REGISTRY=$REGISTRY sh "$KIT/new-club.sh" local "$@" </dev/null
+}
+
+do_enable_site() {
+  nargs $# 1
+  slug=$1; check_new_slug "$slug"
+  dir=$(club_dir "$slug")
+  lock "nginx"
+  url=$(env_value "$dir/.env" PUBLIC_URL); domain=${url#https://}
+  check_domain "$domain"
+  file=$dir/nginx-$domain.conf
+  [ -f "$file" ] || die 3 "pas de fichier nginx préparé pour ce club ($file)"
+  available=$ROOT$NGINX_DIR/sites-available/skycrew-$slug.conf
+  enabled=$ROOT$NGINX_DIR/sites-enabled/skycrew-$slug.conf
+  [ ! -e "$enabled" ] || die 3 "le site nginx du club est déjà activé"
+  say "Activation du site nginx de $domain"
+  mkdir -p "$(dirname "$available")" "$(dirname "$enabled")"
+  install -m 644 "$file" "$available"
+  ln -s "$available" "$enabled"
+  if ! "$NGINX_BIN" -t; then
+    rm -f "$enabled"
+    die 1 "nginx refuse la configuration : le site a été retiré, rien d’autre n’a changé"
+  fi
+  "$SYSTEMCTL_BIN" reload nginx || { rm -f "$enabled"; "$SYSTEMCTL_BIN" reload nginx || true; die 1 "nginx n’a pas rechargé : le site a été retiré"; }
+  echo "site activé (http)"
+  say "Certificat HTTPS (certbot)"
+  if "$CERTBOT_BIN" --nginx --non-interactive --redirect -d "$domain"; then
+    echo "HTTPS en place pour $domain"
+  else
+    die 1 "certbot n’a pas obtenu le certificat : vérifiez que $domain pointe vers ce serveur, puis relancez « Activer le site »"
+  fi
+}
+
+do_set_plan() {
+  nargs $# 4
+  slug=$1; plan=$2; max_aircraft=$3; max_members=$4
+  check_slug "$slug"; check_plan "$plan"; check_cap "$max_aircraft"; check_cap "$max_members"
+  dir=$(club_dir "$slug")
+  lock "$slug"
+  [ "$max_aircraft" = - ] && max_aircraft=""
+  [ "$max_members" = - ] && max_members=""
+  say "Formule de $slug : $plan, avions ${max_aircraft:-sans limite}, membres ${max_members:-sans limite}"
+  cp -p "$dir/.env" "$dir/.env.console-prev"
+  set_env "$dir/.env" SKYCREW_PLAN "$plan"
+  set_env "$dir/.env" SKYCREW_MAX_AIRCRAFT "$max_aircraft"
+  set_env "$dir/.env" SKYCREW_MAX_MEMBERS "$max_members"
+  rc=0; restart_club "$dir" || rc=$?
+  if [ $rc -eq 0 ]; then rm -f "$dir/.env.console-prev"; echo "le club répond avec sa nouvelle formule"; return 0; fi
+  echo "le club ne répond pas avec la nouvelle formule : retour à l’ancienne" >&2
+  cat "$dir/.env.console-prev" >"$dir/.env"; rm -f "$dir/.env.console-prev"
+  restart_club "$dir" || die 2 "l’ancienne formule ne répond pas non plus : À VÉRIFIER"
+  die 1 "formule inchangée (le club a été remis comme avant)"
+}
+
+do_suspend() { # <slug> <1|"">
+  slug=$1; value=$2
+  check_slug "$slug"
+  dir=$(club_dir "$slug")
+  lock "$slug"
+  ensure_suspend_support "$dir"
+  if [ -n "$value" ]; then say "Suspension de $slug"; else say "Réactivation de $slug"; fi
+  set_env "$dir/.env" SKYCREW_SUSPENDED "$value"
+  rc=0; restart_club "$dir" || rc=$?
+  [ $rc -ne 3 ] || die 3 "configuration refusée"
+  [ $rc -eq 0 ] || echo "attention : le club ne répond pas encore entièrement" >&2
+  answer=$(suspended_answer "$dir")
+  echo "SUSPENDED_ANSWER=$answer"
+  if [ -n "$value" ]; then
+    [ "$answer" = true ] || die 4 "le club a bien l’indication de suspension, mais sa version ne la connaît pas (il faut le backend 2.19.0 ou plus récent) : ses membres l’utilisent toujours"
+    echo "club suspendu : ses membres voient « service suspendu », ses données sont intactes"
+  else
+    [ "$answer" != true ] || die 1 "le club se dit toujours suspendu"
+    echo "club réactivé"
+  fi
+  [ $rc -eq 0 ] || exit 1
+}
+
+do_update() {
+  nargs $# 3
+  slug=$1; backend=$2; frontend=$3
+  check_slug "$slug"; check_optional_version "$backend"; check_optional_version "$frontend"
+  [ "$backend$frontend" != -- ] || die 64 "aucune version demandée"
+  dir=$(club_dir "$slug")
+  cmd=$(backup_cmd_of "$slug")
+  [ -x "$cmd" ] || die 3 "ce club n’a pas de sauvegarde installée : mise à jour refusée"
+  lock "$slug"
+  ensure_images "$backend" "$frontend"
+  [ "$backend" = - ] && backend=""
+  [ "$frontend" = - ] && frontend=""
+  # The same steps as release-to-server.sh and clubs.sh update-all.
+  BACKEND_DIR=$KIT FRONTEND_DIR=$KIT SSH=$KIT/local-ssh REGISTRY=$REGISTRY HEALTH_WAIT=$HEALTH_WAIT
+  export SSH REGISTRY HEALTH_WAIT
+  . "$KIT/release-lib.sh"
+  release_init
+  # release_init sets its own tidying up; the lock of the club goes with it.
+  trap 'rc=$?; for x in $LOCKED; do rm -rf "$x"; done; (exit $rc); release_cleanup' EXIT
+  backup_club local "$cmd" || die 3 "la sauvegarde a échoué : versions inchangées"
+  rc=0; switch_club local "$dir" "$backend" "$frontend" || rc=$?
+  case $rc in
+    0) echo "UPDATE_RESULT=updated" ;;
+    1) echo "UPDATE_RESULT=rolled_back" ;;
+    2) echo "UPDATE_RESULT=broken" ;;
+    3) echo "UPDATE_RESULT=unchanged" ;;
+    *) echo "UPDATE_RESULT=interrupted" ;;
+  esac
+  exit $rc
+}
+
+[ $# -ge 1 ] || die 64 "action manquante"
+ACTION=$1; shift
+case $ACTION in
+  version) echo "skycrew-console-helper 1" ;;
+  status) nargs $# 0; sh "$KIT/clubs-remote.sh" status "$ROOT" ;;
+  list) nargs $# 0; sh "$KIT/clubs-remote.sh" list "$ROOT" ;;
+  images)
+    nargs $# 0
+    docker images --format '{{.Repository}} {{.Tag}}' 2>/dev/null |
+      awk -v r="$REGISTRY" '$1 == r "/backend" || $1 == r "/frontend" { sub(".*/", "", $1); if ($2 ~ /^[0-9]+\.[0-9]+\.[0-9]+$/) print $1 "\t" $2 }' | sort -u
+    ;;
+  backup) nargs $# 1; check_slug "$1"; club_dir "$1" >/dev/null; lock "$1"; sh "$KIT/clubs-remote.sh" backup "$ROOT" "$1" ;;
+  create) do_create "$@" ;;
+  enable-site) do_enable_site "$@" ;;
+  set-plan) do_set_plan "$@" ;;
+  suspend) nargs $# 1; do_suspend "$1" 1 ;;
+  resume) nargs $# 1; do_suspend "$1" "" ;;
+  update) do_update "$@" ;;
+  *) die 64 "action inconnue" ;;
+esac

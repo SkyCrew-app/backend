@@ -85,6 +85,7 @@ club_status() {
   out plan "$(env_value "$env" SKYCREW_PLAN)"
   out max_aircraft "$(env_value "$env" SKYCREW_MAX_AIRCRAFT)"
   out max_members "$(env_value "$env" SKYCREW_MAX_MEMBERS)"
+  out suspended "$(env_value "$env" SKYCREW_SUSPENDED)"
   out env_backend "$(env_value "$env" BACKEND_VERSION)"
   out env_frontend "$(env_value "$env" FRONTEND_VERSION)"
 

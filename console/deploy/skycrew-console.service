@@ -1,0 +1,31 @@
+# /etc/systemd/system/skycrew-console.service, written by install.sh.
+[Unit]
+Description=SkyCrew console (owner's administration of the club installations)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skycrew-console
+Group=skycrew-console
+EnvironmentFile=/etc/skycrew-console/console.env
+WorkingDirectory=/opt/skycrew-console/app
+ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning /opt/skycrew-console/app/bin/skycrew-console.ts serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+# On stop, the console finishes the operation in progress (an update is never
+# cut in the middle of a switch), then leaves.
+KillMode=mixed
+TimeoutStopSec=45min
+# Hardening that does not reach the helper: it runs through sudo, so
+# NoNewPrivileges and read-only file systems cannot be used here (they would
+# stop the helper too), and address-family filters could stop sudo's own
+# audit messages. The boundary is the helper and its checks.
+PrivateTmp=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

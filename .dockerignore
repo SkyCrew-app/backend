@@ -23,3 +23,5 @@ deploy-k8s.sh
 docker-compose.yml
 k8s
 screen
+# The super-admin console is a separate package, not part of the API image.
+console
