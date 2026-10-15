@@ -112,7 +112,7 @@ const freshCode = async (): Promise<string> => {
 };
 
 const createOwner = async () => {
-  const child = spawn('node', ['--disable-warning=ExperimentalWarning', cli, 'create-owner'], { env });
+  const child = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', cli, 'create-owner'], { env });
   const closed = new Promise((r) => child.on('close', r));
   let output = '';
   const waitFor = (pattern: RegExp) =>
@@ -152,7 +152,7 @@ const startConsole = async () => {
   } catch (error) {
     if ((error as Error).message.startsWith('le port')) throw error;
   }
-  server = spawn('node', ['--disable-warning=ExperimentalWarning', cli, 'serve'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', cli, 'serve'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   const out: string[] = [];
   server.stdout!.on('data', (d) => out.push(String(d)));
   server.stderr!.on('data', (d) => out.push(String(d)));
