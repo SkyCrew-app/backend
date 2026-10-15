@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import formbody from '@fastify/formbody';
+import rateLimit from '@fastify/rate-limit';
 import type { Config } from '../config.ts';
 import type { Db } from '../db.ts';
 import { listAudit, recordAudit, verifyAuditChain } from '../audit.ts';
@@ -96,6 +97,8 @@ export const buildApp = async (deps: AppDeps): Promise<FastifyInstance> => {
     routerOptions: { ignoreTrailingSlash: true },
   });
   await app.register(formbody, { bodyLimit: 64 * 1024 });
+  // A ceiling on every route, on top of the login lockout: one person uses this console.
+  await app.register(rateLimit, { global: true, max: 300, timeWindow: '1 minute' });
   // Stripe signs the exact bytes it sends: they are kept as they are.
   app.addContentTypeParser('application/json', { parseAs: 'buffer', bodyLimit: 512 * 1024 }, (_req, body, done) => done(null, body));
 
