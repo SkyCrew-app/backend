@@ -47,6 +47,8 @@ import {
   InstructorRoleChangeOutcome,
   InstructorRoleChangeService,
 } from './instructor-role-change.service';
+import { RequiresPlanFeature } from '../../common/plan/plan-feature.guard';
+import { PlanFeature } from '../../common/plan/plan';
 
 const memberTarget = (
   id: number,
@@ -464,6 +466,8 @@ export class UsersResolver {
 }
 
 @Resolver(() => UserProgress)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
+@UseFilters(LocalizedExceptionFilter)
 export class UserProgressResolver {
   constructor(
     private readonly evalService: EvalService,

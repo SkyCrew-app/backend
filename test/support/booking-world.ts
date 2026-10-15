@@ -2,6 +2,7 @@ import { PaymentsService } from '../../src/modules/payments/payments.service';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
 import { FlightCategory } from '../../src/modules/reservations/entity/reservations.entity';
 import { FakeDatabase, tables } from './fake-database';
+import { PlanService } from '../../src/common/plan/plan.service';
 
 // A small club for the booking and money tests: one member with a licence
 // and some money, two aircraft, opening hours 08:00-20:00 (club time), closed
@@ -14,7 +15,7 @@ export const SLOT = {
 };
 
 export const bookingWorld = (
-  options: { balance?: number; rate?: number } = {},
+  options: { balance?: number; rate?: number; plan?: PlanService } = {},
 ) => {
   const database = new FakeDatabase();
   const member = database.insert(tables.User, {
@@ -69,6 +70,7 @@ export const bookingWorld = (
     administration as any,
     payments,
     notifications as any,
+    options.plan,
   );
 
   const input = (overrides: object = {}) =>
