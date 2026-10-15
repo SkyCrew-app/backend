@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InstructionCoursesService } from '../instruction-courses/instruction-courses.service';
 import { LicensesService } from '../licenses/licenses.service';
@@ -22,6 +22,8 @@ import {
   translate,
   translateInEveryLanguage,
 } from '../../common/i18n/translate';
+import { PlanService } from '../../common/plan/plan.service';
+import { PlanFeature } from '../../common/plan/plan';
 
 // The jobs run on the club's clock (midnight in Paris), not the server's.
 const CLUB_SCHEDULE = { timeZone: CLUB_TIME_ZONE };
@@ -45,11 +47,17 @@ export class CronService {
     private readonly reservationsService: ReservationsService,
     private readonly financialService: FinancialService,
     private readonly licenceReminders: LicenceRemindersService,
+    @Optional() private readonly plan: PlanService = new PlanService(),
   ) {}
 
   // Vérification quotidienne des statuts des cours
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, CLUB_SCHEDULE)
   async handleCourseStatusUpdate() {
+    // Courses are part of instruction: nothing to do where the plan leaves
+    // it out.
+    if (!this.plan.includes(PlanFeature.INSTRUCTION)) {
+      return;
+    }
     this.logger.log('Vérification quotidienne des statuts des cours...');
     let expiredCourses: InstructionCourse[];
     try {

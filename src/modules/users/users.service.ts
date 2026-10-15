@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'crypto';
 import { In, IsNull, Not, Raw, Repository } from 'typeorm';
@@ -28,7 +29,14 @@ import {
 } from '../../common/i18n/languages';
 import { translate } from '../../common/i18n/translate';
 import { localized } from '../../common/i18n/localized-exception';
-import { ROLE_ADMIN, ROLE_PILOT } from '../../common/auth/access';
+import {
+  ROLE_ADMIN,
+  ROLE_INSTRUCTOR,
+  ROLE_PILOT,
+} from '../../common/auth/access';
+import { PlanService } from '../../common/plan/plan.service';
+import { PlanFeature } from '../../common/plan/plan';
+import { countActiveMembers } from '../../common/plan/plan-usage';
 import { isEmailAddress, normalizeEmail } from '../../common/validation/email';
 import { Notification } from '../notifications/entity/notifications.entity';
 import { ReservationTemplate } from '../reservations/entity/reservation-template.entity';
@@ -94,7 +102,27 @@ export class UsersService {
     @InjectRepository(Lesson)
     private readonly lessonRepository: Repository<Lesson>,
     private readonly notificationService: NotificationsService,
+    @Optional() private readonly plan: PlanService = new PlanService(),
   ) {}
+
+  // One more active member: refused once the plan's places are all used.
+  // The members already active above the limit stay as they are.
+  private async assertPlaceForMember(): Promise<void> {
+    if (this.plan.maxMembers === null) {
+      return;
+    }
+    this.plan.assertRoomForMember(
+      await countActiveMembers(this.usersRepository.manager),
+    );
+  }
+
+  // The instructor role belongs to instruction, which some plans do not
+  // include. Members who already hold it keep it.
+  private assertRoleAvailable(role: Role): void {
+    if (role.role_name === ROLE_INSTRUCTOR) {
+      this.plan.assertIncludes(PlanFeature.INSTRUCTION);
+    }
+  }
 
   findAll(): Promise<User[]> {
     return this.usersRepository.find({
@@ -163,6 +191,7 @@ export class UsersService {
           : `Rôle « ${DEFAULT_MEMBER_ROLE} » introuvable`,
       );
     }
+    this.assertRoleAvailable(role);
     return role;
   }
 
@@ -190,6 +219,7 @@ export class UsersService {
     if (await this.findOneByEmail(email)) {
       throw localized(ConflictException, 'error.user.emailAlreadyUsed');
     }
+    await this.assertPlaceForMember();
     userData.email = email;
 
     const generatedPassword = uuidv4();
@@ -295,6 +325,9 @@ export class UsersService {
       return user;
     }
 
+    if (active) {
+      await this.assertPlaceForMember();
+    }
     if (!active) {
       await this.assertNotLastAdministrator(user);
       user.sessionVersion = (user.sessionVersion ?? 0) + 1;
@@ -464,6 +497,7 @@ export class UsersService {
       if (!newRole) {
         throw localized(BadRequestException, 'error.user.roleNotFound');
       }
+      this.assertRoleAvailable(newRole);
       if (newRole.role_name !== ROLE_ADMIN) {
         await this.assertNotLastAdministrator(user);
       }

@@ -11,15 +11,15 @@ import { CreateAnswerDTO } from './dto/create-answer.input';
 import { UpdateAnswerDTO } from './dto/update-answers.input';
 import { UserAnswerInput } from './dto/user-answer.input';
 import { ObjectType, Field } from '@nestjs/graphql';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger, UseGuards, UseFilters } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import {
-  assertSelfOrRole,
-  SessionUser,
-} from '../../common/auth/access';
+import { assertSelfOrRole, SessionUser } from '../../common/auth/access';
+import { RequiresPlanFeature } from '../../common/plan/plan-feature.guard';
+import { PlanFeature } from '../../common/plan/plan';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @ObjectType()
 class ValidationResult {
@@ -31,6 +31,8 @@ class ValidationResult {
 }
 
 @Resolver(() => Evaluation)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
+@UseFilters(LocalizedExceptionFilter)
 export class EvaluationResolver {
   constructor(private readonly evalService: EvalService) {}
 
@@ -91,6 +93,8 @@ export class EvaluationResolver {
 }
 
 @Resolver(() => Question)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
+@UseFilters(LocalizedExceptionFilter)
 export class QuestionResolver {
   constructor(private readonly evalService: EvalService) {}
 
@@ -141,6 +145,8 @@ export class QuestionResolver {
 }
 
 @Resolver(() => Answer)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
+@UseFilters(LocalizedExceptionFilter)
 export class AnswerResolver {
   constructor(private readonly evalService: EvalService) {}
 

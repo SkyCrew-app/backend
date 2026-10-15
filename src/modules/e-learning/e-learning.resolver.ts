@@ -19,7 +19,7 @@ import { CreateLessonDTO } from './dto/create-lesson.input';
 import { UpdateLessonDTO } from './dto/update-lesson.input';
 import { CreateModuleDTO } from './dto/create-module.input';
 import { UpdateModuleDTO } from './dto/update-module.input';
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, UseFilters } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -30,8 +30,13 @@ import {
   ROLE_INSTRUCTOR,
   SessionUser,
 } from '../../common/auth/access';
+import { RequiresPlanFeature } from '../../common/plan/plan-feature.guard';
+import { PlanFeature } from '../../common/plan/plan';
+import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 
 @Resolver(() => Course)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
+@UseFilters(LocalizedExceptionFilter)
 export class CourseResolver {
   constructor(
     private readonly eLearningService: ELearningService,
@@ -109,6 +114,8 @@ export class CourseResolver {
 }
 
 @Resolver(() => Module)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
+@UseFilters(LocalizedExceptionFilter)
 export class ModuleResolver {
   constructor(private readonly eLearningService: ELearningService) {}
 
@@ -155,6 +162,8 @@ export class ModuleResolver {
 }
 
 @Resolver(() => Lesson)
+@RequiresPlanFeature(PlanFeature.INSTRUCTION)
+@UseFilters(LocalizedExceptionFilter)
 export class LessonResolver {
   constructor(private readonly eLearningService: ELearningService) {}
 

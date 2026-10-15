@@ -259,6 +259,14 @@ export const en: Record<TranslationKey, string> = {
   'mail.instruction.greeting': 'Hello {{name}},',
   'mail.instruction.start': 'Start:',
   'mail.instruction.end': 'End:',
+  'error.plan.featureNotIncluded':
+    'This feature is part of the Club + School plan, which your club has not chosen.',
+  'error.plan.aircraftLimit':
+    'Your plan allows {{max}} aircraft in service and that number is reached. Take an aircraft out of service or contact your SkyCrew provider to change plan.',
+  'error.plan.memberLimit':
+    'Your plan allows {{max}} active member(s) and that number is reached. Deactivate the account of a member who left or contact your SkyCrew provider to change plan.',
+  'error.reservation.licenceRequired':
+    'Without a licence valid until the end of this flight you cannot book: add your licence in your profile or ask the club administrator to validate it.',
   'error.reservation.instructorRequired':
     'Without a valid licence you can only book with an instructor: choose the instructor of this flight',
   'error.reservation.instructorNoValidLicence':
