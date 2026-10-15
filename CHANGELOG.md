@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.18.0](https://github.com/SkyCrew-app/backend/compare/2.17.1...2.18.0) (2026-10-15)
+
+
+### Features
+
+* **plans:** :sparkles: club and school plans with caps, and new club provisioning ([#190](https://github.com/SkyCrew-app/backend/issues/190)) ([73dde32](https://github.com/SkyCrew-app/backend/commit/73dde32f852afe6f61ef39409021245b74bca285))
+
 ## [2.17.1](https://github.com/SkyCrew-app/backend/compare/2.17.0...2.17.1) (2026-10-14)
 
 
