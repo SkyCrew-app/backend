@@ -8,6 +8,7 @@ const EXPECTED_PUBLIC_OPERATIONS = [
   'app.controller.ts: AppController (class)',
   'app.resolver.ts: hello',
   'common/controllers/webhook.controller.ts: WebhookController (class)',
+  'common/suspension/suspension.resolver.ts: serviceSuspended',
   'modules/administration/administration.resolver.ts: getMaintenanceDetails',
   'modules/administration/administration.resolver.ts: getSiteStatus',
   'modules/auth/auth.resolver.ts: getEmailFromCookie',

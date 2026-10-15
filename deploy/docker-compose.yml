@@ -72,6 +72,9 @@ services:
       SKYCREW_PLAN: ${SKYCREW_PLAN:-}
       SKYCREW_MAX_AIRCRAFT: ${SKYCREW_MAX_AIRCRAFT:-}
       SKYCREW_MAX_MEMBERS: ${SKYCREW_MAX_MEMBERS:-}
+      # 1: suspended by the provider (unpaid subscription...): members see a
+      # "service suspended" page and the API accepts no change. Data is kept.
+      SKYCREW_SUSPENDED: ${SKYCREW_SUSPENDED:-}
     volumes:
       - uploads:/usr/src/app/dist/src/uploads
     depends_on:

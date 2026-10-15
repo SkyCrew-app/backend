@@ -271,6 +271,8 @@ export const fr = {
   'mail.instruction.greeting': 'Bonjour {{name}},',
   'mail.instruction.start': 'Début :',
   'mail.instruction.end': 'Fin :',
+  'error.service.suspended':
+    'L’accès à l’espace de votre club est suspendu : aucune modification n’est possible. Vos données sont conservées. Contactez l’administrateur de votre club ou le prestataire SkyCrew.',
   'error.plan.featureNotIncluded':
     "Cette fonction fait partie de la formule Club + École, que votre club n'a pas choisie.",
   'error.plan.aircraftLimit':

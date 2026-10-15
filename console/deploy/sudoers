@@ -1,0 +1,5 @@
+# /etc/sudoers.d/skycrew-console (root, rights 440), written by install.sh.
+# The SkyCrew console may run its helper as root, and nothing else. The helper
+# checks every argument itself; the environment is reset.
+Defaults:skycrew-console !requiretty, env_reset, secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+skycrew-console ALL=(root) NOPASSWD: /usr/local/sbin/skycrew-console-helper

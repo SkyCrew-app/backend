@@ -313,6 +313,166 @@ sudo rm -rf /opt/skycrew-<nom> /usr/local/sbin/skycrew-backup-<nom> /etc/cron.d/
 sudo rm /etc/nginx/sites-enabled/skycrew-<nom>.conf && sudo nginx -t && sudo systemctl reload nginx
 ```
 
+## Gérer plusieurs clubs
+
+Quand vous avez plusieurs clubs, sur un ou plusieurs serveurs, une seule
+commande lancée depuis votre ordinateur (dans le dossier `backend`) les voit
+tous : `deploy/clubs.sh`.
+
+### Une fois pour toutes : la liste des serveurs
+
+Copiez `deploy/servers.conf.example` en `deploy/servers.conf` et écrivez-y vos
+serveurs, un par ligne, comme vous les tapez après `ssh` (par exemple
+`tickly-prod`). Ce fichier reste sur votre ordinateur (il n'est jamais envoyé
+sur GitHub).
+
+Vous n'avez **pas** à tenir la liste des clubs : le script les trouve tout seul
+sur chaque serveur (le dossier `/opt/skycrew`, le premier club, qui s'appelle
+`skycrew` dans le script, puis chaque dossier `/opt/skycrew-<nom>`). Un club
+ajouté avec `new-club.sh` apparaît donc tout de suite.
+
+### Voir l'état de tous les clubs
+
+```bash
+deploy/clubs.sh status
+```
+
+Ne modifie rien. Pour chaque serveur : mémoire, processeurs et disque libres,
+et combien de clubs il peut encore accueillir. Pour chaque club : son adresse,
+sa formule et ses limites, ses versions, ses conteneurs, s'il répond (sur le
+serveur et à son adresse publique), sa dernière sauvegarde, la place de ses
+données, sa mémoire, son nombre de membres actifs, d'avions en service et de
+réservations des 30 derniers jours, et son veilleur de panne. Chaque club est
+classé **OK**, **À voir** ou **Problème**, avec la raison en dessous du tableau.
+
+Seuls des nombres sont lus dans la base de chaque club, en lecture seule :
+aucun nom, aucune adresse e-mail ne sort du serveur.
+
+### Le tableau de bord
+
+```bash
+deploy/clubs.sh status --html ~/Desktop/clubs.html
+```
+
+Écrit la même chose dans une page qu'il ouvre dans votre navigateur : un seul
+fichier, qui marche sans Internet, en clair ou en sombre selon votre Mac.
+Cliquez sur le titre d'une colonne pour trier (par exemple par état, pour
+avoir les problèmes en premier). La page ne contient ni mot de passe, ni clé,
+ni adresse de webhook : vous pouvez la garder ou la transmettre. Elle montre
+l'état au moment où vous l'avez générée : relancez la commande pour la mettre
+à jour.
+
+Ce qui met un club en **Problème** : un conteneur arrêté ou malade, le club
+qui ne répond pas, aucune sauvegarde de moins de 2 jours, ou son veilleur qui
+le voit en panne. En **À voir** : une sauvegarde de plus de 26 heures, pas de
+veilleur ou un veilleur sans destinataire, des alertes qui ne disent pas de
+quel club il s'agit, ou un plafond de la formule atteint.
+
+### Mettre à jour tous les clubs
+
+```bash
+deploy/clubs.sh update-all --backend 2.19.0 --frontend 2.15.0
+```
+
+Le script affiche d'abord le plan (chaque club, sa version actuelle et la
+nouvelle) et demande de taper `oui`. Ensuite il construit les images **une
+seule fois**, les copie **une seule fois** par serveur, puis met les clubs à
+jour **l'un après l'autre** : sauvegarde, changement de version, attente que
+le club réponde (2 minutes au plus), et retour tout seul à l'ancienne version
+s'il ne répond pas. Chaque club n'est coupé qu'environ 30 secondes, les autres
+continuent de tourner.
+
+- **Si un club échoue**, il revient à son ancienne version et le script
+  s'arrête là : il affiche les clubs mis à jour, celui qui a échoué (et
+  pourquoi) et ceux qui n'ont pas été tentés. Regardez ce qui s'est passé avec
+  `deploy/clubs.sh logs <nom>`. Une fois le problème réglé, relancez la même
+  commande : les clubs déjà à jour sont passés.
+- `--continue-on-error` : continue avec les clubs suivants malgré un échec.
+- `--only aeroclub-vexin,aeroclub-b` : seulement ces clubs ;
+  `--except aeroclub-c` : tous sauf celui-là. Si deux serveurs ont un club du
+  même nom, écrivez `serveur:nom`.
+- `--dry-run` : montre le plan sans rien construire, copier ni modifier.
+- `--yes` : ne pose pas la question (pour l'enchaîner sans vous).
+- Un seul des deux (`--backend` ou `--frontend`) suffit pour ne mettre à jour
+  que l'un.
+
+Conseil : mettez d'abord à jour un club avec `--only`, vérifiez-le, puis
+lancez les autres. `release-to-server.sh --club <nom>` fait toujours la même
+chose pour un seul club.
+
+### Sauvegarder tout de suite
+
+```bash
+deploy/clubs.sh backup-all
+```
+
+Lance la sauvegarde de chaque club maintenant (en plus de celle de chaque
+nuit), par exemple avant une intervention. Accepte aussi `--only` et
+`--except`. Les sauvegardes restent sur le disque du serveur : copiez-les
+régulièrement ailleurs.
+
+### Lire ce qui se passe dans un club
+
+```bash
+deploy/clubs.sh logs aeroclub-vexin            # 100 dernières lignes
+deploy/clubs.sh logs aeroclub-vexin --lines 300
+```
+
+### Les alertes de panne
+
+Chaque club créé par `new-club.sh` a son veilleur, qui envoie un message
+nommant le club et son adresse, par exemple « SkyCrew (aeroclub-vexin,
+vexin.skycrew.fr) ne répond plus », puis « … répond de nouveau ». Le tableau
+de bord indique pour chaque club si le veilleur est installé, s'il a un
+destinataire (webhook Discord ou e-mail) et sa dernière alerte.
+
+Le premier club (`/opt/skycrew`) a été installé à la main : si le tableau dit
+« alertes sans nom du club », mettez son nom dans `/etc/skycrew-watch.env` :
+
+```bash
+MESSAGE_DOWN='SkyCrew (skycrew, <adresse du site>) ne répond plus'
+MESSAGE_UP='SkyCrew (skycrew, <adresse du site>) répond de nouveau'
+```
+
+La date de la dernière alerte est lue dans le journal du serveur ; les
+veilleurs à jour (le fichier `skycrew-watch.sh` de ce dossier) la notent aussi
+à côté de leur état, ce qui la garde même si le journal est vidé.
+
+### Combien de clubs par serveur
+
+`status` donne pour chaque serveur une estimation : « place pour environ N
+clubs de plus ». Elle est calculée ainsi :
+
+- **mémoire** : la mémoire libre du serveur, moins une marge pour le reste du
+  serveur (1 Go, ou 10 % de la mémoire si c'est plus), divisée par la mémoire
+  qu'utilise en moyenne un club de ce serveur (comptée au moins 600 Mo) ;
+- **disque** : l'espace libre, moins une marge (5 Go, ou 10 % du disque),
+  divisé par ce qu'occupe en moyenne un club, sauvegardes comprises (compté au
+  moins 2 Go) ;
+- le plus petit des deux est retenu.
+
+C'est un ordre de grandeur pour des clubs de taille moyenne, mesuré à un
+instant donné. Chaque club est de toute façon plafonné (environ 3,2 Go de
+mémoire au pire), pour ne jamais priver le reste du serveur. Sur `tickly-prod`
+(22 Go), la marge protège aussi Tickly : ne descendez pas sous 2 ou 3 clubs de
+place.
+
+### Quand ajouter un serveur
+
+Prévoyez un nouveau serveur quand l'une de ces choses arrive :
+
+- le tableau de bord annonce **2 clubs de plus ou moins** pour tous vos
+  serveurs (le serveur passe en « À voir », puis en « Problème » à 0) ;
+- la mémoire libre reste sous 10 % ou le disque sous 10 % ;
+- la charge des processeurs dépasse souvent leur nombre (le serveur passe en
+  « À voir ») ;
+- ou, pour le serveur de Tickly, dès que vous voulez garder Tickly à l'abri
+  de la croissance de SkyCrew.
+
+Un nouveau serveur se prépare comme le premier (Docker, nginx, certbot), puis
+s'ajoute en une ligne dans `deploy/servers.conf` ; `new-club.sh` y installe
+les clubs suivants. Les clubs existants restent où ils sont.
+
 ## Notes
 
 - Card payments, PayPal and weather are optional: leave their keys empty and

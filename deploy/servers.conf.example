@@ -1,0 +1,5 @@
+# Servers that run SkyCrew clubs, for deploy/clubs.sh: one SSH host per line,
+# as you would type it after "ssh" (a name of ~/.ssh/config, or user@address).
+# Copy this file to deploy/servers.conf (never committed) and adjust it.
+# The clubs themselves are found on each server: no need to list them.
+tickly-prod

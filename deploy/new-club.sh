@@ -25,6 +25,8 @@
 # Settings, through the environment (for tests):
 #   SSH          command used to reach the server   (default ssh)
 #   SERVER_ROOT  prefix of every path on the server (default none)
+#   REGISTRY     name of the images (default ghcr.io/skycrew-app); another one
+#                is written to the club's .env (BACKEND_IMAGE, FRONTEND_IMAGE)
 set -eu
 
 usage() { sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 64; }
@@ -55,6 +57,8 @@ done
 matches() { printf '%s' "$1" | grep -Eq "$2"; }
 matches "$SLUG" '^[a-z][a-z0-9-]{1,29}[a-z0-9]$' ||
   fail "le nom court « $SLUG » doit faire 3 à 31 caractères : lettres minuscules, chiffres et tirets, en commençant par une lettre"
+# clubs.sh names the historic installation in /opt/skycrew "skycrew".
+[ "$SLUG" != skycrew ] || fail "le nom court « skycrew » est réservé au premier club installé : choisissez-en un autre"
 matches "$DOMAIN" '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$' ||
   fail "--domain : donnez l’adresse du club sans https:// (par exemple vexin.skycrew.fr)"
 matches "$ADMIN_EMAIL" '^[^@[:space:]'"'"'"]+@[^@[:space:]'"'"'"]+\.[a-zA-Z]{2,}$' ||
@@ -113,6 +117,7 @@ q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
   echo "START=$START"
   echo "DRY_RUN=$DRY_RUN"
   echo "ROOT=$(q "$SERVER_ROOT")"
+  echo "REGISTRY=$(q "${REGISTRY:-ghcr.io/skycrew-app}")"
 } >"$BUNDLE/club.conf"
 
 # --- What runs on the server, as root --------------------------------------------
@@ -121,7 +126,6 @@ set -eu
 BUNDLE=$1
 . "$BUNDLE/club.conf"
 
-REGISTRY=ghcr.io/skycrew-app
 NAME=skycrew-$SLUG
 DIR=/opt/$NAME
 REFERENCE_DIR=/opt/skycrew
@@ -234,6 +238,7 @@ PUBLIC_URL=https://$DOMAIN
 
 BACKEND_VERSION=$BACKEND_VERSION
 FRONTEND_VERSION=$FRONTEND_VERSION
+$(if [ "$REGISTRY" != ghcr.io/skycrew-app ]; then printf 'BACKEND_IMAGE=%s/backend\nFRONTEND_IMAGE=%s/frontend\n' "$REGISTRY" "$REGISTRY"; fi)
 
 DB_PASSWORD=$DB_PASSWORD
 JWT_SECRET=$JWT_SECRET
@@ -247,6 +252,8 @@ ADMIN_PASSWORD=$ADMIN_PASSWORD
 SKYCREW_PLAN=$PLAN
 SKYCREW_MAX_AIRCRAFT=$MAX_AIRCRAFT
 SKYCREW_MAX_MEMBERS=$MAX_MEMBERS
+# 1: suspended by the provider (members see "service suspendu", no change accepted).
+SKYCREW_SUSPENDED=
 
 # Outgoing e-mail of the club (activation, password reset, notifications):
 # to fill in, then run: docker compose up -d
