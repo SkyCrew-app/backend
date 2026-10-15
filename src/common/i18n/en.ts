@@ -259,6 +259,8 @@ export const en: Record<TranslationKey, string> = {
   'mail.instruction.greeting': 'Hello {{name}},',
   'mail.instruction.start': 'Start:',
   'mail.instruction.end': 'End:',
+  'error.service.suspended':
+    "Access to your club's space is suspended: no change can be made. Your data is kept. Contact your club's administrator or the SkyCrew provider.",
   'error.plan.featureNotIncluded':
     'This feature is part of the Club + School plan, which your club has not chosen.',
   'error.plan.aircraftLimit':

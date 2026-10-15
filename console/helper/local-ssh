@@ -1,0 +1,8 @@
+#!/bin/sh
+# Stands in for ssh when the helper works on its own server, so that the
+# deployment scripts (new-club.sh, release-lib.sh), written to reach a server
+# over SSH, run here unchanged: the host name is ignored and the command runs
+# on this machine, where the helper already is root ("sudo" does nothing).
+[ $# -ge 2 ] || { echo "local-ssh: usage: local-ssh <host> <command>" >&2; exit 64; }
+shift
+exec sh -c 'sudo() { "$@"; }; '"$*"

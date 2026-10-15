@@ -1,0 +1,18 @@
+# Settings of the privileged helper of the SkyCrew console:
+# /etc/skycrew-console/helper.conf (root, rights 644). Read, never executed.
+
+# Where install.sh put the deployment kit (new-club.sh, release-lib.sh...).
+KIT_DIR=/usr/local/lib/skycrew-console/kit
+
+# Name of the images.
+REGISTRY=ghcr.io/skycrew-app
+
+# Where the images of a new version come from (see README, "Les images des versions"):
+#   preloaded  only images already on this server are used (copied from the Mac
+#              with release-to-server.sh / clubs.sh, or pulled by hand)
+#   pull       a missing image is downloaded from the registry (GHCR: public
+#              packages, or `sudo docker login ghcr.io` once with a read-only token)
+IMAGE_SOURCE=preloaded
+
+# Seconds given to a club to come back healthy after a change.
+HEALTH_WAIT=120

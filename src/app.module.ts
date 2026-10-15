@@ -51,6 +51,8 @@ import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-de
 import { AdminActionsModule } from './common/admin-actions/admin-actions.module';
 import { MemberDepartureModule } from './modules/users/member-departure.module';
 import { PlanModule } from './common/plan/plan.module';
+import { SuspensionModule } from './common/suspension/suspension.module';
+import { SuspensionGuard } from './common/suspension/suspension.guard';
 import { PlanFeatureGuard } from './common/plan/plan-feature.guard';
 
 @Module({
@@ -139,6 +141,7 @@ import { PlanFeatureGuard } from './common/plan/plan-feature.guard';
     }),
 
     PlanModule,
+    SuspensionModule,
 
     MailerModule,
 
@@ -225,6 +228,11 @@ import { PlanFeatureGuard } from './common/plan/plan-feature.guard';
     {
       provide: APP_GUARD,
       useClass: PlanFeatureGuard,
+    },
+    // A suspended installation (SKYCREW_SUSPENDED) accepts no change.
+    {
+      provide: APP_GUARD,
+      useClass: SuspensionGuard,
     },
   ],
 })

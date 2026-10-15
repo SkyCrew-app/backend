@@ -71,6 +71,7 @@ function eval_club(i,    n, list, s, st, a, up, eb, rb, ef, rf, url, dr, lr, age
     f = v(i, "watch_failures") + 0; t = v(i, "watch_threshold") + 0
     if (t > 0 && f >= t) add(i, 2, "le veilleur le voit en panne depuis " f " vérifications")
   }
+  if (v(i, "suspended") ~ /^(1|true|yes)$/) add(i, 1, "suspendu : ses membres voient « service suspendu »")
   m = v(i, "members"); mm = v(i, "max_members"); ac = v(i, "aircraft"); ma = v(i, "max_aircraft")
   if (m != "" && mm != "" && m + 0 >= mm + 0) add(i, 1, "plafond de membres atteint (" m "/" mm ")")
   if (ac != "" && ma != "" && ac + 0 >= ma + 0) add(i, 1, "plafond d’avions atteint (" ac "/" ma ")")
