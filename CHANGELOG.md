@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.19.0](https://github.com/SkyCrew-app/backend/compare/2.18.0...2.19.0) (2026-10-15)
+
+
+### Features
+
+* **console:** :sparkles: super-admin console and club suspension ([#195](https://github.com/SkyCrew-app/backend/issues/195)) ([b718e63](https://github.com/SkyCrew-app/backend/commit/b718e636d1c315cf34d0e6cc87ec63fad998db0b))
+
+
+### Bug Fixes
+
+* **console:** :lock: rate-limit every console route and escape test patterns ([#197](https://github.com/SkyCrew-app/backend/issues/197)) ([f85a59e](https://github.com/SkyCrew-app/backend/commit/f85a59eb24bdbfe487140b4c68eb0821bd94e651))
+
 ## [2.18.0](https://github.com/SkyCrew-app/backend/compare/2.17.1...2.18.0) (2026-10-15)
 
 
