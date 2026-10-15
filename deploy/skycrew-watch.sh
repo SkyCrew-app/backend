@@ -12,7 +12,9 @@
 #                       Discord and most chat webhooks ("text" and "content" are both sent)
 #   ALERT_EMAIL         address written to with the local `mail` command, if there is one
 #   FAILURES_BEFORE_ALERT   consecutive failed checks before alerting (default 2)
-#   STATE_FILE          where the number of failures is kept (default /var/tmp/skycrew-watch.state)
+#   STATE_FILE          where the number of failures is kept (default /var/tmp/skycrew-watch.state);
+#                       the last alert sent is kept next to it, in $STATE_FILE.alert,
+#                       for the dashboard of clubs.sh
 #   MESSAGE_DOWN, MESSAGE_UP   wording of the two messages, to write them in your language
 set -eu
 
@@ -22,8 +24,9 @@ STATE_FILE=${STATE_FILE:-/var/tmp/skycrew-watch.state}
 MESSAGE_DOWN=${MESSAGE_DOWN:-SkyCrew does not answer}
 MESSAGE_UP=${MESSAGE_UP:-SkyCrew answers again}
 
-notify() {
+notify() { # <message> <down|up>
   message=$1
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M')" "$2" >"$STATE_FILE.alert" 2>/dev/null || true
   if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
     curl -fsS -m 10 -H 'Content-Type: application/json' \
       -d "{\"text\":\"$message\",\"content\":\"$message\"}" "$ALERT_WEBHOOK_URL" >/dev/null || true
@@ -37,7 +40,7 @@ notify() {
 failures=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
 
 if curl -fs -m 10 -o /dev/null "$HEALTH_URL"; then
-  [ "$failures" -ge "$THRESHOLD" ] && notify "$MESSAGE_UP ($HEALTH_URL)."
+  [ "$failures" -ge "$THRESHOLD" ] && notify "$MESSAGE_UP ($HEALTH_URL)." up
   echo 0 > "$STATE_FILE"
   exit 0
 fi
@@ -45,5 +48,5 @@ fi
 failures=$((failures + 1))
 echo "$failures" > "$STATE_FILE"
 # One message when the threshold is reached, not one at every check.
-[ "$failures" -eq "$THRESHOLD" ] && notify "$MESSAGE_DOWN ($HEALTH_URL)."
+[ "$failures" -eq "$THRESHOLD" ] && notify "$MESSAGE_DOWN ($HEALTH_URL)." down
 exit 0

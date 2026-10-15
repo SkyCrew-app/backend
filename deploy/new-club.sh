@@ -55,6 +55,8 @@ done
 matches() { printf '%s' "$1" | grep -Eq "$2"; }
 matches "$SLUG" '^[a-z][a-z0-9-]{1,29}[a-z0-9]$' ||
   fail "le nom court « $SLUG » doit faire 3 à 31 caractères : lettres minuscules, chiffres et tirets, en commençant par une lettre"
+# clubs.sh names the historic installation in /opt/skycrew "skycrew".
+[ "$SLUG" != skycrew ] || fail "le nom court « skycrew » est réservé au premier club installé : choisissez-en un autre"
 matches "$DOMAIN" '^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$' ||
   fail "--domain : donnez l’adresse du club sans https:// (par exemple vexin.skycrew.fr)"
 matches "$ADMIN_EMAIL" '^[^@[:space:]'"'"'"]+@[^@[:space:]'"'"'"]+\.[a-zA-Z]{2,}$' ||
