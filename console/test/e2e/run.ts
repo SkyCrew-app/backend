@@ -402,7 +402,7 @@ const main = async () => {
   await shot(page, '17-mise-a-jour-retour-arriere');
   await axe(page, 'opération');
   const envAfterUpdate = readFileSync(join(rootA, 'opt', `skycrew-${SLUG}`, '.env'), 'utf8');
-  check('le .env reprend l’ancienne version', new RegExp(`BACKEND_VERSION=${VERSION.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(envAfterUpdate));
+  check('le .env reprend l’ancienne version', envAfterUpdate.split('\n').includes(`BACKEND_VERSION=${VERSION}`));
 
   // Stripe: subscription, link, cancellation 15 days ago, then paid again.
   const now = Date.now();
