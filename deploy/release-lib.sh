@@ -116,6 +116,44 @@ image_archive() { # <name:version>
   printf '%s\n' "$archive"
 }
 
+# Sends a file in small pieces, each one retried, then checks the whole file on
+# the server. A connection that drops large uploads at random (a phone's shared
+# connection, a weak link) then only costs the pieces that failed.
+# Sets REMOTE_DIR and REMOTE_FILE.
+CHUNK_SIZE=${CHUNK_SIZE:-4m}
+CHUNK_TRIES=${CHUNK_TRIES:-8}
+send_file() { # <host> <local file>
+  sum=$(shasum -a 256 "$2" 2>/dev/null || sha256sum "$2")
+  sum=${sum%% *}
+  REMOTE_DIR=/tmp/skycrew-upload-$sum
+  REMOTE_FILE=$REMOTE_DIR/file
+  # shellcheck disable=SC2029
+  $SSH "$1" "mkdir -p '$REMOTE_DIR'" </dev/null || return 1
+  rm -rf "$WORK/chunks" && mkdir "$WORK/chunks" || return 1
+  split -b "$CHUNK_SIZE" "$2" "$WORK/chunks/part." || return 1
+  total=$(ls "$WORK/chunks" | wc -l | tr -d ' ')
+  n=0
+  for chunk in "$WORK"/chunks/part.*; do
+    n=$((n + 1))
+    name=${chunk##*/}
+    size=$(wc -c <"$chunk" | tr -d ' ')
+    try=1
+    while :; do
+      # shellcheck disable=SC2029
+      got=$(cat "$chunk" | $SSH "$1" "cat > '$REMOTE_DIR/$name' && wc -c < '$REMOTE_DIR/$name'" 2>/dev/null | tr -d ' ') || got=""
+      [ "$got" = "$size" ] && break
+      [ "$try" -lt "$CHUNK_TRIES" ] || { echo "piece $n of $total failed $try times" >&2; return 1; }
+      try=$((try + 1))
+      sleep 2
+    done
+    printf '\rsent %s/%s' "$n" "$total" >&2
+  done
+  printf '\n' >&2
+  # shellcheck disable=SC2029
+  $SSH "$1" "cd '$REMOTE_DIR' && cat part.* > file && rm -f part.* && echo '$sum  file' | sha256sum -c --quiet -" </dev/null ||
+    { echo "the file arrived damaged on $1" >&2; return 1; }
+}
+
 copy_images() { # <host> <backend version or ""> <frontend version or "">
   host=$1
   for image in ${2:+backend:$2} ${3:+frontend:$3}; do
@@ -130,7 +168,10 @@ copy_images() { # <host> <backend version or ""> <frontend version or "">
       fi
     fi
     archive=$(image_archive "$image") || exit 1
-    $SSH "$host" 'gunzip | sudo docker load' <"$archive" ||
+    send_file "$host" "$archive" ||
+      fail "the image $image could not be sent to $host: the versions were not changed"
+    # shellcheck disable=SC2029
+    $SSH "$host" "gunzip -c '$REMOTE_FILE' | sudo docker load; rc=\$?; rm -rf '$REMOTE_DIR'; exit \$rc" </dev/null ||
       fail "the image $image could not be loaded on $host: the versions were not changed"
   done
 }
