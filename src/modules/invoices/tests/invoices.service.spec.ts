@@ -9,6 +9,7 @@ import {
   NEXT_INVOICE_NUMBER_SQL,
   nextInvoiceNumber,
   parseInvoiceLines,
+  SHOWCASE_INVOICE_NUMBER_SQL,
 } from '../invoice-number';
 import { invoiceLineLabel, invoiceLines, invoiceMoney } from '../invoice-pdf';
 
@@ -43,6 +44,10 @@ describe('InvoicesService', () => {
         }
       }),
       query: jest.fn(async (sql: string, [year]: number[]) => {
+        // The member is not part of a showcase club.
+        if (sql === SHOWCASE_INVOICE_NUMBER_SQL && inTransaction) {
+          return [];
+        }
         if (sql !== NEXT_INVOICE_NUMBER_SQL || !inTransaction) {
           throw new Error('unexpected statement, or outside a transaction');
         }
@@ -139,6 +144,35 @@ describe('InvoicesService', () => {
 
     await expect(nextInvoiceNumber(broken, new Date())).rejects.toThrow(
       'Invoice number could not be assigned',
+    );
+  });
+
+  it('numbers the invoices of a showcase member in the showcase series, leaving the club sequence alone', async () => {
+    const statements: string[] = [];
+    const showcase = {
+      query: jest.fn(async (sql: string, [memberId]: string[]) => {
+        statements.push(sql);
+        if (sql === SHOWCASE_INVOICE_NUMBER_SQL) {
+          return memberId === '7'
+            ? [[{ invoice_prefix: 'DEMO', invoice_last_number: 12 }], 1]
+            : [[], 0];
+        }
+        return [{ last_number: 3 }];
+      }),
+    } as any;
+    const date = new Date('2026-10-16T10:00:00Z');
+
+    expect(await nextInvoiceNumber(showcase, date, 7)).toBe('DEMO-2026-00012');
+    expect(statements).toEqual([SHOWCASE_INVOICE_NUMBER_SQL]);
+    // Any other member: the club's sequence.
+    expect(await nextInvoiceNumber(showcase, date, 8)).toBe('2026-00003');
+    expect(statements.slice(1)).toEqual([
+      SHOWCASE_INVOICE_NUMBER_SQL,
+      NEXT_INVOICE_NUMBER_SQL,
+    ]);
+    // The statement only ever raises the counter for a showcase member.
+    expect(SHOWCASE_INVOICE_NUMBER_SQL).toContain(
+      `"entity" = 'users' AND "row_id" = $1::text`,
     );
   });
 

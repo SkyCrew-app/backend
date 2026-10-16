@@ -343,6 +343,11 @@ export class FakeDatabase {
       return [[], open.length];
     }
 
+    // The showcase invoice series: no showcase in these tests.
+    if (sql.startsWith('UPDATE "showcase_state"')) {
+      return [[], 0];
+    }
+
     // The year's invoice counter: created at 1, or raised by one.
     if (sql.startsWith('INSERT INTO "invoice_sequences"')) {
       const year = Number(parameters[0]);
