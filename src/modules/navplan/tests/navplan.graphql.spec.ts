@@ -193,7 +193,7 @@ class InMemoryNavdata {
   }
 }
 
-describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => {
+describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-180)', () => {
   let app: INestApplication;
   const navdata = new InMemoryNavdata();
   const plans = repository('id');
@@ -264,7 +264,10 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
         {
           provide: MetarTafService,
           useValue: {
-            qnhOf: async () => 1021,
+            qnhOf: async () => ({
+              qnhHpa: 1021,
+              observedAt: new Date('2026-10-17T07:30:00Z'),
+            }),
             metarsInBox: async () => [],
             reports: async (icaos: string[]) =>
               icaos.map((icao) => ({
@@ -272,6 +275,8 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
                 metar: `METAR ${icao} 170730Z 27012KT CAVOK 14/09 Q1021`,
                 taf: `TAF ${icao} 170500Z 1706/1715 27012KT CAVOK`,
                 observedAt: new Date('2026-10-17T07:30:00Z'),
+                tafValidFrom: new Date('2026-10-17T06:00:00Z'),
+                tafValidTo: new Date('2026-10-17T15:00:00Z'),
               })),
           },
         },
@@ -282,7 +287,7 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
             {
               id: 1,
               registration_number: 'F-GAER',
-              model: 'Robin DR400-140B',
+              model: 'Robin DR400-180',
               fuel_capacity: 110,
             },
           ]),
@@ -365,20 +370,26 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
 
   let template: ReturnType<typeof templateByCode>;
 
-  it('an administrator applies the DR400-140B template; a pilot cannot', async () => {
-    const mutation = `mutation { applyAircraftTemplate(aircraftId: 1, templateCode: "DR400-140B") { templateCode source validatedAt cruise { normalSetting } fuel { tanks { id usableL } } } }`;
+  it('an administrator applies the DR400-180 template; a pilot cannot', async () => {
+    const mutation = `mutation { applyAircraftTemplate(aircraftId: 1, templateCode: "DR400-180") { templateCode source validatedAt cruise { normalSetting } fuel { tanks { id usableL } } } }`;
     expect((await gql('pilot', mutation)).errors[0].extensions.code).toBe(
       'FORBIDDEN',
     );
     const { data } = await gql('admin', mutation);
     expect(data.applyAircraftTemplate).toMatchObject({
-      templateCode: 'DR400-140B',
+      templateCode: 'DR400-180',
       validatedAt: null,
       cruise: { normalSetting: '75%' },
-      fuel: { tanks: [{ id: 'main', usableL: 109 }] },
+      fuel: {
+        tanks: [
+          { id: 'main', usableL: 100 },
+          { id: 'front-right', usableL: 40 },
+          { id: 'front-left', usableL: 40 },
+        ],
+      },
     });
     expect(data.applyAircraftTemplate.source).toMatch(/Modèle à vérifier/);
-    template = templateByCode('DR400-140B');
+    template = templateByCode('DR400-180');
   });
 
   it('refuses mass and balance while the aircraft data is not confirmed', async () => {
@@ -387,12 +398,18 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
     expect(plan.status).toBe('BLOCKING');
     expect(plan.massBalance.status).toBe('BLOCKING');
     expect(plan.massBalance.lines).toEqual([]);
-    expect(plan.massBalance.messages[0]).toMatch(
-      /ne sont pas confirmées par un administrateur/,
-    );
+    // The template leaves the climb fuel flow (not in the manual) empty:
+    // nothing is computed from a guess.
     expect(plan.notices.map((n: any) => n.code)).toEqual(
-      expect.arrayContaining(['MB_NOT_VALIDATED', 'PERF_NOT_VALIDATED']),
+      expect.arrayContaining([
+        'PERF_NOT_VALIDATED',
+        'PERFORMANCE_OUT_OF_TABLE',
+      ]),
     );
+    expect(
+      plan.notices.find((n: any) => n.code === 'PERFORMANCE_OUT_OF_TABLE')
+        .message,
+    ).toMatch(/^Données de performances incomplètes/);
   });
 
   it('refuses to confirm an aircraft without its weighing', async () => {
@@ -404,6 +421,22 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
   });
 
   it('the administrator enters the weighing and confirms; the pilot cannot confirm', async () => {
+    // The figures the manual does not give are entered by the administrator.
+    const perf = template.performance;
+    const savedPerformance = await gql(
+      'admin',
+      `mutation ($input: AircraftPerformanceInput!) { saveAircraftPerformance(aircraftId: 1, input: $input) { validatedAt } }`,
+      {
+        input: {
+          ...perf,
+          climb: { ...perf.climb, fuelFlowLph: 50 },
+          descent: { iasKt: 100, rateFpm: 500, fuelFlowLph: 25 },
+          reserve: { ...perf.reserve, maxContinuousFuelFlowLph: 50 },
+          source: 'Manuel de vol F-GAER',
+        },
+      },
+    );
+    expect(savedPerformance.errors).toBeUndefined();
     const mb = template.massBalance;
     const save = await gql(
       'admin',
@@ -433,7 +466,7 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
     );
     expect(save.data.saveAircraftMassBalance).toMatchObject({
       emptyMassKg: 590,
-      mtowKg: 1000,
+      mtowKg: 1100,
       validatedAt: null,
     });
     expect(

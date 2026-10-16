@@ -33,6 +33,52 @@ export interface MetarJson {
 interface TafJson {
   icaoId: string;
   rawTAF?: string;
+  validTimeFrom?: number;
+  validTimeTo?: number;
+}
+
+// The validity period of a raw TAF ("TAF LFPN 161400Z 1615/1624 ..."), the
+// days resolved around `reference` (the time it was fetched). Null when the
+// text has no readable period.
+export function tafValidity(
+  raw: string,
+  reference: Date,
+): { from: Date; to: Date } | null {
+  const match =
+    /\b(\d{2})(\d{2})(\d{2})Z\s+(\d{2})(\d{2})\/(\d{2})(\d{2})\b/.exec(raw);
+  if (!match) return null;
+  const [issueDay, fromDay, fromHour, toDay, toHour] = [
+    match[1],
+    match[4],
+    match[5],
+    match[6],
+    match[7],
+  ].map(Number);
+  // The month of the issue: the one that puts it closest to the reference.
+  let issue: Date | null = null;
+  for (const shift of [-1, 0, 1]) {
+    const candidate = new Date(
+      Date.UTC(
+        reference.getUTCFullYear(),
+        reference.getUTCMonth() + shift,
+        issueDay,
+      ),
+    );
+    if (
+      candidate.getUTCDate() === issueDay &&
+      (!issue ||
+        Math.abs(candidate.getTime() - reference.getTime()) <
+          Math.abs(issue.getTime() - reference.getTime()))
+    ) {
+      issue = candidate;
+    }
+  }
+  if (!issue) return null;
+  const at = (day: number, hour: number) => {
+    const month = issue.getUTCMonth() + (day < issueDay ? 1 : 0);
+    return new Date(Date.UTC(issue.getUTCFullYear(), month, day, hour));
+  };
+  return { from: at(fromDay, fromHour), to: at(toDay, toHour) };
 }
 
 @Injectable()
@@ -117,13 +163,22 @@ export class MetarTafService {
       this.metars(unique),
       this.tafs(unique),
     ]);
+    const now = new Date();
     const reports: WeatherReport[] = unique.map((icao) => {
       const metar = metars.find((m) => m.icaoId === icao);
+      const taf = tafs.find((t) => t.icaoId === icao);
+      const parsed = taf?.rawTAF ? tafValidity(taf.rawTAF, now) : null;
+      const epoch = (value: unknown) =>
+        Number.isFinite(Number(value)) && Number(value) > 0
+          ? new Date(Number(value) * 1000)
+          : null;
       return {
         icao,
         metar: metar?.rawOb ?? null,
-        taf: tafs.find((t) => t.icaoId === icao)?.rawTAF ?? null,
+        taf: taf?.rawTAF ?? null,
         observedAt: metar?.obsTime ? new Date(metar.obsTime * 1000) : null,
+        tafValidFrom: epoch(taf?.validTimeFrom) ?? parsed?.from ?? null,
+        tafValidTo: epoch(taf?.validTimeTo) ?? parsed?.to ?? null,
       };
     });
     for (const metar of nearby) {
@@ -138,11 +193,18 @@ export class MetarTafService {
     return reports;
   }
 
-  async qnhOf(icao: string): Promise<number | null> {
+  // The QNH of the latest METAR of an aerodrome, with the time of that
+  // observation (the plan says how old it is at the departure).
+  async qnhOf(
+    icao: string,
+  ): Promise<{ qnhHpa: number; observedAt: Date | null } | null> {
     const [metar] = await this.metars([icao.toUpperCase()]);
     const altim = Number(metar?.altim);
     // The API gives hPa; an inch value would be below 40.
     if (!Number.isFinite(altim) || altim <= 0) return null;
-    return altim < 40 ? altim * 33.8639 : altim;
+    return {
+      qnhHpa: altim < 40 ? altim * 33.8639 : altim,
+      observedAt: metar?.obsTime ? new Date(metar.obsTime * 1000) : null,
+    };
   }
 }

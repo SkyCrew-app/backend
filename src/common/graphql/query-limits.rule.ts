@@ -18,11 +18,13 @@ export type QueryLimits = {
   ignoreIntrospection: boolean;
 };
 
-// The deepest operation of the web application has 4 levels and the largest
-// 45 fields, none uses an alias (measured over frontend/src/graphql).
+// Measured over frontend/src/graphql: the deepest operation has 7 levels,
+// none uses an alias, and the largest is the flight plan result (307
+// fields with __typename: legs, alternate leg, airspaces, sun times); the
+// frontend's documents test keeps every operation under these limits.
 export const DEFAULT_QUERY_LIMITS: QueryLimits = {
   maxDepth: 10,
-  maxFields: 300,
+  maxFields: 400,
   maxAliases: 20,
   ignoreIntrospection: false,
 };

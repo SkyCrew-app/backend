@@ -1,6 +1,7 @@
 import {
   CruiseRow,
   Envelope,
+  FuelTank,
   MassBalanceData,
   PerformanceData,
   Station,
@@ -13,10 +14,11 @@ import {
 // flagged, until an administrator confirms its own values
 // (validateAircraftData).
 //
-// Sources: EASA / FAA type certificate data sheets for the masses, datum and
-// CG ranges where cited; typical published manual figures for speeds and
-// fuel flows (rounded). Values marked "non sourcé" are placeholders shaped
-// like the type's data and must be replaced from the manual.
+// A template is never more permissive than the documents: a figure that was
+// not read in a flight manual or a type certificate data sheet (cited with
+// its page) is left empty, and the data cannot be confirmed until an
+// administrator enters it. The C172S, PA28-161 and DA40 templates still
+// carry figures marked "non sourcé" (not reviewed yet).
 
 export const TEMPLATE_WARNING =
   'Modèle à vérifier avec le manuel de vol et la fiche de pesée de VOTRE avion — valeurs indicatives / Template: check against YOUR aircraft flight manual and weighing report';
@@ -69,202 +71,295 @@ const envelope = (
   })),
 });
 
-const robin = (options: {
+// Robin DR400 series. Masses, centre of gravity range, seat and baggage
+// arms, baggage limit and fuel capacities: EASA TCDS EASA.A.367 issue 05
+// (16 October 2023), one section per model (page numbers below). Datum: wing
+// leading edge of the rectangular part of the wing. Forward limit 0.205 m at
+// 750 kg rising linearly to 0.428 m at the maximum mass, aft limit 0.564 m
+// at every mass (same figures in the DR 400/180 flight manual, p. 2.2).
+// Performance figures are only given where a flight manual was read (the
+// DR 400/180): elsewhere they are left empty and an administrator has to
+// enter them from the aircraft's own manual before confirming.
+const ROBIN_DATUM_NOTE =
+  "Datum : bord d'attaque de la partie rectangulaire de l'aile";
+
+const robinEnvelope = (
+  category: Envelope['category'],
+  maxKg: number,
+): Envelope =>
+  // The polygon is closed at 500 kg, below any empty mass: the manual's
+  // limits apply at every mass (forward 0.205 m below 750 kg).
+  envelope(category, [
+    [0.205, 500],
+    [0.205, 750],
+    [0.428, maxKg],
+    [0.564, maxKg],
+    [0.564, 500],
+  ]);
+
+const robinStations = (baggageMaxKg: number): Station[] => [
+  {
+    id: 'front',
+    label: 'Sièges avant / Front seats',
+    kind: 'SEAT',
+    armM: 0.41,
+  },
+  {
+    id: 'rear',
+    label: 'Banquette arrière / Rear seats',
+    kind: 'SEAT',
+    armM: 1.19,
+  },
+  {
+    id: 'baggage',
+    label: 'Bagages / Baggage',
+    kind: 'BAGGAGE',
+    armM: 1.9,
+    maxKg: baggageMaxKg,
+  },
+];
+
+const fuelStations = (tanks: FuelTank[]): Station[] =>
+  tanks.map((t) => ({
+    id: `fuel-${t.id}`,
+    label: t.label,
+    kind: 'FUEL' as const,
+    armM: t.armM,
+    tankId: t.id,
+  }));
+
+// What a template leaves for the administrator: no figure rather than a
+// plausible one. The data cannot be confirmed while any of it is missing
+// (AircraftDataService.validate).
+const EMPTY_CLIMB = {
+  iasKt: 0,
+  table: null,
+  seaLevelRateFpm: null,
+  ceilingRateFpm: null,
+  fuelFlowLph: null,
+};
+const EMPTY_DESCENT = { iasKt: 0, rateFpm: 500, fuelFlowLph: 0 };
+const EMPTY_RESERVE = { holdingFuelFlowLph: 0, maxContinuousFuelFlowLph: 0 };
+// The taxi allowance is the club's (the editor's default), not a manual figure.
+const TAXI_FUEL_L = 3;
+
+// Main tank, 110 L: 100 L usable ("Standard 88"), 109 L from serial 2210
+// ("Standard 92"); the lower figure is kept.
+const ROBIN_MAIN_CAPACITY =
+  'réservoir principal 110 L (100 L utilisables, 109 L sur les « Standard 92 » à partir du n° 2210)';
+
+const robinWithoutManual = (options: {
   code: string;
   label: string;
-  mtow: number;
-  forwardSlope: [number, number]; // [mass where the forward limit starts sloping, forward arm at MTOW]
-  tanks: {
-    id: string;
-    label: string;
-    usableL: number;
-    unusableL: number;
-    armM: number;
-  }[];
-  cruise: {
-    name: string;
-    tasAt0: number;
-    tasPer1000: number;
-    flowLph: number;
-  }[];
-  climbRate: number;
-  climbFlow: number;
-  ceiling: number;
-  holding: number;
-  maxContinuous: number;
+  mtowKg: number;
+  mlwKg: number;
+  utilityMaxKg: number;
+  baggageMaxKg: number;
+  tanks?: FuelTank[];
   source: string;
-}): AircraftTemplate => {
-  const stations: Station[] = [
-    {
-      id: 'front',
-      label: 'Sièges avant / Front seats',
-      kind: 'SEAT',
-      armM: 0.41,
+}): AircraftTemplate => ({
+  code: options.code,
+  label: options.label,
+  source: `${TEMPLATE_WARNING}. ${options.source}`,
+  performance: {
+    fuel: {
+      type: 'AVGAS_100LL',
+      densityKgPerL: 0.72,
+      // Without a sourced arm, the tank is entered from the manual.
+      tanks: options.tanks ?? [],
+      taxiFuelL: TAXI_FUEL_L,
+      burnOrder: [],
     },
-    {
-      id: 'rear',
-      label: 'Banquette arrière / Rear seats',
-      kind: 'SEAT',
-      armM: 1.19,
+    climb: EMPTY_CLIMB,
+    cruise: { normalSetting: '', rows: [] },
+    descent: EMPTY_DESCENT,
+    reserve: EMPTY_RESERVE,
+    arrivalFuelL: 0,
+    serviceCeilingFt: null,
+    calibration: [],
+  },
+  massBalance: {
+    mtowKg: options.mtowKg,
+    mlwKg: options.mlwKg,
+    mzfwKg: null,
+    stations: [
+      ...robinStations(options.baggageMaxKg),
+      ...fuelStations(options.tanks ?? []),
+    ],
+    combinedLimits: [],
+    envelopes: [
+      robinEnvelope('NORMAL', options.mtowKg),
+      robinEnvelope('UTILITY', options.utilityMaxKg),
+    ],
+  },
+});
+
+// DR 400/180 flight manual (Robin, "Manuel de vol DR 400/180", editions
+// 1972-1980): p. 1.6 and 2.5 fuel tanks; p. 2.2 masses and centre of
+// gravity; p. 2.3 baggage placard 60 kg; p. 4.1 lever arms (front seats
+// 0.41 m, rear bench 1.19 m, rear (main) fuel 1.12 m, front fuel 0.10 m,
+// baggage 1.9 m); p. 4.1 bis loading example; p. 5.3 level flight
+// performance at 1100 kg, ISA; p. 5.4 climb at 1100 kg; p. 7.6 optional
+// auxiliary tank (50 L at 1.61 m, not in the template: optional).
+const KM_H = 1 / 1.852;
+const DR400_180_TANKS: FuelTank[] = [
+  {
+    id: 'main',
+    label: 'Réservoir principal / Main tank',
+    usableL: 100,
+    unusableL: 10,
+    armM: 1.12,
+  },
+  {
+    id: 'front-right',
+    label: 'Réservoir avant droit / Front right tank',
+    usableL: 40,
+    unusableL: 0,
+    armM: 0.1,
+  },
+  {
+    id: 'front-left',
+    label: 'Réservoir avant gauche / Front left tank',
+    usableL: 40,
+    unusableL: 0,
+    armM: 0.1,
+  },
+];
+// p. 5.3: true airspeed (km/h) and fuel flow at 75 % and 60 % power. The
+// 75 % line stops at 8000 ft (full throttle above).
+const dr400180Cruise = (
+  setting: string,
+  flowLph: number,
+  rows: [number, number][],
+): CruiseRow[] =>
+  rows.map(([pressureAltFt, kmh]) => ({
+    pressureAltFt,
+    setting,
+    isaDeviationC: 0,
+    tasKt: r(kmh * KM_H, 1),
+    fuelFlowLph: flowLph,
+  }));
+
+const DR400_180: AircraftTemplate = {
+  code: 'DR400-180',
+  label: 'Robin DR400-180 (Régent)',
+  source: `${TEMPLATE_WARNING}. Manuel de vol DR 400/180 (Robin) : masses et centrage p. 2.2, bagages p. 2.3, réservoirs p. 1.6 et 2.5, bras de levier p. 4.1, croisière p. 5.3 (75 % : 248 km/h, 39 L/h au niveau de la mer ; 60 % : 228 km/h, 32 L/h), montée p. 5.4 (4,2 m/s au sol, -0,24 m/s par 1000 ft, plafond 15 500 ft, 170 km/h) ; masses, centrage et réservoirs confirmés par l'EASA TCDS EASA.A.367 issue 05, section Z (p. 108-109). ${ROBIN_DATUM_NOTE}. ${ROBIN_MAIN_CAPACITY} + 2 réservoirs avant de 40 L ; réservoir supplémentaire optionnel 50 L à 1,61 m (p. 7.6) non inclus. Débit d'attente = croisière 60 % (GM2 NCO.OP.125, à défaut de donnée d'attente). Non donnés par le manuel, à saisir : débit en montée, vitesse et débit en descente, débit à la puissance maximale continue.`,
+  performance: {
+    fuel: {
+      type: 'AVGAS_100LL',
+      densityKgPerL: 0.72,
+      tanks: DR400_180_TANKS,
+      taxiFuelL: TAXI_FUEL_L,
+      burnOrder: [],
     },
-    {
-      id: 'baggage',
-      label: 'Bagages / Baggage',
-      kind: 'BAGGAGE',
-      armM: 1.9,
-      maxKg: 60,
+    climb: {
+      // p. 5.4: 170 km/h, 4.2 m/s at sea level, 0.48 m/s at 15 500 ft.
+      iasKt: 92,
+      table: null,
+      seaLevelRateFpm: 827,
+      ceilingRateFpm: 94,
+      fuelFlowLph: null,
     },
-  ];
-  return {
-    code: options.code,
-    label: options.label,
-    source: `${TEMPLATE_WARNING}. ${options.source}`,
-    performance: {
-      fuel: {
-        type: 'AVGAS_100LL',
-        densityKgPerL: 0.72,
-        tanks: options.tanks,
-        taxiFuelL: 3,
-        burnOrder: [],
-      },
-      climb: {
-        iasKt: 76,
-        table: null,
-        seaLevelRateFpm: options.climbRate,
-        ceilingRateFpm: 100,
-        fuelFlowLph: options.climbFlow,
-      },
-      cruise: {
-        normalSetting: options.cruise[0].name,
-        rows: cruiseRows(options.cruise, 10000),
-      },
-      descent: { iasKt: 100, rateFpm: 500, fuelFlowLph: 18 },
-      reserve: {
-        holdingFuelFlowLph: options.holding,
-        maxContinuousFuelFlowLph: options.maxContinuous,
-      },
-      arrivalFuelL: 0,
-      serviceCeilingFt: options.ceiling,
-      calibration: [],
-    },
-    massBalance: {
-      mtowKg: options.mtow,
-      mlwKg: options.mtow,
-      mzfwKg: null,
-      stations: [
-        ...stations,
-        ...options.tanks.map((t) => ({
-          id: `fuel-${t.id}`,
-          label: t.label,
-          kind: 'FUEL' as const,
-          armM: t.armM,
-          tankId: t.id,
-        })),
-      ],
-      combinedLimits: [],
-      // Datum: wing leading edge. Forward limit 0.205 m up to the mass where
-      // it starts sloping, aft limit 0.564 m.
-      envelopes: [
-        envelope('NORMAL', [
-          [0.205, 500],
-          [0.205, options.forwardSlope[0]],
-          [options.forwardSlope[1], options.mtow],
-          [0.564, options.mtow],
-          [0.564, 500],
+    cruise: {
+      normalSetting: '75%',
+      rows: [
+        ...dr400180Cruise('75%', 39, [
+          [0, 248],
+          [4000, 257],
+          [8000, 267],
+        ]),
+        ...dr400180Cruise('60%', 32, [
+          [0, 228],
+          [4000, 235],
+          [8000, 242],
+          [12000, 249],
         ]),
       ],
     },
-  };
+    descent: EMPTY_DESCENT,
+    reserve: { holdingFuelFlowLph: 32, maxContinuousFuelFlowLph: 0 },
+    arrivalFuelL: 0,
+    serviceCeilingFt: 15500,
+    calibration: [],
+  },
+  massBalance: {
+    mtowKg: 1100,
+    mlwKg: 1045,
+    mzfwKg: null,
+    stations: [...robinStations(60), ...fuelStations(DR400_180_TANKS)],
+    combinedLimits: [],
+    envelopes: [robinEnvelope('NORMAL', 1100), robinEnvelope('UTILITY', 950)],
+  },
 };
 
-const ROBIN_MAIN = {
-  id: 'main',
-  label: 'Réservoir principal / Main tank',
-  usableL: 109,
-  unusableL: 1,
-  armM: 1.12,
-};
-const ROBIN_AUX = {
-  id: 'aux',
-  label: 'Réservoir supplémentaire / Auxiliary tank',
-  usableL: 50,
-  unusableL: 0,
-  armM: 1.6,
-};
+const emptyTemplate = (options: {
+  code: string;
+  label: string;
+  fuel: PerformanceData['fuel']['type'];
+  source: string;
+}): AircraftTemplate => ({
+  code: options.code,
+  label: options.label,
+  source: `${TEMPLATE_WARNING}. ${options.source}`,
+  performance: {
+    fuel: {
+      type: options.fuel,
+      densityKgPerL: 0.72,
+      tanks: [],
+      taxiFuelL: TAXI_FUEL_L,
+      burnOrder: [],
+    },
+    climb: EMPTY_CLIMB,
+    cruise: { normalSetting: '', rows: [] },
+    descent: EMPTY_DESCENT,
+    reserve: EMPTY_RESERVE,
+    arrivalFuelL: 0,
+    serviceCeilingFt: null,
+    calibration: [],
+  },
+  massBalance: {
+    mtowKg: null,
+    mlwKg: null,
+    mzfwKg: null,
+    stations: [],
+    combinedLimits: [],
+    envelopes: [],
+  },
+});
 
 export const AIRCRAFT_TEMPLATES: AircraftTemplate[] = [
-  robin({
+  robinWithoutManual({
     code: 'DR400-120',
     label: 'Robin DR400-120 (Dauphin 2+2)',
-    mtow: 900,
-    forwardSlope: [700, 0.36],
-    tanks: [ROBIN_MAIN],
-    cruise: [
-      { name: '75%', tasAt0: 103, tasPer1000: 1.5, flowLph: 25 },
-      { name: '65%', tasAt0: 96, tasPer1000: 1.5, flowLph: 22 },
-    ],
-    climbRate: 600,
-    climbFlow: 28,
-    ceiling: 12000,
-    holding: 18,
-    maxContinuous: 27,
-    source:
-      'MTOW et limites de centrage : EASA TCDS A.039 (Robin DR400), à confirmer ; bras et débits non sourcés.',
+    mtowKg: 900,
+    mlwKg: 900,
+    utilityMaxKg: 900,
+    baggageMaxKg: 40,
+    source: `EASA TCDS EASA.A.367 issue 05, section CC : réservoirs p. 121, masses, centrage, sièges et bagages (40 kg) p. 122 (catégories N et U identiques). ${ROBIN_DATUM_NOTE}. ${ROBIN_MAIN_CAPACITY}, bras à relever dans le manuel ; réservoir supplémentaire optionnel 50 L. Performances non sourcées : à saisir depuis le manuel de vol de l'avion.`,
   }),
-  robin({
+  robinWithoutManual({
     code: 'DR400-140B',
     label: 'Robin DR400-140B (Major)',
-    mtow: 1000,
-    forwardSlope: [785, 0.38],
-    tanks: [ROBIN_MAIN],
-    cruise: [
-      { name: '75%', tasAt0: 116, tasPer1000: 1.6, flowLph: 32 },
-      { name: '65%', tasAt0: 109, tasPer1000: 1.6, flowLph: 28 },
-    ],
-    climbRate: 750,
-    climbFlow: 38,
-    ceiling: 13000,
-    holding: 22,
-    maxContinuous: 36,
-    source:
-      'MTOW et limites de centrage : EASA TCDS A.039 (Robin DR400), à confirmer ; bras et débits non sourcés.',
+    mtowKg: 1000,
+    mlwKg: 1000,
+    utilityMaxKg: 910,
+    baggageMaxKg: 40,
+    source: `EASA TCDS EASA.A.367 issue 05, section EE : réservoirs, masses et centrage p. 130, sièges et bagages (40 kg) p. 131. ${ROBIN_DATUM_NOTE}. ${ROBIN_MAIN_CAPACITY}, bras à relever dans le manuel ; réservoir supplémentaire optionnel 50 L. Performances non sourcées : à saisir depuis le manuel de vol de l'avion.`,
   }),
-  robin({
+  // The DR 400/160 is the DR 400/180 airframe with another engine (TCDS
+  // section Z note 1): same tanks and arms; no manual read for its
+  // performance.
+  robinWithoutManual({
     code: 'DR400-160',
     label: 'Robin DR400-160 (Chevalier)',
-    mtow: 1050,
-    forwardSlope: [800, 0.39],
-    tanks: [ROBIN_MAIN, ROBIN_AUX],
-    cruise: [
-      { name: '75%', tasAt0: 120, tasPer1000: 1.6, flowLph: 33 },
-      { name: '65%', tasAt0: 112, tasPer1000: 1.6, flowLph: 29 },
-    ],
-    climbRate: 780,
-    climbFlow: 40,
-    ceiling: 13500,
-    holding: 23,
-    maxContinuous: 37,
-    source:
-      'MTOW et limites de centrage : EASA TCDS A.039 (Robin DR400), à confirmer ; bras et débits non sourcés.',
+    mtowKg: 1050,
+    mlwKg: 1045,
+    utilityMaxKg: 950,
+    baggageMaxKg: 40,
+    tanks: DR400_180_TANKS,
+    source: `EASA TCDS EASA.A.367 issue 05, section Y : réservoirs p. 103, masses et centrage p. 104, sièges et bagages (40 kg) p. 105 ; bras des réservoirs : manuel DR 400/180 p. 4.1 (cellule identique, TCDS section Z note 1). ${ROBIN_DATUM_NOTE}. ${ROBIN_MAIN_CAPACITY} + 2 réservoirs avant de 40 L ; réservoir supplémentaire optionnel 50 L non inclus. Performances (croisière, montée, descente, débits) non sourcées : à saisir depuis le manuel de vol de l'avion.`,
   }),
-  robin({
-    code: 'DR400-180',
-    label: 'Robin DR400-180 (Régent)',
-    mtow: 1100,
-    forwardSlope: [820, 0.4],
-    tanks: [ROBIN_MAIN, ROBIN_AUX],
-    cruise: [
-      { name: '75%', tasAt0: 127, tasPer1000: 1.7, flowLph: 38 },
-      { name: '65%', tasAt0: 119, tasPer1000: 1.7, flowLph: 33 },
-    ],
-    climbRate: 830,
-    climbFlow: 45,
-    ceiling: 15000,
-    holding: 26,
-    maxContinuous: 42,
-    source:
-      'MTOW et limites de centrage : EASA TCDS A.039 (Robin DR400), à confirmer ; bras et débits non sourcés.',
-  }),
+  DR400_180,
   {
     code: 'C172S',
     label: 'Cessna 172S Skyhawk SP',
@@ -539,182 +634,22 @@ export const AIRCRAFT_TEMPLATES: AircraftTemplate[] = [
       ],
     },
   },
-  {
+  // No document read for these two types: the template only names the type
+  // and its fuel; every figure is entered from the aircraft's own manual.
+  emptyTemplate({
     code: 'TB10',
     label: 'Socata TB10 Tobago',
-    source: `${TEMPLATE_WARNING}. MTOW 1150 kg : EASA TCDS (TB series), à confirmer ; bras, enveloppe et débits non sourcés (structure seulement).`,
-    performance: {
-      fuel: {
-        type: 'AVGAS_100LL',
-        densityKgPerL: 0.72,
-        tanks: [
-          {
-            id: 'main',
-            label: 'Réservoirs ailes / Wing tanks',
-            usableL: 204,
-            unusableL: 6,
-            armM: 1.15,
-          },
-        ],
-        taxiFuelL: 3,
-        burnOrder: [],
-      },
-      climb: {
-        iasKt: 80,
-        table: null,
-        seaLevelRateFpm: 790,
-        ceilingRateFpm: 100,
-        fuelFlowLph: 45,
-      },
-      cruise: {
-        normalSetting: '75%',
-        rows: cruiseRows(
-          [
-            { name: '75%', tasAt0: 118, tasPer1000: 1.6, flowLph: 38 },
-            { name: '65%', tasAt0: 110, tasPer1000: 1.5, flowLph: 33 },
-          ],
-          10000,
-        ),
-      },
-      descent: { iasKt: 100, rateFpm: 500, fuelFlowLph: 22 },
-      reserve: { holdingFuelFlowLph: 26, maxContinuousFuelFlowLph: 42 },
-      arrivalFuelL: 0,
-      serviceCeilingFt: 13000,
-      calibration: [],
-    },
-    massBalance: {
-      mtowKg: 1150,
-      mlwKg: 1150,
-      mzfwKg: null,
-      stations: [
-        {
-          id: 'front',
-          label: 'Sièges avant / Front seats',
-          kind: 'SEAT',
-          armM: 1.06,
-        },
-        {
-          id: 'rear',
-          label: 'Banquette arrière / Rear seats',
-          kind: 'SEAT',
-          armM: 2.03,
-        },
-        {
-          id: 'baggage',
-          label: 'Bagages / Baggage',
-          kind: 'BAGGAGE',
-          armM: 2.67,
-          maxKg: 45,
-        },
-        {
-          id: 'fuel-main',
-          label: 'Carburant / Fuel',
-          kind: 'FUEL',
-          armM: 1.15,
-          tankId: 'main',
-        },
-      ],
-      combinedLimits: [],
-      envelopes: [
-        envelope('NORMAL', [
-          [0.98, 700],
-          [0.98, 900],
-          [1.05, 1150],
-          [1.26, 1150],
-          [1.26, 700],
-        ]),
-      ],
-    },
-  },
-  {
+    fuel: 'AVGAS_100LL',
+    source:
+      "Aucune donnée sourcée : masses, enveloppe de centrage, stations de chargement, réservoirs et performances sont à saisir depuis le manuel de vol et la fiche de pesée de l'avion.",
+  }),
+  emptyTemplate({
     code: 'P2008JC',
     label: 'Tecnam P2008 JC',
-    source: `${TEMPLATE_WARNING}. MTOW 650 kg : EASA TCDS (P2008 JC), à confirmer ; bras, enveloppe et débits non sourcés (structure seulement).`,
-    performance: {
-      fuel: {
-        type: 'UL91',
-        densityKgPerL: 0.72,
-        tanks: [
-          {
-            id: 'left',
-            label: 'Réservoir gauche / Left tank',
-            usableL: 49,
-            unusableL: 1,
-            armM: 0.45,
-          },
-          {
-            id: 'right',
-            label: 'Réservoir droit / Right tank',
-            usableL: 49,
-            unusableL: 1,
-            armM: 0.45,
-          },
-        ],
-        taxiFuelL: 2,
-        burnOrder: [],
-      },
-      climb: {
-        iasKt: 68,
-        table: null,
-        seaLevelRateFpm: 800,
-        ceilingRateFpm: 100,
-        fuelFlowLph: 24,
-      },
-      cruise: {
-        normalSetting: '75%',
-        rows: cruiseRows(
-          [
-            { name: '75%', tasAt0: 106, tasPer1000: 1.5, flowLph: 18 },
-            { name: '65%', tasAt0: 98, tasPer1000: 1.4, flowLph: 15 },
-          ],
-          10000,
-        ),
-      },
-      descent: { iasKt: 85, rateFpm: 500, fuelFlowLph: 10 },
-      reserve: { holdingFuelFlowLph: 13, maxContinuousFuelFlowLph: 22 },
-      arrivalFuelL: 0,
-      serviceCeilingFt: 13000,
-      calibration: [],
-    },
-    massBalance: {
-      mtowKg: 650,
-      mlwKg: 650,
-      mzfwKg: null,
-      stations: [
-        { id: 'front', label: 'Sièges / Seats', kind: 'SEAT', armM: 0.6 },
-        {
-          id: 'baggage',
-          label: 'Bagages / Baggage',
-          kind: 'BAGGAGE',
-          armM: 1.4,
-          maxKg: 20,
-        },
-        {
-          id: 'fuel-left',
-          label: 'Carburant gauche / Left fuel',
-          kind: 'FUEL',
-          armM: 0.45,
-          tankId: 'left',
-        },
-        {
-          id: 'fuel-right',
-          label: 'Carburant droit / Right fuel',
-          kind: 'FUEL',
-          armM: 0.45,
-          tankId: 'right',
-        },
-      ],
-      combinedLimits: [],
-      envelopes: [
-        envelope('NORMAL', [
-          [0.3, 400],
-          [0.3, 650],
-          [0.55, 650],
-          [0.55, 400],
-        ]),
-      ],
-    },
-  },
+    fuel: 'UL91',
+    source:
+      "Aucune donnée sourcée : masses, enveloppe de centrage, stations de chargement, réservoirs et performances sont à saisir depuis le manuel de vol et la fiche de pesée de l'avion.",
+  }),
 ];
 
 export const templateByCode = (code: string): AircraftTemplate | null =>

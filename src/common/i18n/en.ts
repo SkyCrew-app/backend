@@ -194,6 +194,13 @@ export const en: Record<TranslationKey, string> = {
     'An incident is attached to this flight: it cannot be deleted',
   'error.aircraft.upcomingBookings':
     'This aircraft has {{count}} upcoming booking(s): cancel or move them before retiring it',
+  'error.aircraft.registrationRequired':
+    'Enter the registration of the aircraft',
+  'error.aircraft.modelRequired': 'Enter the model of the aircraft',
+  'error.aircraft.yearRequired':
+    'Enter the year of manufacture of the aircraft, between {{min}} and {{max}}',
+  'error.aircraft.hourlyCostRequired':
+    'Enter the cost of one flight hour, in euros (0 or more)',
   'error.aircraft.heldByMaintenance':
     'This aircraft is in maintenance: its availability cannot be changed until the maintenance is over',
   'error.maintenance.endBeforeStart':
@@ -395,6 +402,29 @@ export const en: Record<TranslationKey, string> = {
   'navplan.notice.windUnavailable':
     'No winds aloft forecast for part of the route: calm wind assumed, enter the forecast wind (WINTEM)',
   'navplan.notice.windPilot': 'Wind entered by the pilot on at least one leg',
+  'navplan.notice.nightFlight':
+    'Flight partly at night from {{time}} (aviation night: from the end of evening civil twilight to the beginning of morning civil twilight, SERA): night final reserve (45 min) and a night rating required',
+  'navplan.notice.nightReserveImposed':
+    'Flight partly at night from {{time}} (aviation night: from the end of evening civil twilight to the beginning of morning civil twilight, SERA): the night final reserve (45 min) replaces the day reserve chosen; night rating required',
+  'navplan.notice.nightApproaching':
+    'Planned arrival at {{icao}} ({{role}}) at {{arrival}}, {{minutes}} min before the end of civil twilight ({{dusk}}): any delay makes it a night flight',
+  'navplan.notice.qnhMetarOld':
+    'QNH from a METAR of {{time}} ({{icao}}), to be updated before departure',
+  'navplan.notice.qnhMetarUnknownTime':
+    'QNH from a {{icao}} METAR of unknown time, to be updated before departure',
+  'navplan.notice.tafNotCovering':
+    'TAF {{icao}} ({{role}}) valid from {{from}} to {{to}}: it does not cover the planned time ({{time}}), check again before departure',
+  'navplan.notice.tafValidityUnknown':
+    'TAF {{icao}} ({{role}}): validity period not readable, check that it covers the planned time ({{time}})',
+  'navplan.notice.tafMissing':
+    'No TAF for {{icao}} ({{role}}): no forecast for the planned time ({{time}})',
+  'navplan.notice.departureNoForecast':
+    'No TAF for {{icao}} ({{role}}): the latest METAR ({{observed}}) does not describe the conditions of the departure planned at {{time}}',
+  'navplan.notice.windOutOfRange':
+    'Winds aloft forecast (run {{run}}) valid from {{from}} to {{to}}: the time of the flight is not covered, calm wind assumed on the legs concerned; enter the forecast wind (WINTEM)',
+  'navplan.role.departure': 'departure',
+  'navplan.role.destination': 'destination',
+  'navplan.role.alternate': 'alternate',
   'navplan.fuel.alternateRequired':
     'The club requires an alternate in VFR: add an alternate aerodrome',
   'navplan.fuel.aboveUsable': '{{loaded}} L loaded > {{usable}} L usable',
@@ -515,4 +545,23 @@ export const en: Record<TranslationKey, string> = {
   'navplan.pdf.page': 'Page {{page}}',
   'navplan.pdf.forecastNotice':
     'Automatic forecast not checked by a forecaster.',
+  'navplan.pdf.qnhSource.METAR': '{{icao}} METAR of {{time}}',
+  'navplan.pdf.qnhSource.INPUT': 'entered by the pilot',
+  'navplan.pdf.qnhSource.DEFAULT': 'QNH unknown, standard atmosphere',
+  'navplan.pdf.navdata.airac': 'AIRAC cycle {{airac}} of {{date}}',
+  'navplan.pdf.navdata.ourairports':
+    'OurAirports aerodrome data of {{date}}, no AIRAC cycle',
+  'navplan.pdf.navdata.none': 'no aeronautical data imported',
+  'navplan.pdf.navdata.stale': 'OUT OF DATE',
+  'navplan.pdf.sun': 'Sun (UTC)',
+  'navplan.pdf.sun.line':
+    '{{icao}} ({{role}}, {{date}}): civil twilight begins {{dawn}}, sunrise {{sunrise}}, sunset {{sunset}}, civil twilight ends {{dusk}}',
+  'navplan.pdf.sun.night':
+    'Flight partly at night from {{time}}: night final reserve (45 min).',
+  'navplan.pdf.sun.day':
+    'Flight entirely by day (aviation night: from the end of evening civil twilight to the beginning of morning civil twilight).',
+  'navplan.pdf.windNone': '* no wind forecast: calm wind assumed',
+  'navplan.pdf.status.OK': 'INFO',
+  'navplan.pdf.status.WARNING': 'WARNING',
+  'navplan.pdf.status.BLOCKING': 'BLOCKING',
 };

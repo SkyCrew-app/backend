@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { spawn } from 'child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
-import { WindProvider } from '../engine/engine';
+import { WindCoverage, WindProvider } from '../engine/engine';
 import { windsDir } from './icon-eu/fetch-job';
 import { decodeGrid, sampleGrid, WindsGrid } from './winds-grid';
 
@@ -61,17 +61,31 @@ export class WindsAloftService implements OnApplicationBootstrap {
     this.checkedAt = Date.now();
   }
 
-  provider(qnhHpa: number): { provider: WindProvider | null; source: string } {
+  provider(qnhHpa: number): {
+    provider: WindProvider | null;
+    source: string;
+    coverage: WindCoverage | null;
+  } {
     const grid = this.current();
     if (!grid) {
       return {
         provider: null,
+        coverage: null,
         source:
           'Aucune prévision de vent en altitude disponible / no winds aloft forecast',
       };
     }
     const run = grid.header.run.slice(0, 13).replace('T', ' ') + 'Z';
+    const runTime = new Date(grid.header.run).getTime();
+    const steps = grid.header.steps;
     return {
+      coverage: steps.length
+        ? {
+            run,
+            from: new Date(runTime + steps[0] * 3_600_000),
+            to: new Date(runTime + steps[steps.length - 1] * 3_600_000),
+          }
+        : null,
       provider: (lat, lon, altitudeFt, time) => {
         const sample = sampleGrid(grid, lat, lon, altitudeFt, qnhHpa, time);
         return sample

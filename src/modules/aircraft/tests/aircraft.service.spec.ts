@@ -52,7 +52,12 @@ describe('AircraftService', () => {
   });
 
   it('create devrait gérer upload et sauvegarder', async () => {
-    const dto = {} as any;
+    const dto = {
+      registration_number: 'F-TEST',
+      model: 'DR400',
+      year_of_manufacture: 2000,
+      hourly_cost: 150,
+    } as any;
     const result = await service.create(dto, ['f1'], 'i1');
     expect(repo.create).toHaveBeenCalledWith(dto);
     expect(fs.renameSync).toHaveBeenCalled();

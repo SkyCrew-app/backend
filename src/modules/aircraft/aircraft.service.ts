@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -58,6 +59,54 @@ export const withEffectiveAvailability = (
   }
   return aircraft;
 };
+
+// The first powered aircraft flew in 1903 (same bounds as the form).
+export const FIRST_MANUFACTURE_YEAR = 1903;
+
+// The columns the database requires (NOT NULL, no default), refused with a
+// message rather than a database error: all of them on a creation, an
+// explicit empty value on an update.
+export function assertAircraftRequired(
+  input: Partial<
+    Pick<
+      CreateAircraftInput,
+      'registration_number' | 'model' | 'year_of_manufacture' | 'hourly_cost'
+    >
+  >,
+  creating: boolean,
+  now: Date = new Date(),
+): void {
+  const given = (key: keyof typeof input) =>
+    creating || (key in input && input[key] !== undefined);
+  const text = (value: unknown) =>
+    typeof value === 'string' && value.trim().length > 0;
+  if (given('registration_number') && !text(input.registration_number))
+    throw localized(BadRequestException, 'error.aircraft.registrationRequired');
+  if (given('model') && !text(input.model))
+    throw localized(BadRequestException, 'error.aircraft.modelRequired');
+  const max = now.getFullYear();
+  const year = input.year_of_manufacture;
+  if (
+    given('year_of_manufacture') &&
+    !(
+      typeof year === 'number' &&
+      Number.isInteger(year) &&
+      year >= FIRST_MANUFACTURE_YEAR &&
+      year <= max
+    )
+  ) {
+    throw localized(BadRequestException, 'error.aircraft.yearRequired', {
+      min: FIRST_MANUFACTURE_YEAR,
+      max,
+    });
+  }
+  const cost = input.hourly_cost;
+  if (
+    given('hourly_cost') &&
+    !(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0)
+  )
+    throw localized(BadRequestException, 'error.aircraft.hourlyCostRequired');
+}
 
 @Injectable()
 export class AircraftService {
@@ -120,6 +169,7 @@ export class AircraftService {
       null,
       createAircraftInput.availability_status ?? AvailabilityStatus.AVAILABLE,
     );
+    assertAircraftRequired(createAircraftInput, true);
     const newAircraft = this.aircraftRepository.create(createAircraftInput);
 
     await this.aircraftRepository.save(newAircraft);
@@ -163,6 +213,7 @@ export class AircraftService {
     const aircraft = await this.aircraftRepository.findOneOrFail({
       where: { id: aircraftId },
     });
+    assertAircraftRequired(updateAircraftInput, false);
     const input = await this.withoutHeldStatus(aircraftId, updateAircraftInput);
     await this.assertPlaceFor(
       aircraft.availability_status,
