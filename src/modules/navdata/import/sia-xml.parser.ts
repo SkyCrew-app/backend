@@ -218,9 +218,9 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
     // its call sign.
     const lkName =
       /\]\[[^\]]*\]\[([^\]]+)\]$/.exec(service.attributes.lk ?? '')?.[1] ?? '';
-    const fromLk = lkName
-      .replace(new RegExp(`^${code.replace(/[/]/g, '\\/')}\\s*`), '')
-      .trim();
+    const fromLk = (
+      code && lkName.startsWith(code) ? lkName.slice(code.length) : lkName
+    ).trim();
     const callsign =
       [place, indic].filter((v) => v && v !== '.').join(' ') || fromLk || null;
     const frequencies = (
