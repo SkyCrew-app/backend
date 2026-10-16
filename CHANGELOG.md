@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.20.0](https://github.com/SkyCrew-app/backend/compare/2.19.0...2.20.0) (2026-10-16)
+
+
+### Features
+
+* **flight-plans:** :sparkles: precise VFR flight preparation computed in-house ([#201](https://github.com/SkyCrew-app/backend/issues/201)) ([0800ca9](https://github.com/SkyCrew-app/backend/commit/0800ca903ed39efdfee9e8aa9b091ab1e6a7da94))
+
+
+### Bug Fixes
+
+* **deploy:** :bug: send images in retried pieces checked on arrival ([#200](https://github.com/SkyCrew-app/backend/issues/200)) ([d1faccd](https://github.com/SkyCrew-app/backend/commit/d1faccd8a16e8b2a2c49479453d4fc311a59f32c))
+* **flight-plans:** :lock: strip the service prefix without building a pattern ([#203](https://github.com/SkyCrew-app/backend/issues/203)) ([e75b557](https://github.com/SkyCrew-app/backend/commit/e75b5570fb238522572d4ad08a51e3f4518aa29a))
+
 ## [2.19.0](https://github.com/SkyCrew-app/backend/compare/2.18.0...2.19.0) (2026-10-15)
 
 
