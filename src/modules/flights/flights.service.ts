@@ -32,12 +32,6 @@ import { Aircraft } from '../aircraft/entity/aircraft.entity';
 import { Incident } from '../incidents/entity/incidents.entity';
 import { InstructionCourse } from '../instruction-courses/entity/instruction-courses.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import axios from 'axios';
-import { AirportsService } from './airports.service';
-import { FlightPlanGeneratorService } from './flight-plan-generator.service';
-import { AircraftPerformanceService } from './aircraft-performance.service';
-import { MetarService } from './metar.service';
-import { WeatherResponse } from './interfaces/weather.interface';
 import {
   hasRole,
   isAdmin,
@@ -62,6 +56,19 @@ export interface AIFlightOptions {
   // be theirs. Internal callers (demo data) leave it out.
   requester?: SessionUser;
 }
+
+// Computes a direct plan for a booking and returns the columns of the
+// flight, and how to keep the plan once the flight is saved.
+export type DirectPlanner = (
+  reservation: Reservation,
+  originIcao: string,
+  destinationIcao: string,
+  departureTime: Date,
+  cruiseAltitudeFt: number | null,
+) => Promise<{
+  legacy: Record<string, any> & { waypoints: unknown[] };
+  persist: (flightId: number, pilotId: number) => Promise<void>;
+}>;
 
 // What a flight adds to the totals of its pilot, of its instructor and of
 // its aircraft.
@@ -88,10 +95,8 @@ const sameId = (a: unknown, b: unknown): boolean =>
 
 @Injectable()
 export class FlightsService {
-  private readonly WEATHER_URL =
-    'https://api.openweathermap.org/data/2.5/weather';
-  private readonly WEATHER_API_KEY = process.env.OPENWEATHERMAP_API_KEY;
   private readonly logger = new Logger(FlightsService.name);
+  private directPlanner: DirectPlanner | null = null;
 
   constructor(
     @InjectRepository(Flight)
@@ -99,16 +104,16 @@ export class FlightsService {
     @InjectRepository(Reservation)
     private reservationsRepository: Repository<Reservation>,
     private readonly notificationsService: NotificationsService,
-    private readonly airportsService: AirportsService,
-    private readonly flightPlanGenerator: FlightPlanGeneratorService,
-    private readonly aircraftPerformance: AircraftPerformanceService,
-    private readonly metarService: MetarService,
   ) {}
+
+  useDirectPlanner(planner: DirectPlanner): void {
+    this.directPlanner = planner;
+  }
 
   // A flight is planned on a booking of the member, never on someone
   // else's. Only an administrator records a flight without a booking, or on
   // the booking of another member (the flight is then that member's).
-  private async bookingForNewFlight(
+  async bookingForNewFlight(
     reservationId: number | null | undefined,
     requester: SessionUser | undefined,
   ): Promise<Reservation | null> {
@@ -214,6 +219,9 @@ export class FlightsService {
     return this.flightsRepository.save(flight);
   }
 
+  // The "generate a plan" of a booking: a direct route from departure to
+  // destination computed by the flight preparation engine (handed over by
+  // the navplan module), returned as a flight like before.
   async createFlightByAI(
     origin_icao: string,
     destination_icao: string,
@@ -251,123 +259,36 @@ export class FlightsService {
         user_id = reservation.user?.id ?? user_id;
       }
 
-      const aircraft = reservation.aircraft;
-      if (!aircraft?.cruiseSpeed || !aircraft?.maxAltitude) {
+      if (!reservation.aircraft) {
         throw new BadRequestException('Aircraft configuration incomplete');
       }
+      if (!this.directPlanner) {
+        throw new InternalServerErrorException('Flight planner unavailable');
+      }
 
-      // Get performance profile for this aircraft model
-      const perfProfile = this.aircraftPerformance.getProfile(
-        aircraft.model,
-        aircraft.cruiseSpeed,
-        aircraft.consumption,
-      );
-
-      const departure = this.airportsService.getAirportInfo(origin_icao);
-      const arrival = this.airportsService.getAirportInfo(destination_icao);
-
-      // Fetch weather + METAR in parallel
-      const [weatherDeparture, weatherArrival, metarDep, metarArr] =
-        await Promise.all([
-          this.fetchWeatherSafe(departure.lat, departure.lon),
-          this.fetchWeatherSafe(arrival.lat, arrival.lon),
-          this.metarService.fetchMetarSafe(origin_icao),
-          this.metarService.fetchMetarSafe(destination_icao),
-        ]);
-
-      // Generate flight plan with performance data + METAR
-      const flightPlan = this.flightPlanGenerator.generateFlightPlan(
-        departure,
-        arrival,
-        aircraft.cruiseSpeed,
-        aircraft.maxAltitude,
-        reservation.flight_category,
-        aircraft.consumption,
-        {
-          preferred_runway_dep: options?.preferred_runway_dep,
-          preferred_runway_arr: options?.preferred_runway_arr,
-          cruise_altitude_ft: options?.cruise_altitude_ft,
-          flight_rules: options?.flight_rules,
-          metar_departure: metarDep,
-          metar_arrival: metarArr,
-          performance: perfProfile,
-        },
-      );
-
-      // Use flight_hours from the enriched flight plan (includes WCA/GS)
-      const adjustedFlightHours = flightPlan.flight_hours;
-
-      // Compute departure and arrival times
       const departureTime = options?.departure_time ?? reservation.start_time;
-      const arrivalTime = new Date(
-        departureTime.getTime() + adjustedFlightHours * 3_600_000,
-      );
-
-      // Build weather conditions string
-      const weatherParts: string[] = [];
-      weatherParts.push(
-        `DEP ${departure.icao}(${departure.name}) ${weatherDeparture?.weather?.[0]?.description ?? 'Unavailable'} ${weatherDeparture?.main?.temp ?? 'N/A'}C`,
-      );
-      if (metarDep?.rawOb) {
-        weatherParts.push(`METAR DEP: ${metarDep.rawOb}`);
-      }
-      weatherParts.push(
-        `ARR ${arrival.icao}(${arrival.name}) ${weatherArrival?.weather?.[0]?.description ?? 'Unavailable'} ${weatherArrival?.main?.temp ?? 'N/A'}C`,
-      );
-      if (metarArr?.rawOb) {
-        weatherParts.push(`METAR ARR: ${metarArr.rawOb}`);
-      }
-
-      // Append weather info to first/last waypoint names
-      const waypointsWithContext = flightPlan.waypoints.map(
-        (waypoint, index, allWaypoints) => {
-          if (index === 0) {
-            return {
-              ...waypoint,
-              name: `${waypoint.name} | METEO ${weatherDeparture?.weather?.[0]?.description ?? 'Unavailable'} | WIND ${metarDep?.wspd ?? weatherDeparture?.wind?.speed ?? 'N/A'}kt`,
-            };
-          }
-
-          if (index === allWaypoints.length - 1) {
-            return {
-              ...waypoint,
-              name: `${waypoint.name} | METEO ${weatherArrival?.weather?.[0]?.description ?? 'Unavailable'} | WIND ${metarArr?.wspd ?? weatherArrival?.wind?.speed ?? 'N/A'}kt`,
-            };
-          }
-
-          return waypoint;
-        },
+      const plan = await this.directPlanner(
+        reservation,
+        origin_icao.toUpperCase(),
+        destination_icao.toUpperCase(),
+        new Date(departureTime),
+        options?.cruise_altitude_ft ?? null,
       );
 
       const flight = this.flightsRepository.create({
-        origin_icao,
-        destination_icao,
+        ...plan.legacy,
         user: { id: user_id },
         reservation: { id: reservation_id },
         instructor: reservation.instructor
           ? { id: reservation.instructor.id }
           : null,
-        flight_hours: adjustedFlightHours,
-        estimated_flight_time: adjustedFlightHours,
         flight_type: reservation.flight_category,
-        distance_km: flightPlan.distance_km,
-        encoded_polyline: flightPlan.encoded_polyline,
-        weather_conditions: weatherParts.join(' | '),
-        waypoints: JSON.stringify(waypointsWithContext),
         number_of_passengers: reservation.number_of_passengers || 1,
-        departure_time: departureTime,
-        arrival_time: arrivalTime,
-        fuel_policy: flightPlan.fuel_policy
-          ? JSON.stringify(flightPlan.fuel_policy)
-          : null,
-        wind_summary: flightPlan.wind_summary
-          ? JSON.stringify(flightPlan.wind_summary)
-          : null,
-        performance_profile: flightPlan.performance_profile ?? null,
-        estimated_fuel_liters: flightPlan.fuel_policy?.total_liters ?? null,
-      });
+        waypoints: JSON.stringify(plan.legacy.waypoints),
+      } as any) as unknown as Flight;
 
       const savedFlight = await this.flightsRepository.save(flight);
+      await plan.persist(savedFlight.id, user_id);
 
       await this.notificationsService.create({
         user_id: user_id,
@@ -380,8 +301,6 @@ export class FlightsService {
         is_read: false,
       });
 
-      savedFlight.departure_airport_info = JSON.stringify(departure);
-      savedFlight.arrival_airport_info = JSON.stringify(arrival);
       return savedFlight;
     } catch (error: any) {
       this.logger.error(
@@ -760,39 +679,6 @@ export class FlightsService {
       }
       return true;
     });
-  }
-
-  async fetchWeather(lat: number, lon: number): Promise<WeatherResponse> {
-    try {
-      const response = await axios.get(this.WEATHER_URL, {
-        params: {
-          lat,
-          lon,
-          appid: this.WEATHER_API_KEY,
-          units: 'metric',
-          lang: 'fr',
-        },
-      });
-      return response.data;
-    } catch {
-      throw new Error(
-        `Failed to fetch weather data for coordinates (${lat}, ${lon})`,
-      );
-    }
-  }
-
-  private async fetchWeatherSafe(
-    lat: number,
-    lon: number,
-  ): Promise<WeatherResponse | null> {
-    try {
-      return await this.fetchWeather(lat, lon);
-    } catch (error: any) {
-      this.logger.warn(
-        `Weather unavailable for (${lat}, ${lon}): ${error.message}`,
-      );
-      return null;
-    }
   }
 
   computeFlightTime(distanceKm: number, cruiseSpeedKmh: number): number {

@@ -5,16 +5,12 @@ import { FlightsService } from '../flights.service';
 import { Flight } from '../entity/flights.entity';
 import { Reservation } from '../../reservations/entity/reservations.entity';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { AirportsService } from '../airports.service';
 import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { FlightPlanGeneratorService } from '../flight-plan-generator.service';
-import { AircraftPerformanceService } from '../aircraft-performance.service';
-import { MetarService } from '../metar.service';
 import { User } from '../../users/entity/users.entity';
 import { Aircraft } from '../../aircraft/entity/aircraft.entity';
 import { FlightAmendment } from '../entity/flight-amendment.entity';
@@ -26,10 +22,8 @@ describe('FlightsService', () => {
   let repo: Partial<Record<keyof Repository<Flight>, jest.Mock>>;
   let resRepo: Partial<Record<keyof Repository<Reservation>, jest.Mock>>;
   let notif: Partial<NotificationsService>;
-  let airports: Partial<AirportsService>;
-  let generator: Partial<FlightPlanGeneratorService>;
-  let perfService: Partial<AircraftPerformanceService>;
-  let metar: Partial<MetarService>;
+  let planner: jest.Mock;
+  let persist: jest.Mock;
   let manager: Record<string, jest.Mock>;
 
   beforeEach(async () => {
@@ -52,22 +46,22 @@ describe('FlightsService', () => {
     };
     resRepo = { findOne: jest.fn(), find: jest.fn() };
     notif = { create: jest.fn() };
-    airports = { getAirportInfo: jest.fn() };
-    generator = { generateFlightPlan: jest.fn() };
-    perfService = {
-      getProfile: jest.fn().mockReturnValue({
-        icao_type: 'C172',
-        category: 'SEP',
-        climb: { rate_fpm: 730, ias_kts: 75, fuel_lph: 38 },
-        cruise: { tas_kts: 122, fuel_lph: 32, ceiling_ft: 14000 },
-        descent: { rate_fpm: 500, ias_kts: 100, fuel_lph: 20 },
-        approach: { ias_kts: 65, vref_kts: 60, fuel_lph: 25 },
-        taxi_fuel_liters: 5,
-        usable_fuel_liters: 200,
-        max_range_nm: 640,
-      }),
-    };
-    metar = { fetchMetarSafe: jest.fn() };
+    persist = jest.fn();
+    planner = jest.fn().mockResolvedValue({
+      legacy: {
+        origin_icao: 'LFPG',
+        destination_icao: 'LFBO',
+        flight_hours: 1.2,
+        estimated_flight_time: 1.2,
+        distance_km: 600,
+        encoded_polyline: '',
+        waypoints: [],
+        departure_time: new Date('2025-06-15T08:00:00Z'),
+        arrival_time: new Date('2025-06-15T09:22:00Z'),
+        plan_engine: 'navplan-1',
+      },
+      persist,
+    });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -75,14 +69,11 @@ describe('FlightsService', () => {
         { provide: getRepositoryToken(Flight), useValue: repo },
         { provide: getRepositoryToken(Reservation), useValue: resRepo },
         { provide: NotificationsService, useValue: notif },
-        { provide: AirportsService, useValue: airports },
-        { provide: FlightPlanGeneratorService, useValue: generator },
-        { provide: AircraftPerformanceService, useValue: perfService },
-        { provide: MetarService, useValue: metar },
       ],
     }).compile();
 
     service = module.get<FlightsService>(FlightsService);
+    service.useDirectPlanner(planner);
   });
 
   describe('createFlightByUser', () => {
@@ -216,42 +207,19 @@ describe('FlightsService', () => {
   });
 
   describe('createFlightByAI', () => {
-    const mockAirport = {
-      icao: 'LFPG',
-      lat: 49,
-      lon: 2,
-      elevation_ft: 392,
-      name: 'CDG',
-      city: 'Paris',
-      country: 'FR',
-      type: 'large_airport',
-      iata: 'CDG',
-      continent: 'EU',
-    };
+    const booking = () => ({
+      id: 1,
+      user: { id: 2 },
+      aircraft: { id: 4, model: 'Cessna 172' },
+      flight_category: 'local',
+      number_of_passengers: 1,
+      start_time: new Date('2025-06-15T08:00:00Z'),
+    });
 
     const setupMocks = () => {
-      resRepo.findOne.mockResolvedValue({
-        id: 1,
-        aircraft: {
-          cruiseSpeed: 500,
-          maxAltitude: 30000,
-          consumption: 40,
-          model: 'Cessna 172',
-        },
-        flight_category: 'local',
-        number_of_passengers: 1,
-        start_time: new Date('2025-06-15T08:00:00Z'),
-      });
-      (airports.getAirportInfo as jest.Mock).mockReturnValue(mockAirport);
-      (generator.generateFlightPlan as jest.Mock).mockReturnValue({
-        distance_km: 600,
-        flight_hours: 1.2,
-        waypoints: [],
-        encoded_polyline: '',
-      });
-      (metar.fetchMetarSafe as jest.Mock).mockResolvedValue(null);
-      repo.create.mockReturnValue({ id: 10 });
-      repo.save.mockResolvedValue({ id: 10 });
+      resRepo.findOne.mockResolvedValue(booking());
+      repo.create.mockImplementation((value) => ({ ...value }));
+      repo.save.mockImplementation(async (value) => ({ id: 10, ...value }));
     };
 
     it("refuses a plan generated on another member's booking", async () => {
@@ -278,32 +246,40 @@ describe('FlightsService', () => {
       );
     });
 
-    it('populates estimated_flight_time', async () => {
+    it('asks the flight preparation engine for a direct plan of the booking', async () => {
       setupMocks();
-      await service.createFlightByAI('LFPG', 'LFBO', 2, 1);
+      await service.createFlightByAI('lfpg', 'lfbo', 2, 1, {
+        cruise_altitude_ft: 3500,
+      });
 
-      expect(repo.create).toHaveBeenCalledWith(
+      expect(planner).toHaveBeenCalledWith(
         expect.objectContaining({
-          estimated_flight_time: expect.any(Number),
+          id: 1,
+          aircraft: { id: 4, model: 'Cessna 172' },
         }),
+        'LFPG',
+        'LFBO',
+        new Date('2025-06-15T08:00:00Z'),
+        3500,
       );
     });
 
-    it('populates departure_time and arrival_time', async () => {
+    it('stores the columns of the plan and keeps the plan with the flight', async () => {
       setupMocks();
-      await service.createFlightByAI('LFPG', 'LFBO', 2, 1);
+      const saved = await service.createFlightByAI('LFPG', 'LFBO', 2, 1);
 
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
+          estimated_flight_time: 1.2,
+          distance_km: 600,
+          plan_engine: 'navplan-1',
+          flight_type: 'local',
+          waypoints: '[]',
           departure_time: expect.any(Date),
           arrival_time: expect.any(Date),
         }),
       );
-
-      const createCall = repo.create.mock.calls[0][0];
-      expect(createCall.arrival_time.getTime()).toBeGreaterThan(
-        createCall.departure_time.getTime(),
-      );
+      expect(persist).toHaveBeenCalledWith(saved.id, 2);
     });
 
     it('uses requested departure_time from options', async () => {
@@ -313,112 +289,17 @@ describe('FlightsService', () => {
         departure_time: customTime,
       });
 
-      const createCall = repo.create.mock.calls[0][0];
-      expect(createCall.departure_time).toEqual(customTime);
+      expect(planner.mock.calls[0][3]).toEqual(customTime);
     });
 
-    it('passes options to the flight plan generator', async () => {
+    it('fails clearly without a planner', async () => {
       setupMocks();
-      await service.createFlightByAI('LFPG', 'LFBO', 2, 1, {
-        preferred_runway_dep: '09L',
-        cruise_altitude_ft: 25000,
-        flight_rules: 'IFR',
-      });
-
-      expect(generator.generateFlightPlan).toHaveBeenCalledWith(
-        mockAirport,
-        mockAirport,
-        500,
-        30000,
-        'local',
-        40,
-        expect.objectContaining({
-          preferred_runway_dep: '09L',
-          cruise_altitude_ft: 25000,
-          flight_rules: 'IFR',
-        }),
-      );
-    });
-
-    it('fetches METAR for both airports', async () => {
-      setupMocks();
-      await service.createFlightByAI('LFPG', 'LFBO', 2, 1);
-
-      expect(metar.fetchMetarSafe).toHaveBeenCalledWith('LFPG');
-      expect(metar.fetchMetarSafe).toHaveBeenCalledWith('LFBO');
-    });
-
-    it('passes METAR data to generator options', async () => {
-      setupMocks();
-      const metarData = {
-        icaoId: 'LFPG',
-        rawOb: 'METAR LFPG 09012KT',
-        temp: 15,
-        dewp: 8,
-        wdir: 90,
-        wspd: 12,
-        wgst: null,
-        visib: 10,
-        altim: 1013,
-        fltcat: 'VFR',
-        clouds: [],
-      };
-      (metar.fetchMetarSafe as jest.Mock).mockResolvedValue(metarData);
-
-      await service.createFlightByAI('LFPG', 'LFBO', 2, 1);
-
-      expect(generator.generateFlightPlan).toHaveBeenCalledWith(
-        mockAirport,
-        mockAirport,
-        500,
-        30000,
-        'local',
-        40,
-        expect.objectContaining({
-          metar_departure: metarData,
-          metar_arrival: metarData,
-        }),
-      );
-    });
-
-    it('passes flight category and consumption to generator', async () => {
-      resRepo.findOne.mockResolvedValue({
-        id: 1,
-        aircraft: {
-          cruiseSpeed: 500,
-          maxAltitude: 30000,
-          consumption: 35,
-          model: 'Cessna 172',
-        },
-        flight_category: 'cross_country',
-        number_of_passengers: 2,
-        start_time: new Date('2025-06-15T08:00:00Z'),
-      });
-      (airports.getAirportInfo as jest.Mock).mockReturnValue(mockAirport);
-      (generator.generateFlightPlan as jest.Mock).mockReturnValue({
-        distance_km: 600,
-        flight_hours: 1.2,
-        waypoints: [],
-        encoded_polyline: '',
-      });
-      (metar.fetchMetarSafe as jest.Mock).mockResolvedValue(null);
-      repo.create.mockReturnValue({ id: 11 });
-      repo.save.mockResolvedValue({ id: 11 });
-
-      await service.createFlightByAI('LFPG', 'LFBO', 2, 1);
-
-      expect(generator.generateFlightPlan).toHaveBeenCalledWith(
-        mockAirport,
-        mockAirport,
-        500,
-        30000,
-        'cross_country',
-        35,
-        expect.any(Object),
-      );
+      (service as any).directPlanner = null;
+      await expect(
+        service.createFlightByAI('LFPG', 'LFBO', 2, 1),
+      ).rejects.toThrow('Flight planner unavailable');
     });
   });
-
   describe('computeFlightTime', () => {
     it('calculates correctly', () => {
       expect(service.computeFlightTime(100, 50)).toBe(2);

@@ -75,8 +75,18 @@ services:
       # 1: suspended by the provider (unpaid subscription...): members see a
       # "service suspended" page and the API accepts no change. Data is kept.
       SKYCREW_SUSPENDED: ${SKYCREW_SUSPENDED:-}
+      # Flight preparation. Navigation data bundles ("navdata-<AIRAC>.json.gz"
+      # and their .sha256) are imported from this folder, or from the URL,
+      # every night (see backend/scripts/navdata.ts).
+      NAVDATA_DIR: /usr/src/app/data/navdata
+      NAVDATA_BUNDLE_URL: ${NAVDATA_BUNDLE_URL:-}
+      # Winds aloft from DWD ICON-EU (CC BY 4.0), downloaded twice a day by a
+      # separate process (about 250 MB a run). false: no forecast winds.
+      WINDS_ALOFT_FETCH: ${WINDS_ALOFT_FETCH:-true}
+      WINDS_DIR: /usr/src/app/data/winds
     volumes:
       - uploads:/usr/src/app/dist/src/uploads
+      - navdata:/usr/src/app/data/navdata
     depends_on:
       db:
         condition: service_healthy
@@ -108,5 +118,6 @@ volumes:
   db-data:
   redis-data:
   uploads:
+  navdata:
   caddy-data:
   caddy-config:

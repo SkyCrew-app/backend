@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "build": "nest build",
-    "postbuild": "cp -r src/modules/templates dist/src/modules/templates/ 2>/dev/null || true && cp -r src/modules/flights/data dist/src/modules/flights/data/ 2>/dev/null || true",
+    "postbuild": "cp -r src/modules/templates dist/src/modules/templates/ 2>/dev/null || true && cp -r src/modules/flights/data dist/src/modules/flights/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navdata/data && cp src/modules/navdata/data/*.json.gz dist/src/modules/navdata/data/ 2>/dev/null || true",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/src/main",
     "heroku-postbuild": "npm run build",
@@ -31,7 +31,9 @@
     "seed:dist": "node dist/src/db/run-seeders.js",
     "seed:demo:dist": "node dist/src/db/run-seeders.js --demo",
     "airports:build-db": "ts-node --transpile-only scripts/build-airport-db.ts",
-    "navigation:sync-sources": "ts-node --transpile-only scripts/sync-navigation-sources.ts",
+    "navdata:build": "ts-node --transpile-only scripts/navdata.ts build",
+    "navdata:import": "ts-node --transpile-only scripts/navdata.ts import",
+    "winds:fetch": "ts-node --transpile-only src/modules/navplan/weather/icon-eu/fetch-job.ts",
     "prepare": "husky || true"
   },
   "dependencies": {

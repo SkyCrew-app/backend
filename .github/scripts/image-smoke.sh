@@ -32,6 +32,8 @@ found=$(inside 'find dist/src/modules/templates -name "*.hbs" | wc -l' | tr -d '
 echo "e-mail templates: $found"
 
 inside 'test -s dist/src/modules/flights/data/airports.json' || fail "the aerodrome data is missing"
+inside 'test -s dist/src/modules/navdata/data/navdata-baseline.json.gz' ||
+  fail "the baseline navigation data of the flight preparation is missing (dist/src/modules/navdata/data)"
 [ "$(inside 'find dist -name "*.spec.js" | wc -l' | tr -d ' ')" -eq 0 ] || fail "test files were built into the image"
 [ "$(inside 'id -u')" != 0 ] || fail "the image runs as root"
 
@@ -94,3 +96,16 @@ done
 applied=$(docker exec "$ID-db" psql -At -U skycrew -d skycrew -c 'SELECT count(*) FROM migrations')
 [ "$applied" -gt 0 ] || fail "no migration was applied to the empty database"
 echo "the API answers on /health/ready (database reached), $applied migrations applied to an empty database"
+
+# The flight preparation needs its aerodromes: the baseline is imported at start-up.
+i=0
+until [ "$(docker exec "$ID-db" psql -At -U skycrew -d skycrew -c "SELECT count(*) FROM navdata_cycles WHERE status = 'ACTIVE'" 2>/dev/null)" = 1 ]; do
+  i=$((i + 1))
+  if [ $i -ge 20 ]; then
+    docker logs --tail 40 "$ID-api" >&2 || true
+    fail "no active navigation data after start-up: the baseline aerodromes were not imported"
+  fi
+  sleep 3
+done
+points=$(docker exec "$ID-db" psql -At -U skycrew -d skycrew -c "SELECT count(*) FROM nav_points")
+echo "navigation data imported at start-up: $points points"

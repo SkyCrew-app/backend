@@ -38,6 +38,10 @@ COPY --from=builder /usr/src/app/dist ./dist
 RUN mkdir -p dist/src/uploads && chown -R nestjs:nodejs dist/src/uploads
 VOLUME ["/usr/src/app/dist/src/uploads"]
 
+# Flight preparation: navigation data bundles waiting to be imported, and
+# the winds aloft grid written by the ICON-EU job (re-created every run).
+RUN mkdir -p data/navdata data/winds && chown -R nestjs:nodejs data
+
 # Switch to non-root user
 USER nestjs
 

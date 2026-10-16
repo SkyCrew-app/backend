@@ -45,6 +45,8 @@ import { FinancialModule } from './modules/financial/financial.module';
 import { HealthModule } from './modules/health/health.module';
 import { ChecklistsModule } from './modules/checklists/checklists.module';
 import { AviationDataModule } from './modules/aviation-data/aviation-data.module';
+import { NavdataModule } from './modules/navdata/navdata.module';
+import { NavplanModule } from './modules/navplan/navplan.module';
 import { APP_GUARD } from '@nestjs/core';
 import { DemoModeGuard } from './common/guards/demo-mode.guard';
 import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-default.guard';
@@ -192,6 +194,10 @@ import { PlanFeatureGuard } from './common/plan/plan-feature.guard';
     ChecklistsModule,
 
     AviationDataModule,
+
+    NavdataModule,
+
+    NavplanModule,
 
     AuditModule,
 
