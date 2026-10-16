@@ -183,7 +183,8 @@ export class AircraftPerformanceInput {
   @Field(() => String, { nullable: true })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  // Template sources cite several documents with page numbers.
+  @MaxLength(2000)
   source?: string | null;
 }
 
