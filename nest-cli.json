@@ -11,10 +11,6 @@
       {
         "include": "modules/flights/data/*.json",
         "watchAssets": true
-      },
-      {
-        "include": "modules/flights/data/xplane/*.dat",
-        "watchAssets": true
       }
     ],
     "deleteOutDir": true

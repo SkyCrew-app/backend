@@ -63,10 +63,6 @@ describe('ReservationsResolver', () => {
     } as any,
     {} as any,
     {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
-    {} as any,
   );
 
   beforeEach(async () => {

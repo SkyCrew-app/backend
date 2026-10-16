@@ -25,6 +25,9 @@ import { seedDemoAudits } from './demo/demo-audits.seeder';
 import { seedDemoEvaluations } from './demo/demo-evaluations.seeder';
 import { seedDemoReservationTemplates } from './demo/demo-reservation-templates.seeder';
 import { FlightsService } from '../modules/flights/flights.service';
+import { NavdataImportService } from '../modules/navdata/import/navdata-import.service';
+import { NavdataService } from '../modules/navdata/navdata.service';
+import { seedNavdataBaseline } from './navdata.seeder';
 
 const isDemoSeed = process.argv.includes('--demo');
 const isFreshSeed = process.argv.includes('--fresh');
@@ -68,6 +71,10 @@ async function bootstrap() {
     await seedRoles(dataSource);
     await seedAdminUser(dataSource);
     await seedAdministration(dataSource);
+    await seedNavdataBaseline(
+      app.get(NavdataImportService),
+      app.get(NavdataService),
+    );
 
     // Demo seeders (uniquement avec --demo)
     if (isDemoSeed) {

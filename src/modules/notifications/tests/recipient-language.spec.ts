@@ -29,10 +29,6 @@ describe('notifications in the language of their recipient', () => {
         { save: jest.fn().mockImplementation(async (flight) => flight) } as any,
         { findOne: jest.fn() } as any,
         notifications as any,
-        {} as any,
-        {} as any,
-        {} as any,
-        {} as any,
       );
     });
 

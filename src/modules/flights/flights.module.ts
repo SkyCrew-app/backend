@@ -8,9 +8,6 @@ import { Reservation } from '../reservations/entity/reservations.entity';
 import { User } from '../users/entity/users.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AirportsService } from './airports.service';
-import { FlightPlanGeneratorService } from './flight-plan-generator.service';
-import { AirwayGraphService } from './airway-graph.service';
-import { AircraftPerformanceService } from './aircraft-performance.service';
 import { MetarService } from './metar.service';
 import { LogbookService } from './logbook.service';
 import { LogbookResolver } from './logbook.resolver';
@@ -27,9 +24,6 @@ import { AdminActionsModule } from '../../common/admin-actions/admin-actions.mod
     FlightsService,
     FlightsResolver,
     AirportsService,
-    FlightPlanGeneratorService,
-    AirwayGraphService,
-    AircraftPerformanceService,
     MetarService,
     LogbookService,
     LogbookResolver,
