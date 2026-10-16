@@ -375,6 +375,21 @@ export const en: Record<TranslationKey, string> = {
     'Invalid mass and balance data: {{detail}}',
   'error.aircraftData.incomplete':
     'Aircraft data incomplete, cannot be confirmed: {{missing}}',
+  'aircraftData.missing.performance': 'cruise table',
+  'aircraftData.missing.tanks': 'fuel tanks (usable capacity)',
+  'aircraftData.missing.climb':
+    'climb (speed, rate, fuel flow and ceiling, or table)',
+  'aircraftData.missing.descent': 'descent (speed, rate and fuel flow)',
+  'aircraftData.missing.reserve':
+    'holding and maximum continuous power fuel flows',
+  'aircraftData.missing.massBalance': 'mass and balance',
+  'aircraftData.missing.weighing': 'weighing (empty mass and arm)',
+  'aircraftData.missing.weighingDate': 'weighing date',
+  'aircraftData.missing.mtow': 'maximum take-off mass',
+  'aircraftData.missing.mlw': 'maximum landing mass',
+  'aircraftData.missing.seats': 'seat stations',
+  'aircraftData.missing.envelope': 'centre of gravity envelope',
+  'aircraftData.missing.fuelArm': 'tank lever arms',
   'navplan.notice.disclaimer':
     'Flight preparation aid. It replaces neither the official aeronautical publications (AIP, AIP SUP, NOTAM, VAC charts), nor the aircraft flight manual, nor the judgement of the pilot in command.',
   'navplan.notice.notamCheck':

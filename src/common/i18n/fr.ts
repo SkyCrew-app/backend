@@ -387,6 +387,21 @@ export const fr = {
     'Données de masse et centrage incorrectes : {{detail}}',
   'error.aircraftData.incomplete':
     "Données de l'avion incomplètes, confirmation impossible : {{missing}}",
+  'aircraftData.missing.performance': 'table de croisière',
+  'aircraftData.missing.tanks': 'réservoirs (capacité utilisable)',
+  'aircraftData.missing.climb':
+    'montée (vitesse, taux, débit et plafond, ou table)',
+  'aircraftData.missing.descent': 'descente (vitesse, taux et débit)',
+  'aircraftData.missing.reserve':
+    'débits d’attente et à la puissance maximale continue',
+  'aircraftData.missing.massBalance': 'masse et centrage',
+  'aircraftData.missing.weighing': 'pesée (masse et bras à vide)',
+  'aircraftData.missing.weighingDate': 'date de pesée',
+  'aircraftData.missing.mtow': 'masse maximale au décollage',
+  'aircraftData.missing.mlw': 'masse maximale à l’atterrissage',
+  'aircraftData.missing.seats': 'stations des sièges',
+  'aircraftData.missing.envelope': 'enveloppe de centrage',
+  'aircraftData.missing.fuelArm': 'bras des réservoirs',
   'navplan.notice.disclaimer':
     'Aide à la préparation du vol. Ne remplace ni les publications aéronautiques officielles (AIP, SUP AIP, NOTAM, cartes VAC), ni le manuel de vol de l’avion, ni le jugement du commandant de bord.',
   'navplan.notice.notamCheck':

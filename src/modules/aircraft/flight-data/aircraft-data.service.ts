@@ -6,6 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { localized } from '../../../common/i18n/localized-exception';
+import { TranslationKey } from '../../../common/i18n/fr';
+import { translatedList } from '../../../common/i18n/translate';
 import { SessionUser } from '../../../common/auth/access';
 import { Aircraft } from '../entity/aircraft.entity';
 import {
@@ -93,13 +95,14 @@ const positive = (value: unknown) =>
 export function aircraftDataGaps(
   performance: AircraftPerformanceEntity | null,
   massBalance: AircraftMassBalanceEntity | null,
-): string[] {
-  const missing: string[] = [];
-  if (!performanceUsable(performance)) missing.push('performance');
+): TranslationKey[] {
+  const missing: TranslationKey[] = [];
+  if (!performanceUsable(performance))
+    missing.push('aircraftData.missing.performance');
   if (performance) {
     const tanks = performance.fuel?.tanks ?? [];
     if (tanks.length === 0 || tanks.some((t) => !positive(t.usableL)))
-      missing.push('fuel tanks');
+      missing.push('aircraftData.missing.tanks');
     const climb =
       performance.climb ?? ({} as AircraftPerformanceEntity['climb']);
     const climbTable = (climb.table ?? []).length >= 2;
@@ -112,34 +115,35 @@ export function aircraftDataGaps(
           positive(performance.service_ceiling_ft)
         ))
     )
-      missing.push('climb');
+      missing.push('aircraftData.missing.climb');
     const descent = performance.descent;
     if (
       !positive(descent?.iasKt) ||
       !positive(descent?.rateFpm) ||
       !positive(descent?.fuelFlowLph)
     )
-      missing.push('descent');
+      missing.push('aircraftData.missing.descent');
     if (
       !positive(performance.reserve?.holdingFuelFlowLph) ||
       !positive(performance.reserve?.maxContinuousFuelFlowLph)
     )
-      missing.push('reserve fuel flows');
+      missing.push('aircraftData.missing.reserve');
   }
-  if (!massBalance) missing.push('mass & balance');
+  if (!massBalance) missing.push('aircraftData.missing.massBalance');
   else {
     if (massBalance.empty_mass_kg == null || massBalance.empty_arm_m == null)
-      missing.push('weighing (empty mass and arm)');
-    if (!massBalance.weighing_date) missing.push('weighing date');
-    if (massBalance.mtow_kg == null) missing.push('MTOW');
-    if (massBalance.mlw_kg == null) missing.push('MLW');
+      missing.push('aircraftData.missing.weighing');
+    if (!massBalance.weighing_date)
+      missing.push('aircraftData.missing.weighingDate');
+    if (massBalance.mtow_kg == null) missing.push('aircraftData.missing.mtow');
+    if (massBalance.mlw_kg == null) missing.push('aircraftData.missing.mlw');
     const stations = massBalance.stations ?? [];
-    if (!stations.some((st) => st.kind === 'SEAT')) missing.push('seats');
+    if (!stations.some((st) => st.kind === 'SEAT'))
+      missing.push('aircraftData.missing.seats');
     if (!(massBalance.envelopes ?? []).some((e) => e.points?.length >= 3))
-      missing.push('envelope');
-    for (const tank of performance?.fuel?.tanks ?? []) {
-      if (!Number.isFinite(tank.armM)) missing.push(`fuel arm (${tank.label})`);
-    }
+      missing.push('aircraftData.missing.envelope');
+    if ((performance?.fuel?.tanks ?? []).some((t) => !Number.isFinite(t.armM)))
+      missing.push('aircraftData.missing.fuelArm');
   }
   return missing;
 }
@@ -527,7 +531,7 @@ export class AircraftDataService {
     const missing = aircraftDataGaps(performance, massBalance);
     if (missing.length > 0) {
       throw localized(BadRequestException, 'error.aircraftData.incomplete', {
-        missing: missing.join(', '),
+        missing: translatedList(missing),
       });
     }
     const now = new Date();

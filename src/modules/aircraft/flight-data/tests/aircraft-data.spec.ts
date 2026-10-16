@@ -1,4 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
+import { translationOf } from '../../../../common/i18n/localized-exception';
+import { renderTranslation } from '../../../../common/i18n/translate';
 import {
   AIRCRAFT_TEMPLATES,
   templateForModel,
@@ -251,15 +253,37 @@ describe('aircraft data rules', () => {
     expect(massBalance.rows[0].validated_at).toBeInstanceOf(Date);
   });
 
-  it('refuses to confirm a template whose unsourced figures were not entered', async () => {
+  it('refuses to confirm a template whose unsourced figures were not entered, saying what in French', async () => {
+    const NO_PERFORMANCE = [
+      'table de croisière',
+      'réservoirs (capacité utilisable)',
+      'montée',
+      'descente',
+      'débits d’attente',
+    ];
+    const NOTHING = [
+      ...NO_PERFORMANCE,
+      'masse maximale au décollage',
+      'masse maximale à l’atterrissage',
+      'stations des sièges',
+      'enveloppe de centrage',
+    ];
     for (const [code, gaps] of [
-      ['DR400-180', ['climb', 'descent', 'reserve fuel flows']],
       [
-        'DR400-140B',
-        ['performance', 'fuel tanks', 'climb', 'descent', 'reserve fuel flows'],
+        'DR400-180',
+        [
+          'montée (vitesse, taux, débit et plafond, ou table)',
+          'descente (vitesse, taux et débit)',
+          'débits d’attente et à la puissance maximale continue',
+        ],
       ],
-      ['TB10', ['performance', 'MTOW', 'MLW', 'seats', 'envelope']],
-      ['P2008JC', ['performance', 'MTOW', 'MLW', 'seats', 'envelope']],
+      ['DR400-140B', NO_PERFORMANCE],
+      // Stations given as ranges in the TCDS: entered by the administrator.
+      ['C172S', ['table de croisière', 'montée', 'stations des sièges']],
+      ['PA28-161', NOTHING],
+      ['DA40', NOTHING],
+      ['TB10', NOTHING],
+      ['P2008JC', NOTHING],
     ] as const) {
       const { service: s, massBalance } = service();
       await s.applyTemplate(1, code);
@@ -272,7 +296,17 @@ describe('aircraft data rules', () => {
         .validate(1, { id: 9, email: 'a' })
         .catch((error) => error);
       expect(refusal).toBeInstanceOf(BadRequestException);
+      expect(refusal.message).toMatch(
+        /^Données de l'avion incomplètes, confirmation impossible : /,
+      );
       for (const gap of gaps) expect(refusal.message).toContain(gap);
+      // The list is written in the language of the message.
+      const translation = translationOf(refusal);
+      expect(
+        renderTranslation('en', translation.key, translation.params),
+      ).toMatch(
+        /^Aircraft data incomplete, cannot be confirmed: .*(cruise table|climb \()/,
+      );
     }
   });
 

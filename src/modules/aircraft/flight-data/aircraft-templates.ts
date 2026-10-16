@@ -17,8 +17,7 @@ import {
 // A template is never more permissive than the documents: a figure that was
 // not read in a flight manual or a type certificate data sheet (cited with
 // its page) is left empty, and the data cannot be confirmed until an
-// administrator enters it. The C172S, PA28-161 and DA40 templates still
-// carry figures marked "non sourcé" (not reviewed yet).
+// administrator enters it.
 
 export const TEMPLATE_WARNING =
   'Modèle à vérifier avec le manuel de vol et la fiche de pesée de VOTRE avion — valeurs indicatives / Template: check against YOUR aircraft flight manual and weighing report';
@@ -39,26 +38,6 @@ export interface AircraftTemplate {
     'emptyMassKg' | 'emptyArmM' | 'weighingDate' | 'weighingRef'
   >;
 }
-
-// ISA cruise table from 0 to `maxFt` every 2000 ft.
-const cruiseRows = (
-  settings: {
-    name: string;
-    tasAt0: number;
-    tasPer1000: number;
-    flowLph: number;
-  }[],
-  maxFt: number,
-): CruiseRow[] =>
-  settings.flatMap((s) =>
-    Array.from({ length: Math.floor(maxFt / 2000) + 1 }, (_, i) => ({
-      pressureAltFt: i * 2000,
-      setting: s.name,
-      isaDeviationC: 0,
-      tasKt: r(s.tasAt0 + (s.tasPer1000 * i * 2000) / 1000, 1),
-      fuelFlowLph: s.flowLph,
-    })),
-  );
 
 const envelope = (
   category: Envelope['category'],
@@ -292,6 +271,66 @@ const DR400_180: AircraftTemplate = {
   },
 };
 
+// Cessna 172S: EASA TCDS IM.A.051 issue 11 (17 November 2025), section 2
+// (Model 172S): fuel p. 19, masses p. 19, centre of gravity range, datum,
+// seats and baggage p. 20 (datum: TCDS item 14, the leading edge of the MAC
+// being 25.9 in aft of it). The seats and the baggage areas
+// are given as ranges of arms (front seats 34 to 46 in, baggage 82 to 108
+// and 108 to 142 in), so no loading station is set: the administrator
+// enters them from the aircraft's own manual. No performance figure was
+// read in a manual.
+const C172S_TANK: FuelTank = {
+  id: 'main',
+  label: 'Réservoirs ailes / Wing tanks',
+  usableL: r(53 * USG, 1),
+  unusableL: r(3 * USG, 1),
+  armM: r(48 * IN),
+};
+const C172S: AircraftTemplate = {
+  code: 'C172S',
+  label: 'Cessna 172S Skyhawk SP',
+  source: `${TEMPLATE_WARNING}. EASA TCDS IM.A.051 issue 11, section 2 (172S) : réservoirs 56 US gal dont 53 utilisables à 48,0 in, masse maximale au décollage et à l'atterrissage 2550 lb (utilitaire 2200 lb) p. 19 ; centrage p. 20 : limite arrière 47,3 in, limite avant 35,0 in jusqu'à 1950 lb puis 41,0 in à 2550 lb (utilitaire : 37,5 in à 2200 lb, arrière 40,5 in) ; datum : TCDS § 14 (bord d'attaque de la corde aérodynamique moyenne à 25,9 in en arrière). Stations à saisir depuis le manuel (le TCDS ne donne que des plages) : sièges avant 34 à 46 in, sièges arrière 73 in, bagages 82 à 108 in (120 lb) et 108 à 142 in (50 lb), 120 lb au total. Performances non sourcées : à saisir depuis le manuel de vol de l'avion.`,
+  performance: {
+    fuel: {
+      type: 'AVGAS_100LL',
+      densityKgPerL: 0.72,
+      tanks: [C172S_TANK],
+      taxiFuelL: TAXI_FUEL_L,
+      burnOrder: [],
+    },
+    climb: EMPTY_CLIMB,
+    cruise: { normalSetting: '', rows: [] },
+    descent: EMPTY_DESCENT,
+    reserve: EMPTY_RESERVE,
+    arrivalFuelL: 0,
+    serviceCeilingFt: null,
+    calibration: [],
+  },
+  massBalance: {
+    mtowKg: r(2550 * LB, 1),
+    mlwKg: r(2550 * LB, 1),
+    mzfwKg: null,
+    stations: fuelStations([C172S_TANK]),
+    combinedLimits: [],
+    envelopes: [
+      envelope('NORMAL', [
+        [35 * IN, 1500 * LB],
+        [35 * IN, 1950 * LB],
+        [41 * IN, 2550 * LB],
+        [47.3 * IN, 2550 * LB],
+        [47.3 * IN, 1500 * LB],
+      ]),
+      envelope('UTILITY', [
+        [35 * IN, 1500 * LB],
+        [35 * IN, 1950 * LB],
+        [37.5 * IN, 2200 * LB],
+        [40.5 * IN, 2200 * LB],
+        [40.5 * IN, 1500 * LB],
+      ]),
+    ],
+  },
+};
+
 const emptyTemplate = (options: {
   code: string;
   label: string;
@@ -360,282 +399,23 @@ export const AIRCRAFT_TEMPLATES: AircraftTemplate[] = [
     source: `EASA TCDS EASA.A.367 issue 05, section Y : réservoirs p. 103, masses et centrage p. 104, sièges et bagages (40 kg) p. 105 ; bras des réservoirs : manuel DR 400/180 p. 4.1 (cellule identique, TCDS section Z note 1). ${ROBIN_DATUM_NOTE}. ${ROBIN_MAIN_CAPACITY} + 2 réservoirs avant de 40 L ; réservoir supplémentaire optionnel 50 L non inclus. Performances (croisière, montée, descente, débits) non sourcées : à saisir depuis le manuel de vol de l'avion.`,
   }),
   DR400_180,
-  {
-    code: 'C172S',
-    label: 'Cessna 172S Skyhawk SP',
-    source: `${TEMPLATE_WARNING}. Datum : face avant de la cloison pare-feu ; MTOW 2550 lb, centrage 35.0-47.3 in (41.0 in à 2550 lb) : FAA TCDS 3A12 ; bras des stations et débits : valeurs usuelles du manuel, à vérifier.`,
-    performance: {
-      fuel: {
-        type: 'AVGAS_100LL',
-        densityKgPerL: 0.72,
-        tanks: [
-          {
-            id: 'main',
-            label: 'Réservoirs ailes / Wing tanks',
-            usableL: r(53 * USG, 1),
-            unusableL: r(3 * USG, 1),
-            armM: r(48 * IN),
-          },
-        ],
-        taxiFuelL: 4,
-        burnOrder: [],
-      },
-      climb: {
-        iasKt: 74,
-        table: null,
-        seaLevelRateFpm: 730,
-        ceilingRateFpm: 100,
-        fuelFlowLph: 42,
-      },
-      cruise: {
-        normalSetting: '2400 rpm',
-        rows: cruiseRows(
-          [
-            { name: '2400 rpm', tasAt0: 112, tasPer1000: 1.7, flowLph: 32 },
-            { name: '2200 rpm', tasAt0: 104, tasPer1000: 1.5, flowLph: 27 },
-          ],
-          10000,
-        ),
-      },
-      descent: { iasKt: 90, rateFpm: 500, fuelFlowLph: 20 },
-      reserve: { holdingFuelFlowLph: 24, maxContinuousFuelFlowLph: 36 },
-      arrivalFuelL: 0,
-      serviceCeilingFt: 14000,
-      calibration: [],
-    },
-    massBalance: {
-      mtowKg: r(2550 * LB, 1),
-      mlwKg: r(2550 * LB, 1),
-      mzfwKg: null,
-      stations: [
-        {
-          id: 'front',
-          label: 'Sièges avant / Front seats',
-          kind: 'SEAT',
-          armM: r(37 * IN),
-        },
-        {
-          id: 'rear',
-          label: 'Sièges arrière / Rear seats',
-          kind: 'SEAT',
-          armM: r(73 * IN),
-        },
-        {
-          id: 'baggageA',
-          label: 'Bagages zone A / Baggage A',
-          kind: 'BAGGAGE',
-          armM: r(95 * IN),
-          maxKg: r(120 * LB, 1),
-        },
-        {
-          id: 'baggageB',
-          label: 'Bagages zone B / Baggage B',
-          kind: 'BAGGAGE',
-          armM: r(123 * IN),
-          maxKg: r(50 * LB, 1),
-        },
-        {
-          id: 'fuel-main',
-          label: 'Carburant / Fuel',
-          kind: 'FUEL',
-          armM: r(48 * IN),
-          tankId: 'main',
-        },
-      ],
-      combinedLimits: [
-        {
-          stationIds: ['baggageA', 'baggageB'],
-          maxKg: r(120 * LB, 1),
-          label: 'Bagages A + B / Baggage A + B',
-        },
-      ],
-      envelopes: [
-        envelope('NORMAL', [
-          [35 * IN, 1500 * LB],
-          [35 * IN, 1950 * LB],
-          [41 * IN, 2550 * LB],
-          [47.3 * IN, 2550 * LB],
-          [47.3 * IN, 1500 * LB],
-        ]),
-      ],
-    },
-  },
-  {
+  C172S,
+  // No type certificate data sheet or flight manual could be read for these
+  // types: the template only names the type and its fuel.
+  emptyTemplate({
     code: 'PA28-161',
     label: 'Piper PA-28-161 Warrior',
-    source: `${TEMPLATE_WARNING}. Datum : 78.4 in en avant du bord d'attaque ; MTOW 2440 lb : FAA TCDS 2A13 ; limites de centrage, bras et débits : non sourcés, à relever dans le manuel.`,
-    performance: {
-      fuel: {
-        type: 'AVGAS_100LL',
-        densityKgPerL: 0.72,
-        tanks: [
-          {
-            id: 'main',
-            label: 'Réservoirs ailes / Wing tanks',
-            usableL: r(48 * USG, 1),
-            unusableL: r(2 * USG, 1),
-            armM: r(95 * IN),
-          },
-        ],
-        taxiFuelL: 4,
-        burnOrder: [],
-      },
-      climb: {
-        iasKt: 79,
-        table: null,
-        seaLevelRateFpm: 640,
-        ceilingRateFpm: 100,
-        fuelFlowLph: 40,
-      },
-      cruise: {
-        normalSetting: '75%',
-        rows: cruiseRows(
-          [
-            { name: '75%', tasAt0: 110, tasPer1000: 1.6, flowLph: 32 },
-            { name: '65%', tasAt0: 103, tasPer1000: 1.5, flowLph: 28 },
-          ],
-          10000,
-        ),
-      },
-      descent: { iasKt: 95, rateFpm: 500, fuelFlowLph: 20 },
-      reserve: { holdingFuelFlowLph: 23, maxContinuousFuelFlowLph: 36 },
-      arrivalFuelL: 0,
-      serviceCeilingFt: 11000,
-      calibration: [],
-    },
-    massBalance: {
-      mtowKg: r(2440 * LB, 1),
-      mlwKg: r(2440 * LB, 1),
-      mzfwKg: null,
-      stations: [
-        {
-          id: 'front',
-          label: 'Sièges avant / Front seats',
-          kind: 'SEAT',
-          armM: r(80.5 * IN),
-        },
-        {
-          id: 'rear',
-          label: 'Sièges arrière / Rear seats',
-          kind: 'SEAT',
-          armM: r(118.1 * IN),
-        },
-        {
-          id: 'baggage',
-          label: 'Bagages / Baggage',
-          kind: 'BAGGAGE',
-          armM: r(142.8 * IN),
-          maxKg: r(200 * LB, 1),
-        },
-        {
-          id: 'fuel-main',
-          label: 'Carburant / Fuel',
-          kind: 'FUEL',
-          armM: r(95 * IN),
-          tankId: 'main',
-        },
-      ],
-      combinedLimits: [],
-      envelopes: [
-        envelope('NORMAL', [
-          [83 * IN, 1200 * LB],
-          [83 * IN, 1950 * LB],
-          [87 * IN, 2440 * LB],
-          [93 * IN, 2440 * LB],
-          [93 * IN, 1200 * LB],
-        ]),
-      ],
-    },
-  },
-  {
+    fuel: 'AVGAS_100LL',
+    source:
+      "Aucune donnée sourcée : masses, enveloppe de centrage, stations de chargement, réservoirs et performances sont à saisir depuis le manuel de vol et la fiche de pesée de l'avion.",
+  }),
+  emptyTemplate({
     code: 'DA40',
     label: 'Diamond DA40 (AVGAS)',
-    source: `${TEMPLATE_WARNING}. MTOW 1150 kg et limites de centrage : EASA TCDS A.022 (DA40), selon variante ; bras et débits non sourcés.`,
-    performance: {
-      fuel: {
-        type: 'AVGAS_100LL',
-        densityKgPerL: 0.72,
-        tanks: [
-          {
-            id: 'main',
-            label: 'Réservoirs ailes / Wing tanks',
-            usableL: r(40 * USG, 1),
-            unusableL: r(1 * USG, 1),
-            armM: 2.63,
-          },
-        ],
-        taxiFuelL: 4,
-        burnOrder: [],
-      },
-      climb: {
-        iasKt: 66,
-        table: null,
-        seaLevelRateFpm: 1000,
-        ceilingRateFpm: 100,
-        fuelFlowLph: 50,
-      },
-      cruise: {
-        normalSetting: '75%',
-        rows: cruiseRows(
-          [
-            { name: '75%', tasAt0: 128, tasPer1000: 1.8, flowLph: 37 },
-            { name: '60%', tasAt0: 117, tasPer1000: 1.6, flowLph: 30 },
-          ],
-          10000,
-        ),
-      },
-      descent: { iasKt: 110, rateFpm: 500, fuelFlowLph: 22 },
-      reserve: { holdingFuelFlowLph: 26, maxContinuousFuelFlowLph: 45 },
-      arrivalFuelL: 0,
-      serviceCeilingFt: 16000,
-      calibration: [],
-    },
-    massBalance: {
-      mtowKg: 1150,
-      mlwKg: 1150,
-      mzfwKg: null,
-      stations: [
-        {
-          id: 'front',
-          label: 'Sièges avant / Front seats',
-          kind: 'SEAT',
-          armM: 2.3,
-        },
-        {
-          id: 'rear',
-          label: 'Sièges arrière / Rear seats',
-          kind: 'SEAT',
-          armM: 3.25,
-        },
-        {
-          id: 'baggage',
-          label: 'Bagages / Baggage',
-          kind: 'BAGGAGE',
-          armM: 3.65,
-          maxKg: 30,
-        },
-        {
-          id: 'fuel-main',
-          label: 'Carburant / Fuel',
-          kind: 'FUEL',
-          armM: 2.63,
-          tankId: 'main',
-        },
-      ],
-      combinedLimits: [],
-      envelopes: [
-        envelope('NORMAL', [
-          [2.4, 780],
-          [2.4, 980],
-          [2.46, 1150],
-          [2.59, 1150],
-          [2.59, 780],
-        ]),
-      ],
-    },
-  },
-  // No document read for these two types: the template only names the type
-  // and its fuel; every figure is entered from the aircraft's own manual.
+    fuel: 'AVGAS_100LL',
+    source:
+      "Aucune donnée sourcée : masses, enveloppe de centrage, stations de chargement, réservoirs et performances sont à saisir depuis le manuel de vol et la fiche de pesée de l'avion.",
+  }),
   emptyTemplate({
     code: 'TB10',
     label: 'Socata TB10 Tobago',
