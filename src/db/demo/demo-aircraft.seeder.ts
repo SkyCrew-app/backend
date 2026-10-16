@@ -1,5 +1,13 @@
 import { DataSource } from 'typeorm';
-import { Aircraft, AvailabilityStatus } from '../../modules/aircraft/entity/aircraft.entity';
+import {
+  Aircraft,
+  AvailabilityStatus,
+} from '../../modules/aircraft/entity/aircraft.entity';
+import {
+  AircraftMassBalanceEntity,
+  AircraftPerformanceEntity,
+} from '../../modules/aircraft/entity/aircraft-flight-data.entity';
+import { templateForModel } from '../../modules/aircraft/flight-data/aircraft-templates';
 
 export const seedDemoAircraft = async (
   dataSource: DataSource,
@@ -18,7 +26,7 @@ export const seedDemoAircraft = async (
       fuel_type: '100LL',
       empty_weight: 767,
       max_takeoff_weight: 1111,
-      hourly_cost: 165.00,
+      hourly_cost: 165.0,
       total_flight_hours: 1245,
       availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'OK',
@@ -35,7 +43,7 @@ export const seedDemoAircraft = async (
       fuel_type: '100LL',
       empty_weight: 635,
       max_takeoff_weight: 1055,
-      hourly_cost: 155.00,
+      hourly_cost: 155.0,
       total_flight_hours: 2340,
       availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'OK',
@@ -52,7 +60,7 @@ export const seedDemoAircraft = async (
       fuel_type: '100LL',
       empty_weight: 580,
       max_takeoff_weight: 1000,
-      hourly_cost: 145.00,
+      hourly_cost: 145.0,
       total_flight_hours: 3800,
       availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'OK',
@@ -69,7 +77,7 @@ export const seedDemoAircraft = async (
       fuel_type: 'JET-A1',
       empty_weight: 865,
       max_takeoff_weight: 1280,
-      hourly_cost: 210.00,
+      hourly_cost: 210.0,
       total_flight_hours: 620,
       availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'OK',
@@ -86,7 +94,7 @@ export const seedDemoAircraft = async (
       fuel_type: '100LL',
       empty_weight: 1009,
       max_takeoff_weight: 1542,
-      hourly_cost: 280.00,
+      hourly_cost: 280.0,
       total_flight_hours: 890,
       availability_status: AvailabilityStatus.AVAILABLE,
       maintenance_status: 'OK',
@@ -103,7 +111,7 @@ export const seedDemoAircraft = async (
       fuel_type: '100LL',
       empty_weight: 375,
       max_takeoff_weight: 600,
-      hourly_cost: 120.00,
+      hourly_cost: 120.0,
       total_flight_hours: 310,
       availability_status: AvailabilityStatus.UNAVAILABLE,
       maintenance_status: 'Visite 100h en cours',
@@ -122,11 +130,50 @@ export const seedDemoAircraft = async (
       const aircraft = aircraftRepository.create(data);
       const saved = await aircraftRepository.save(aircraft);
       savedAircraft.push(saved);
-      console.log(`Demo aircraft "${data.registration_number} (${data.model})" created`);
+      console.log(
+        `Demo aircraft "${data.registration_number} (${data.model})" created`,
+      );
     } else {
       savedAircraft.push(existing);
       console.log(`Demo aircraft "${data.registration_number}" already exists`);
     }
+  }
+
+  // Flight manual data from the type templates, left unconfirmed: the demo
+  // shows what an administrator has to check before a plan is usable.
+  for (const aircraft of savedAircraft) {
+    const template = templateForModel(aircraft.model);
+    if (!template) continue;
+    await dataSource.getRepository(AircraftPerformanceEntity).save({
+      aircraft_id: aircraft.id,
+      template_code: template.code,
+      fuel: template.performance.fuel,
+      climb: template.performance.climb,
+      cruise: template.performance.cruise,
+      descent: template.performance.descent,
+      reserve: template.performance.reserve,
+      arrival_fuel_l: template.performance.arrivalFuelL,
+      calibration: template.performance.calibration,
+      service_ceiling_ft: template.performance.serviceCeilingFt,
+      source: template.source,
+      validated_by_id: null,
+      validated_at: null,
+    });
+    await dataSource.getRepository(AircraftMassBalanceEntity).save({
+      aircraft_id: aircraft.id,
+      empty_mass_kg: aircraft.empty_weight ?? null,
+      empty_arm_m: null,
+      weighing_date: null,
+      weighing_ref: null,
+      mtow_kg: template.massBalance.mtowKg,
+      mlw_kg: template.massBalance.mlwKg,
+      mzfw_kg: null,
+      stations: template.massBalance.stations,
+      combined_limits: template.massBalance.combinedLimits,
+      envelopes: template.massBalance.envelopes,
+      validated_by_id: null,
+      validated_at: null,
+    });
   }
 
   console.log('Demo aircraft seeding completed');

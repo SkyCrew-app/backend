@@ -13,6 +13,7 @@ const ALLOWED_MUTATIONS = [
   'generatePdfFinancialReport',
   'generateCsvFinancialReport',
   'exportLogbookPDF',
+  'exportFlightPlanPdf',
 ];
 
 @Injectable()
@@ -20,8 +21,7 @@ export class DemoModeGuard implements CanActivate {
   constructor(private readonly configService: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const isDemoMode =
-      this.configService.get<string>('DEMO_MODE') === 'true';
+    const isDemoMode = this.configService.get<string>('DEMO_MODE') === 'true';
 
     if (!isDemoMode) {
       return true;

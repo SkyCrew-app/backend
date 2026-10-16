@@ -116,6 +116,13 @@ export class Flight {
   @Column({ nullable: true })
   remarks?: string;
 
+  // The engine that computed the flight plan: "legacy" for the plans made
+  // before the flight preparation (shown as "ancien calcul"), "navplan-1"
+  // for the new one, empty for a flight without plan.
+  @Field(() => String, { nullable: true })
+  @Column({ type: 'character varying', length: 32, nullable: true })
+  plan_engine?: string | null;
+
   // Set when the pilot closes the flight; empty while it is still open.
   @Field({ nullable: true })
   @Column({ type: 'timestamptz', nullable: true })

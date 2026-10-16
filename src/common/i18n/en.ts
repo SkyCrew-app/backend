@@ -341,4 +341,176 @@ export const en: Record<TranslationKey, string> = {
   'invoice.method.cash': 'cash',
   'invoice.method.cheque': 'cheque',
   'invoice.method.transfer': 'bank transfer',
+  // Flight preparation (navigation data, aircraft data, plans).
+  'error.navdata.zoomIn':
+    'Too many points to show (more than {{max}}): zoom in on the map',
+  'error.navdata.aerodromeNotFound': 'Aerodrome {{icao}} not found',
+  'error.navplan.pointNotFound':
+    'A point of the route no longer exists in the data in force',
+  'error.navplan.aerodromeRequired':
+    'Departure, destination and alternate must be aerodromes',
+  'error.navplan.legsCount':
+    'There must be one leg more than waypoints ({{expected}} expected)',
+  'error.navplan.notOwnPlan':
+    'You can only read or change your own flight plans',
+  'error.navplan.planNotFound': 'This flight plan does not exist',
+  'error.navplan.aircraftNotBooked':
+    'The aircraft of the plan must be the booked one',
+  'error.navplan.reservationChange':
+    'The booking of a saved plan cannot be changed',
+  'error.navplan.reserveBelowAmc':
+    'The {{label}} final reserve cannot be below {{minimum}} min (AMC1 NCO.OP.125(b))',
+  'error.aircraftData.aircraftNotFound': 'This aircraft does not exist',
+  'error.aircraftData.unknownTemplate': 'Unknown template: {{code}}',
+  'error.aircraftData.invalidPerformance':
+    'Invalid performance data: {{detail}}',
+  'error.aircraftData.invalidMassBalance':
+    'Invalid mass and balance data: {{detail}}',
+  'error.aircraftData.incomplete':
+    'Aircraft data incomplete, cannot be confirmed: {{missing}}',
+  'navplan.notice.disclaimer':
+    'Flight preparation aid. It replaces neither the official aeronautical publications (AIP, AIP SUP, NOTAM, VAC charts), nor the aircraft flight manual, nor the judgement of the pilot in command.',
+  'navplan.notice.notamCheck':
+    'NOTAM and AIP SUP not included: check SOFIA Briefing (https://sofia-briefing.aviation-civile.gouv.fr) and the day’s AZBA activity before departure.',
+  'navplan.notice.navdataStale':
+    'Aeronautical data of cycle {{airac}} ({{date}}) OUT OF DATE — check the publications in force',
+  'navplan.notice.noAirspaceData':
+    'No airspace data imported: the airspaces crossed are not checked',
+  'navplan.notice.qnhDefaulted':
+    'QNH unknown: computed on 1013.25 hPa, flight levels and pressure altitudes are approximate',
+  'navplan.notice.perfNotValidated':
+    'Performance not confirmed by an administrator: template to check against the aircraft flight manual',
+  'navplan.notice.perfMissing':
+    'No flight manual data for this aircraft: times and fuel estimated from the fleet sheet, not usable for a flight',
+  'navplan.notice.cruiseTemperatureIgnored':
+    'Leg {{leg}}: ISA deviation {{deviation}} °C not taken into account (single temperature column in the cruise table)',
+  'navplan.notice.windExceedsTas':
+    'Leg {{leg}}: wind stronger than the aircraft speed, leg impossible',
+  'navplan.notice.performanceOutOfTable':
+    'Outside the flight manual tables: {{detail}}',
+  'navplan.notice.performanceIncomplete':
+    'Incomplete performance data: {{detail}}',
+  'navplan.notice.wmmExpired':
+    'Magnetic model expired (WMM2025 valid until 31/12/2029): magnetic tracks and headings not computed',
+  'navplan.notice.windUnavailable':
+    'No winds aloft forecast for part of the route: calm wind assumed, enter the forecast wind (WINTEM)',
+  'navplan.notice.windPilot': 'Wind entered by the pilot on at least one leg',
+  'navplan.fuel.alternateRequired':
+    'The club requires an alternate in VFR: add an alternate aerodrome',
+  'navplan.fuel.aboveUsable': '{{loaded}} L loaded > {{usable}} L usable',
+  'navplan.fuel.insufficient':
+    'Not enough fuel: {{missing}} L missing (minimum block fuel {{minimum}} L)',
+  'navplan.fuel.landingBelowReserve':
+    'Planned fuel at landing {{landing}} L < final reserve {{reserve}} L',
+  'navplan.fuel.unknownTank': 'Unknown tank: {{tank}}',
+  'navplan.fuel.tankAboveUsable':
+    '{{tank}}: {{loaded}} L > {{usable}} L usable',
+  'navplan.fuel.negative': '{{tank}}: negative quantity',
+  'navplan.fuel.notComputed': 'Fuel not computed (see the warnings)',
+  'navplan.mb.notValidated':
+    'Mass and balance refused: the data of this aircraft (weighing, stations, envelope) is not confirmed by an administrator',
+  'navplan.mb.noEnvelope': 'No {{category}} CG envelope for this aircraft',
+  'navplan.mb.noWeighing': 'Aircraft weighing missing (empty mass and arm)',
+  'navplan.mb.unknownStation': 'Unknown loading station: {{station}}',
+  'navplan.mb.negativeMass': '{{station}}: negative mass',
+  'navplan.mb.stationLimit': '{{station}}: {{mass}} kg > {{max}} kg',
+  'navplan.mb.aboveMtow': 'Take-off mass {{mass}} kg > maximum {{max}} kg',
+  'navplan.mb.aboveMlw':
+    'Landing mass {{mass}} kg > maximum landing mass {{max}} kg',
+  'navplan.mb.aboveMzfw': 'Zero fuel mass {{mass}} kg > maximum {{max}} kg',
+  'navplan.mb.cgAft':
+    'CG aft of the limits at {{moment}}: {{cg}} m > {{limit}} m ({{mass}} kg)',
+  'navplan.mb.cgForward':
+    'CG forward of the limits at {{moment}}: {{cg}} m < {{limit}} m ({{mass}} kg)',
+  'navplan.mb.outOfEnvelope':
+    'Outside the envelope at {{moment}}: {{mass}} kg, CG {{cg}} m',
+  'navplan.mb.pathLeavesEnvelope':
+    'The CG leaves the envelope between take-off and landing',
+  'navplan.mb.moment.takeoff': 'take-off',
+  'navplan.mb.moment.landing': 'landing',
+  'navplan.airspace.prohibited': 'Prohibited area: entry prohibited.',
+  'navplan.airspace.restricted':
+    'Restricted area: entry subject to conditions. Activity: {{activity}} — check the NOTAM, the AIP SUP and, for the RTBA, the day’s AZBA activity.',
+  'navplan.airspace.danger':
+    'Danger area: activity {{activity}} — check the NOTAM / AIP SUP.',
+  'navplan.airspace.rmz': 'Radio contact mandatory {{radio}}.',
+  'navplan.airspace.rmzNoRadio':
+    'Radio contact mandatory (frequency: see the current chart).',
+  'navplan.airspace.sivNoRadio':
+    'Flight information service (frequency: see the current chart).',
+  'navplan.airspace.clearanceNoRadio':
+    'Clearance required — call the unit (frequency: see the current chart).',
+  'navplan.airspace.tmz': 'Transponder mandatory (mode S).',
+  'navplan.airspace.siv': 'Flight information service: {{radio}}.',
+  'navplan.airspace.protected':
+    'Overflight at the published minimum height ({{limit}}) — check.',
+  'navplan.airspace.classA': 'Class A: VFR prohibited.',
+  'navplan.airspace.clearance': 'Clearance required — call {{radio}}.',
+  'navplan.airspace.classE':
+    'No clearance in VFR; radio and transponder as RMZ/TMZ require.',
+  'navplan.airspace.other': 'Airspace to check on the current chart.',
+  'navplan.airspace.checkHeight':
+    'Limit given as a height above ground: check on the chart. Unknown activity ≠ inactive area.',
+  'navplan.pdf.title': 'Flight file',
+  'navplan.pdf.navLog': 'Navigation log',
+  'navplan.pdf.aircraft': 'Aircraft',
+  'navplan.pdf.pilot': 'Pilot',
+  'navplan.pdf.date': 'Date (UTC)',
+  'navplan.pdf.route': 'Route',
+  'navplan.pdf.qnh': 'QNH',
+  'navplan.pdf.navdata': 'Aeronautical data',
+  'navplan.pdf.winds': 'Winds',
+  'navplan.pdf.status': 'Status',
+  'navplan.pdf.blocking': 'OUT OF LIMITS — DO NOT DEPART',
+  'navplan.pdf.warning': 'Items to check before departure',
+  'navplan.pdf.ok': 'No blocking item found',
+  'navplan.pdf.col.point': 'Point',
+  'navplan.pdf.col.alt': 'Alt ft',
+  'navplan.pdf.col.tc': 'TC',
+  'navplan.pdf.col.mc': 'MC',
+  'navplan.pdf.col.wind': 'Wind',
+  'navplan.pdf.col.wca': 'WCA',
+  'navplan.pdf.col.mh': 'MH',
+  'navplan.pdf.col.tas': 'TAS',
+  'navplan.pdf.col.gs': 'GS',
+  'navplan.pdf.col.dist': 'Dist',
+  'navplan.pdf.col.cumDist': 'Total',
+  'navplan.pdf.col.time': 'Time',
+  'navplan.pdf.col.cumTime': 'Total',
+  'navplan.pdf.col.eta': 'ETA',
+  'navplan.pdf.col.ata': 'ATA',
+  'navplan.pdf.col.fuel': 'Fuel L',
+  'navplan.pdf.col.fuelActual': 'Actual',
+  'navplan.pdf.col.radio': 'Frequencies / airspaces',
+  'navplan.pdf.fuel': 'Fuel plan',
+  'navplan.pdf.fuel.taxi': 'Taxi',
+  'navplan.pdf.fuel.trip': 'Trip',
+  'navplan.pdf.fuel.contingency': 'Contingency',
+  'navplan.pdf.fuel.alternate': 'Alternate',
+  'navplan.pdf.fuel.reserve': 'Final reserve ({{minutes}} min)',
+  'navplan.pdf.fuel.margin': 'Club margin',
+  'navplan.pdf.fuel.minimum': 'Minimum block fuel',
+  'navplan.pdf.fuel.loaded': 'Loaded',
+  'navplan.pdf.fuel.extra': 'Extra',
+  'navplan.pdf.fuel.landing': 'Planned at landing',
+  'navplan.pdf.fuel.endurance': 'Endurance',
+  'navplan.pdf.mb': 'Mass and balance',
+  'navplan.pdf.mb.station': 'Station',
+  'navplan.pdf.mb.mass': 'Mass kg',
+  'navplan.pdf.mb.arm': 'Arm m',
+  'navplan.pdf.mb.moment': 'Moment kg·m',
+  'navplan.pdf.mb.takeoff': 'Take-off',
+  'navplan.pdf.mb.landing': 'Landing',
+  'navplan.pdf.mb.empty': 'Empty aircraft',
+  'navplan.pdf.mb.notice':
+    'Computed from the data entered by the club (weighing of {{date}}). The pilot in command checks it against the flight manual.',
+  'navplan.pdf.airspaces': 'Airspaces crossed',
+  'navplan.pdf.airspaces.none': 'No airspace crossed in the data in force',
+  'navplan.pdf.weather': 'Weather (raw METAR / TAF, aviationweather.gov)',
+  'navplan.pdf.notices': 'Warnings',
+  'navplan.pdf.links':
+    'NOTAM: https://sofia-briefing.aviation-civile.gouv.fr — RTBA activity: AZBA page of the SIA. NOTAM and AIP SUP checked: [ ]',
+  'navplan.pdf.page': 'Page {{page}}',
+  'navplan.pdf.forecastNotice':
+    'Automatic forecast not checked by a forecaster.',
 };

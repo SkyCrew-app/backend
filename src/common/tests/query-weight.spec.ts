@@ -103,15 +103,7 @@ describe('query weight of the main screens', () => {
 
   it("caps a member's own flights, newest first", async () => {
     const flights = { find: jest.fn().mockResolvedValue([]) };
-    const service = new FlightsService(
-      flights as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-    );
+    const service = new FlightsService(flights as any, {} as any, {} as any);
 
     await service.getFlightsByUser(5);
 
