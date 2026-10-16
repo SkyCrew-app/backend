@@ -388,6 +388,8 @@ export class FlightPlanResult {
   @Field(() => CheckStatusEnum) status: CheckStatusEnum;
   @Field(() => [Notice]) notices: Notice[];
   @Field() encodedPolyline: string;
+  // QNH the plan was computed with: the pilot's, the departure METAR's or standard.
+  @Field(() => Float, { nullable: true }) qnhHpa: number | null;
 }
 
 @ObjectType()

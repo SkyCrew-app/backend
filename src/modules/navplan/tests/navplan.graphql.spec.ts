@@ -327,7 +327,7 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
 
   const COMPUTE = `query ($input: FlightPlanInput!) {
     computeFlightPlan(input: $input) {
-      status totalDistanceNm totalTimeMin windSource engineVersion encodedPolyline
+      status totalDistanceNm totalTimeMin windSource engineVersion encodedPolyline qnhHpa
       navdata { airac stale source }
       notices { code status message }
       legs {
@@ -599,6 +599,8 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-140B)', () => 
       expect.arrayContaining(['DISCLAIMER', 'NOTAM_CHECK']),
     );
     expect(plan.notices.map((n: any) => n.code)).not.toContain('QNH_DEFAULTED');
+    // The QNH used (here the departure METAR's) is given back for the paper log.
+    expect(plan.qnhHpa).toBe(1021);
     expect(plan.status).toBe('WARNING');
   });
 
