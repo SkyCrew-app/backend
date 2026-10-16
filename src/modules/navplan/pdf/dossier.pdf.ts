@@ -1,4 +1,4 @@
-import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFFont, PDFPage, rgb } from 'pdf-lib';
 import { Language } from '../../../common/i18n/languages';
 import { renderTranslation } from '../../../common/i18n/translate';
 import { TranslationKey } from '../../../common/i18n/fr';
@@ -7,14 +7,17 @@ import {
   LegResult,
   TAXI_OUT_MINUTES,
 } from '../engine/engine';
+import { utcTime } from '../engine/conditions';
 import { renderMessage } from '../render';
 import { altitudeLimitLabel } from '../engine/airspace-intersection';
+import { embedDossierFonts } from './truetype-font';
 
 // The flight file: navigation log, fuel, mass and balance with the envelope,
 // airspaces crossed, raw weather, warnings and the mandatory notices. A4
 // portrait: the whole file; A5 landscape: the kneeboard navigation log with
-// the fuel summary and warnings. Standard PDF fonts (WinAnsi: French
-// accents, degree sign); other symbols are replaced.
+// the fuel summary and warnings. The fonts are embedded (Liberation Sans,
+// WinAnsi encoding: French accents, degree sign); other symbols are
+// replaced.
 
 export interface DossierOptions {
   result: FlightPlanResult;
@@ -304,7 +307,9 @@ function legRows(legs: LegResult[], result: FlightPlanResult): string[][] {
       String(leg.altitudeFt),
       deg(leg.trueCourseDeg),
       deg(leg.magneticCourseDeg),
-      `${deg(leg.wind.directionDeg)}/${leg.wind.speedKt}`,
+      leg.wind.source === 'NONE'
+        ? '000/0*'
+        : `${deg(leg.wind.directionDeg)}/${leg.wind.speedKt}`,
       `${leg.windCorrectionDeg >= 0 ? '+' : ''}${Math.round(leg.windCorrectionDeg)}`,
       deg(leg.magneticHeadingDeg),
       String(Math.round(leg.tasKt)),
@@ -421,6 +426,78 @@ function drawEnvelope(writer: Writer, result: FlightPlanResult) {
   writer.y = y0 - 18;
 }
 
+const QNH_OLD_CODES = new Set(['QNH_METAR_OLD', 'QNH_DEFAULTED']);
+const qnhIsOld = (notices: { code: string }[]) =>
+  notices.some((n) => QNH_OLD_CODES.has(n.code));
+
+/** Where the QNH of the plan comes from: a METAR and its time, the pilot, or none. */
+export function qnhOrigin(
+  result: Pick<
+    FlightPlanResult,
+    'qnhSource' | 'qnhStation' | 'qnhObservedAt' | 'departureTime'
+  >,
+  language: Language,
+): string {
+  const source = result.qnhSource ?? 'INPUT';
+  if (source !== 'METAR') return t(language, `navplan.pdf.qnhSource.${source}`);
+  const observed = result.qnhObservedAt ? new Date(result.qnhObservedAt) : null;
+  return t(language, 'navplan.pdf.qnhSource.METAR', {
+    icao: result.qnhStation ?? '',
+    time: observed ? utcTime(observed, new Date(result.departureTime)) : '?',
+  });
+}
+
+/** The navigation data line: an AIRAC cycle, or aerodrome data without a cycle. */
+export function navdataLabel(
+  result: Pick<FlightPlanResult, 'navdata'>,
+  language: Language,
+): string {
+  const { airac, effectiveFrom, stale } = result.navdata;
+  const date = new Date(effectiveFrom).toISOString().slice(0, 10);
+  const label =
+    airac === 'OURAIRPORTS'
+      ? t(language, 'navplan.pdf.navdata.ourairports', { date })
+      : airac === 'NONE'
+        ? t(language, 'navplan.pdf.navdata.none')
+        : t(language, 'navplan.pdf.navdata.airac', { airac, date });
+  return stale
+    ? `${label} — ${t(language, 'navplan.pdf.navdata.stale')}`
+    : label;
+}
+
+/** Day or night, then twilight, sunrise and sunset of each aerodrome of the plan. */
+export function sunLines(
+  result: Pick<FlightPlanResult, 'daylight'>,
+  language: Language,
+): string[] {
+  const daylight = result.daylight;
+  if (!daylight) return [];
+  const time = (value: Date | string | null) => (value ? hhmm(value) : '—');
+  return [
+    `${t(language, 'navplan.pdf.sun')} — ${
+      daylight.night && daylight.nightFrom
+        ? t(language, 'navplan.pdf.sun.night', {
+            time: utcTime(new Date(daylight.nightFrom)),
+          })
+        : t(language, 'navplan.pdf.sun.day')
+    }`,
+    ...daylight.aerodromes.map((a) =>
+      t(language, 'navplan.pdf.sun.line', {
+        icao: a.icao,
+        role: renderTranslation(
+          language,
+          `navplan.role.${a.role}` as TranslationKey,
+        ),
+        date: a.date,
+        dawn: time(a.civilDawn),
+        sunrise: time(a.sunrise),
+        sunset: time(a.sunset),
+        dusk: time(a.civilDusk),
+      }),
+    ),
+  ];
+}
+
 export async function buildDossierPdf(
   options: DossierOptions,
 ): Promise<string> {
@@ -430,8 +507,7 @@ export async function buildDossierPdf(
     `${renderTranslation(language, 'navplan.pdf.title')} ${result.legs[0]?.from.ident ?? ''}-${result.legs[result.legs.length - 1]?.to.ident ?? ''}`,
   );
   doc.setProducer('Skycrew');
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const { regular: font, bold } = embedDossierFonts(doc);
   const size: [number, number] =
     options.format === 'A5' ? [595.28, 419.53] : [595.28, 841.89];
   const footer = `${printable(renderTranslation(language, 'navplan.notice.disclaimer'))} ${printable(result.navdata.source)}`;
@@ -449,18 +525,44 @@ export async function buildDossierPdf(
     `${t(language, 'navplan.pdf.aircraft')} : ${options.aircraft}   ${t(language, 'navplan.pdf.pilot')} : ${options.pilot}   ${t(language, 'navplan.pdf.date')} : ${new Date(result.departureTime).toISOString().slice(0, 16).replace('T', ' ')}`,
   );
   w.text(
-    `${t(language, 'navplan.pdf.qnh')} : ${one(result.qnhHpa)} hPa   ${t(language, 'navplan.pdf.navdata')} : AIRAC ${result.navdata.airac} (${new Date(result.navdata.effectiveFrom).toISOString().slice(0, 10)})${result.navdata.stale ? ' — PÉRIMÉ / OUT OF DATE' : ''}`,
-    { color: result.navdata.stale ? ORANGE : BLACK },
+    `${t(language, 'navplan.pdf.qnh')} : ${one(result.qnhHpa)} hPa (${qnhOrigin(result, language)})   ${t(language, 'navplan.pdf.navdata')} : ${navdataLabel(result, language)}`,
+    {
+      color: result.navdata.stale || qnhIsOld(result.notices) ? ORANGE : BLACK,
+    },
   );
   w.text(
     `${t(language, 'navplan.pdf.winds')} : ${result.windSource}. ${t(language, 'navplan.pdf.forecastNotice')}`,
     { size: 7, color: GREY },
+  );
+  sunLines(result, language).forEach((line, i) =>
+    w.text(line, {
+      size: 7,
+      color: i === 0 && result.daylight?.night ? ORANGE : GREY,
+    }),
   );
   if (result.status === 'BLOCKING')
     w.banner(t(language, 'navplan.pdf.blocking'), RED);
   else if (result.status === 'WARNING')
     w.banner(t(language, 'navplan.pdf.warning'), ORANGE);
   else w.banner(t(language, 'navplan.pdf.ok'), GREEN);
+
+  // Warnings first, right under the verdict.
+  w.heading(t(language, 'navplan.pdf.notices'));
+  for (const notice of result.notices) {
+    w.text(
+      `${t(language, `navplan.pdf.status.${notice.status}`)} — ${renderMessage(language, notice.message)}`,
+      {
+        size: 7,
+        color:
+          notice.status === 'BLOCKING'
+            ? RED
+            : notice.status === 'WARNING'
+              ? ORANGE
+              : BLACK,
+      },
+    );
+  }
+  w.text(t(language, 'navplan.pdf.links'), { size: 7 });
 
   // Navigation log.
   w.heading(t(language, 'navplan.pdf.navLog'));
@@ -494,6 +596,8 @@ export async function buildDossierPdf(
     [40, 24, 16, 16, 28, 16, 16, 16, 16, 20, 22, 16, 22, 20, 20, 22, 20, 90],
     options.format === 'A5' ? 6 : 6.5,
   );
+  if (legs.some((leg) => leg.wind.source === 'NONE'))
+    w.text(t(language, 'navplan.pdf.windNone'), { size: 7, color: ORANGE });
 
   // Fuel.
   w.heading(t(language, 'navplan.pdf.fuel'));
@@ -606,20 +710,7 @@ export async function buildDossierPdf(
     }
   }
 
-  // Warnings and links.
-  w.heading(t(language, 'navplan.pdf.notices'));
-  for (const notice of result.notices) {
-    w.text(`${notice.status} — ${renderMessage(language, notice.message)}`, {
-      size: 7,
-      color:
-        notice.status === 'BLOCKING'
-          ? RED
-          : notice.status === 'WARNING'
-            ? ORANGE
-            : BLACK,
-    });
-  }
-  w.text(t(language, 'navplan.pdf.links'), { size: 7 });
-
+  await font.embed();
+  await bold.embed();
   return Buffer.from(await doc.save()).toString('base64');
 }

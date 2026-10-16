@@ -237,8 +237,13 @@ export class NavplanService {
 
     let qnh = input.qnhHpa ?? null;
     let qnhSource: EngineInput['qnhSource'] = 'INPUT';
+    let qnhObservedAt: Date | null = null;
     if (qnh == null) {
-      qnh = await this.metarTaf.qnhOf(departure.ident).catch(() => null);
+      const metar = await this.metarTaf
+        .qnhOf(departure.ident)
+        .catch(() => null);
+      qnh = metar?.qnhHpa ?? null;
+      qnhObservedAt = metar?.observedAt ?? null;
       qnhSource = qnh == null ? 'DEFAULT' : 'METAR';
     }
     const qnhHpa = qnh ?? STANDARD_PRESSURE_HPA;
@@ -289,6 +294,8 @@ export class NavplanService {
       reserveCase: input.reserveCase,
       qnhHpa,
       qnhSource,
+      qnhStation: qnhSource === 'METAR' ? departure.ident : null,
+      qnhObservedAt,
       loads: input.loads.map((l) => ({
         stationId: l.stationId,
         massKg: l.massKg ?? null,
@@ -309,6 +316,7 @@ export class NavplanService {
       navdata: this.navdata.status(navdataCycle, now),
       wind: wind.provider,
       windSource: wind.source,
+      windCoverage: wind.coverage,
       weather,
     };
   }

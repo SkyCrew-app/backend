@@ -9,6 +9,15 @@ import {
   pressureAltitudeFt,
   STANDARD_PRESSURE_HPA,
 } from './atmosphere';
+import {
+  AerodromeRole,
+  CIRCUIT_AND_LANDING_MIN,
+  Daylight,
+  daylightOf,
+  FlightStretch,
+  nightConditions,
+  weatherConditions,
+} from './conditions';
 import { FuelPlan, FuelSettings, planFuel, ReserveCase } from './fuel';
 import { legGeometry, normalizeDeg } from './geodesy';
 import {
@@ -110,6 +119,14 @@ export interface WeatherReport {
   metar: string | null;
   taf: string | null;
   observedAt: Date | null;
+  tafValidFrom?: Date | null;
+  tafValidTo?: Date | null;
+}
+
+export interface WindCoverage {
+  from: Date;
+  to: Date;
+  run: string;
 }
 
 export interface EngineInput {
@@ -122,6 +139,9 @@ export interface EngineInput {
   reserveCase: ReserveCase;
   qnhHpa: number;
   qnhSource: 'INPUT' | 'METAR' | 'DEFAULT';
+  // The METAR the QNH comes from (qnhSource METAR).
+  qnhStation?: string | null;
+  qnhObservedAt?: Date | null;
   loads: { stationId: string; massKg: number | null }[];
   fuel: { tankId: string; liters: number }[];
   envelopeCategory: EnvelopeCategory;
@@ -135,6 +155,8 @@ export interface EngineInput {
   navdata: NavdataStatus;
   wind: WindProvider | null;
   windSource: string;
+  // Times the winds aloft forecast covers; null without a forecast.
+  windCoverage?: WindCoverage | null;
   weather: WeatherReport[];
 }
 
@@ -198,8 +220,12 @@ export interface FlightPlanResult {
   status: CheckStatus;
   notices: Notice[];
   encodedPolyline: string;
-  // Not in the GraphQL result: kept with the saved plan for the PDF.
+  daylight: Daylight;
   qnhHpa: number;
+  qnhSource: 'INPUT' | 'METAR' | 'DEFAULT';
+  qnhStation: string | null;
+  qnhObservedAt: Date | null;
+  // Not in the GraphQL result: kept with the saved plan for the PDF.
   departureTime: Date;
 }
 
@@ -561,9 +587,48 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     }
   }
 
+  // Night and weather against the times of the flight.
+  const landing = new Date(
+    takeoffTime.getTime() + (cumulativeTime + CIRCUIT_AND_LANDING_MIN) * 60000,
+  );
+  const alternateArrival = alternateLeg
+    ? new Date(
+        takeoffTime.getTime() +
+          (alternateLeg.cumulativeTimeMin + CIRCUIT_AND_LANDING_MIN) * 60000,
+      )
+    : null;
+  const daylight = daylightOf(
+    flightStretches(input, legs, alternateLeg, takeoffTime, landing),
+    roleAerodromes(input, landing, alternateArrival),
+  );
+  const reserveCase: ReserveCase = daylight.night
+    ? 'VFR_NIGHT'
+    : input.reserveCase;
+  for (const condition of nightConditions(
+    daylight,
+    daylight.night && input.reserveCase !== 'VFR_NIGHT',
+  ))
+    notices.push(condition);
+  const weatherNotices = weatherConditions({
+    departureTime: input.departureTime,
+    qnhSource: input.qnhSource,
+    qnhStation: input.qnhStation ?? null,
+    qnhObservedAt: input.qnhObservedAt ?? null,
+    reports: input.weather,
+    aerodromes: roleAerodromes(input, landing, alternateArrival),
+    winds: input.windCoverage ?? null,
+    flightStart: takeoffTime,
+    flightEnd: alternateArrival ?? landing,
+    windFallbackUsed: windMissing,
+  });
+  notices.push(...weatherNotices);
+
   if (wmmExpired)
     notice('WMM_EXPIRED', 'BLOCKING', 'navplan.notice.wmmExpired');
-  if (windMissing)
+  if (
+    windMissing &&
+    !weatherNotices.some((n) => n.code === 'WIND_OUT_OF_RANGE')
+  )
     notice('WIND_UNAVAILABLE', 'WARNING', 'navplan.notice.windUnavailable');
   if (legs.some((leg) => leg.wind.source === 'PILOT')) {
     notice('WIND_PILOT', 'OK', 'navplan.notice.windPilot');
@@ -592,7 +657,7 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     0,
   );
   const fuel = planFuel({
-    reserveCase: input.reserveCase,
+    reserveCase,
     settings: input.settings,
     taxiL,
     tripL: cumulativeFuel,
@@ -692,9 +757,101 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     status,
     notices,
     encodedPolyline: polyline.encode(route),
+    daylight,
     qnhHpa: input.qnhHpa,
+    ...qnhOrigin(input),
     departureTime: input.departureTime,
   };
+}
+
+const qnhOrigin = (input: EngineInput) => ({
+  qnhSource: input.qnhSource,
+  qnhStation: input.qnhSource === 'METAR' ? (input.qnhStation ?? null) : null,
+  qnhObservedAt:
+    input.qnhSource === 'METAR' ? (input.qnhObservedAt ?? null) : null,
+});
+
+// The departure at off-block, the destination at landing, the alternate at
+// arrival there.
+function roleAerodromes(
+  input: EngineInput,
+  landing: Date,
+  alternateArrival: Date | null,
+): {
+  icao: string;
+  role: AerodromeRole;
+  point: EnginePoint;
+  at: Date;
+}[] {
+  return [
+    {
+      icao: input.departure.ident,
+      role: 'departure' as const,
+      point: input.departure,
+      at: input.departureTime,
+    },
+    {
+      icao: input.destination.ident,
+      role: 'destination' as const,
+      point: input.destination,
+      at: landing,
+    },
+    ...(input.alternate && alternateArrival
+      ? [
+          {
+            icao: input.alternate.ident,
+            role: 'alternate' as const,
+            point: input.alternate,
+            at: alternateArrival,
+          },
+        ]
+      : []),
+  ];
+}
+
+// Off-block to landing (and on to the alternate): taxi at the departure,
+// each leg between its estimated times, circuit and landing at the end.
+function flightStretches(
+  input: EngineInput,
+  legs: LegResult[],
+  alternateLeg: LegResult | null,
+  takeoffTime: Date,
+  landing: Date,
+): FlightStretch[] {
+  const stretches: FlightStretch[] = [
+    {
+      from: input.departure,
+      to: input.departure,
+      start: input.departureTime,
+      end: takeoffTime,
+    },
+  ];
+  let start = takeoffTime;
+  for (const leg of [...legs, ...(alternateLeg ? [alternateLeg] : [])]) {
+    const end = new Date(leg.eta);
+    stretches.push({ from: leg.from, to: leg.to, start, end });
+    start = end;
+  }
+  const lastLeg = legs[legs.length - 1];
+  if (lastLeg) {
+    stretches.push({
+      from: lastLeg.to,
+      to: lastLeg.to,
+      start: new Date(lastLeg.eta),
+      end: landing,
+    });
+  }
+  if (alternateLeg) {
+    stretches.push({
+      from: alternateLeg.to,
+      to: alternateLeg.to,
+      start: new Date(alternateLeg.eta),
+      end: new Date(
+        new Date(alternateLeg.eta).getTime() + CIRCUIT_AND_LANDING_MIN * 60000,
+      ),
+    });
+  }
+  return stretches;
 }
 
 // A plan whose performance tables do not cover the flight: the route is
@@ -756,6 +913,18 @@ function failedPlan(
     (sum, f) => sum + (Number(f.liters) || 0),
     0,
   );
+  // Without times, only the off-block is known.
+  const daylight = daylightOf(
+    [
+      {
+        from: input.departure,
+        to: input.departure,
+        start: input.departureTime,
+        end: input.departureTime,
+      },
+    ],
+    roleAerodromes(input, input.departureTime, null).slice(0, 1),
+  );
   return {
     legs,
     alternateLeg: null,
@@ -763,6 +932,7 @@ function failedPlan(
     totalDistanceNm: legs.reduce((s, l) => s + l.distanceNm, 0),
     totalTimeMin: 0,
     fuel: {
+      reserveCase: daylight.night ? 'VFR_NIGHT' : input.reserveCase,
       taxiL: 0,
       tripL: 0,
       contingencyL: 0,
@@ -796,7 +966,9 @@ function failedPlan(
     status: 'BLOCKING',
     notices,
     encodedPolyline: polyline.encode(points.map((p) => [p.lat, p.lon])),
+    daylight,
     qnhHpa: input.qnhHpa ?? STANDARD_PRESSURE_HPA,
+    ...qnhOrigin(input),
     departureTime: input.departureTime,
   };
 }
