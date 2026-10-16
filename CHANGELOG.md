@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.20.1](https://github.com/SkyCrew-app/backend/compare/2.20.0...2.20.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **flight-plans:** :bug: detect night, date the weather, source templates, embed PDF font ([#206](https://github.com/SkyCrew-app/backend/issues/206)) ([40f66f9](https://github.com/SkyCrew-app/backend/commit/40f66f9f9ba037ae3b6429b076f3403daa91cc14))
+
 ## [2.20.0](https://github.com/SkyCrew-app/backend/compare/2.19.0...2.20.0) (2026-10-16)
 
 
