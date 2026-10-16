@@ -35,6 +35,22 @@ const REPLACEMENTS: [RegExp, string][] = [
 ];
 const WIN_ANSI_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
 
+/**
+ * What the airspace section says when it lists nothing: without airspace data
+ * the route was not checked, which is never "no airspace crossed".
+ */
+export const emptyAirspacesKey = (notices: { code: string }[]) =>
+  notices.some((notice) => notice.code === 'NAVDATA_NO_AIRSPACE')
+    ? ('navplan.pdf.airspaces.notChecked' as const)
+    : ('navplan.pdf.airspaces.none' as const);
+
+/** A chart label goes under its point when an earlier label sits close by. */
+export const labelBelow = (
+  earlier: [number, number][],
+  [x, y]: [number, number],
+): boolean =>
+  earlier.some(([ox, oy]) => Math.abs(ox - x) < 30 && Math.abs(oy - y) < 8);
+
 export const printable = (text: string): string => {
   let value = String(text ?? '');
   for (const [pattern, replacement] of REPLACEMENTS)
@@ -354,10 +370,13 @@ function drawEnvelope(writer: Writer, result: FlightPlanResult) {
     thickness: 1,
     color: ORANGE,
   });
+  const placed: [number, number][] = [];
   for (const [state, label] of [
     [to, 'DEC/TO'],
     [ldg, 'ATT/LDG'],
   ] as const) {
+    const below = labelBelow(placed, [sx(state.cgM), sy(state.massKg)]);
+    placed.push([sx(state.cgM), sy(state.massKg)]);
     writer.page.drawCircle({
       x: sx(state.cgM),
       y: sy(state.massKg),
@@ -366,7 +385,7 @@ function drawEnvelope(writer: Writer, result: FlightPlanResult) {
     });
     writer.page.drawText(label, {
       x: sx(state.cgM) + 4,
-      y: sy(state.massKg) + 2,
+      y: sy(state.massKg) + (below ? -8 : 2),
       size: 6,
       font: writer.font,
     });
@@ -558,8 +577,12 @@ export async function buildDossierPdf(
     const crossings = legs.flatMap((leg) =>
       leg.crossings.map((c) => ({ leg, c })),
     );
-    if (crossings.length === 0)
-      w.text(t(language, 'navplan.pdf.airspaces.none'));
+    if (crossings.length === 0) {
+      const key = emptyAirspacesKey(result.notices);
+      w.text(t(language, key), {
+        color: key === 'navplan.pdf.airspaces.none' ? BLACK : ORANGE,
+      });
+    }
     for (const { leg, c } of crossings) {
       w.text(
         `${leg.from.ident}-${leg.to.ident} ${one(c.entryNm)}-${one(c.exitNm)} NM : ${c.airspace.name} [${altitudeLimitLabel(c.airspace.floor)} / ${altitudeLimitLabel(c.airspace.ceiling)}] ${c.relation} — ${renderMessage(language, c.requirement)}`,

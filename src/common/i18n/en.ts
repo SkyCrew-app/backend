@@ -506,6 +506,8 @@ export const en: Record<TranslationKey, string> = {
     'Computed from the data entered by the club (weighing of {{date}}). The pilot in command checks it against the flight manual.',
   'navplan.pdf.airspaces': 'Airspaces crossed',
   'navplan.pdf.airspaces.none': 'No airspace crossed in the data in force',
+  'navplan.pdf.airspaces.notChecked':
+    'Airspaces not checked: no airspace data imported. Find the airspaces crossed on the current aeronautical chart (ICAO chart, VAC, AIP).',
   'navplan.pdf.weather': 'Weather (raw METAR / TAF, aviationweather.gov)',
   'navplan.pdf.notices': 'Warnings',
   'navplan.pdf.links':

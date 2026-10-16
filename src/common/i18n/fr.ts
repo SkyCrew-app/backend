@@ -524,6 +524,8 @@ export const fr = {
   'navplan.pdf.airspaces': 'Zones traversées',
   'navplan.pdf.airspaces.none':
     'Aucune zone traversée dans les données en vigueur',
+  'navplan.pdf.airspaces.notChecked':
+    "Zones non vérifiées : aucune donnée d'espace aérien importée. Repérer les zones traversées sur la carte aéronautique en vigueur (carte OACI, VAC, AIP).",
   'navplan.pdf.weather': 'Météo (METAR / TAF bruts, aviationweather.gov)',
   'navplan.pdf.notices': 'Avertissements',
   'navplan.pdf.links':
