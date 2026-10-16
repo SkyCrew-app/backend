@@ -86,7 +86,8 @@ export async function latestRun(now: Date, lastStep: number): Promise<Date> {
 }
 
 const decompress = (data: Buffer): Buffer => {
-  const result = spawnSync('bzcat', [], {
+  // A fixed path, so that the job never runs whatever "bzcat" comes first in the PATH.
+  const result = spawnSync(process.env.BZCAT_PATH ?? '/usr/bin/bzcat', [], {
     input: data,
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -193,7 +194,8 @@ export const windsDir = () =>
   process.env.WINDS_DIR ?? join(process.cwd(), 'data', 'winds');
 
 if (require.main === module) {
-  const dir = process.argv[2] ?? windsDir();
+  // The folder comes from the environment only (WINDS_DIR), never from arguments.
+  const dir = windsDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   runWindsFetch({ dir })
     .then(() => process.exit(0))

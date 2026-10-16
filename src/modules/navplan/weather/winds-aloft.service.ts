@@ -96,7 +96,7 @@ export class WindsAloftService implements OnApplicationBootstrap {
       return;
     }
     this.running = true;
-    const child = spawn(process.execPath, [script, windsDir()], {
+    const child = spawn(process.execPath, [script], {
       stdio: 'inherit',
     });
     child.on('exit', (code) => {

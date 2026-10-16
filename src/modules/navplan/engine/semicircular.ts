@@ -21,11 +21,13 @@ export function suggestedVfrAltitudeFt(
       candidates.push(thousands * 1000 + 500);
     }
   }
-  return candidates
-    .filter((level) => level >= SEMICIRCULAR_FROM_FT)
-    .reduce((best, level) =>
+  const allowed = candidates.filter((level) => level >= SEMICIRCULAR_FROM_FT);
+  if (allowed.length === 0) return null;
+  return allowed.reduce(
+    (best, level) =>
       Math.abs(level - plannedAltitudeFt) < Math.abs(best - plannedAltitudeFt)
         ? level
         : best,
-    );
+    allowed[0],
+  );
 }

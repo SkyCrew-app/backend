@@ -263,9 +263,8 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
       bump(report.skipped, 'aerodrome without code or position');
       continue;
     }
-    const icao = /^[A-Z]{2}$/.test(code)
-      ? `${territory}${code}`
-      : `${territory}${code}`;
+    // The SIA gives the last two letters (PN); a full code (LFPN) is kept.
+    const icao = /^[A-Z]{2}$/.test(code) ? `${territory}${code}` : code;
     icaoByAdPk.set(ad.attributes.pk, icao);
     points.push({
       type: 'AERODROME',
