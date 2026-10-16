@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "build": "nest build",
-    "postbuild": "cp -r src/modules/templates dist/src/modules/templates/ 2>/dev/null || true && cp -r src/modules/flights/data dist/src/modules/flights/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navdata/data && cp src/modules/navdata/data/*.json.gz dist/src/modules/navdata/data/ 2>/dev/null || true",
+    "postbuild": "cp -r src/modules/templates dist/src/modules/templates/ 2>/dev/null || true && cp -r src/modules/flights/data dist/src/modules/flights/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navdata/data && cp src/modules/navdata/data/*.json.gz dist/src/modules/navdata/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navplan/pdf/fonts && cp src/modules/navplan/pdf/fonts/* dist/src/modules/navplan/pdf/fonts/",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/src/main",
     "heroku-postbuild": "npm run build",

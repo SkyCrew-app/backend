@@ -205,6 +205,13 @@ export const fr = {
     'Un incident est rattaché à ce vol : il ne peut pas être supprimé',
   'error.aircraft.upcomingBookings':
     'Cet avion a {{count}} réservation(s) à venir : annulez-les ou déplacez-les avant de le retirer',
+  'error.aircraft.registrationRequired':
+    "Indiquez l'immatriculation de l'avion",
+  'error.aircraft.modelRequired': "Indiquez le modèle de l'avion",
+  'error.aircraft.yearRequired':
+    "Indiquez l'année de fabrication de l'avion, entre {{min}} et {{max}}",
+  'error.aircraft.hourlyCostRequired':
+    "Indiquez le coût d'une heure de vol, en euros (0 ou plus)",
   'error.aircraft.heldByMaintenance':
     "Cet avion est en maintenance : sa disponibilité ne peut pas être modifiée tant que la maintenance n'est pas terminée",
   'error.maintenance.endBeforeStart':
@@ -380,6 +387,21 @@ export const fr = {
     'Données de masse et centrage incorrectes : {{detail}}',
   'error.aircraftData.incomplete':
     "Données de l'avion incomplètes, confirmation impossible : {{missing}}",
+  'aircraftData.missing.performance': 'table de croisière',
+  'aircraftData.missing.tanks': 'réservoirs (capacité utilisable)',
+  'aircraftData.missing.climb':
+    'montée (vitesse, taux, débit et plafond, ou table)',
+  'aircraftData.missing.descent': 'descente (vitesse, taux et débit)',
+  'aircraftData.missing.reserve':
+    'débits d’attente et à la puissance maximale continue',
+  'aircraftData.missing.massBalance': 'masse et centrage',
+  'aircraftData.missing.weighing': 'pesée (masse et bras à vide)',
+  'aircraftData.missing.weighingDate': 'date de pesée',
+  'aircraftData.missing.mtow': 'masse maximale au décollage',
+  'aircraftData.missing.mlw': 'masse maximale à l’atterrissage',
+  'aircraftData.missing.seats': 'stations des sièges',
+  'aircraftData.missing.envelope': 'enveloppe de centrage',
+  'aircraftData.missing.fuelArm': 'bras des réservoirs',
   'navplan.notice.disclaimer':
     'Aide à la préparation du vol. Ne remplace ni les publications aéronautiques officielles (AIP, SUP AIP, NOTAM, cartes VAC), ni le manuel de vol de l’avion, ni le jugement du commandant de bord.',
   'navplan.notice.notamCheck':
@@ -408,6 +430,29 @@ export const fr = {
     'Pas de prévision de vent en altitude pour une partie de la route : vent nul supposé, saisissez le vent prévu (WINTEM)',
   'navplan.notice.windPilot':
     'Vent saisi par le pilote sur au moins une branche',
+  'navplan.notice.nightFlight':
+    'Vol en partie de nuit à partir de {{time}} (nuit aéronautique : de la fin du crépuscule civil du soir au début du crépuscule civil du matin, règlement SERA) : réserve finale de nuit (45 min) et qualification de vol de nuit requises',
+  'navplan.notice.nightReserveImposed':
+    'Vol en partie de nuit à partir de {{time}} (nuit aéronautique : de la fin du crépuscule civil du soir au début du crépuscule civil du matin, règlement SERA) : la réserve finale de nuit (45 min) remplace la réserve de jour choisie ; qualification de vol de nuit requise',
+  'navplan.notice.nightApproaching':
+    'Arrivée prévue à {{icao}} ({{role}}) à {{arrival}}, {{minutes}} min avant la fin du crépuscule civil ({{dusk}}) : tout retard fera finir le vol de nuit',
+  'navplan.notice.qnhMetarOld':
+    'QNH issu d’un METAR de {{time}} ({{icao}}), à réactualiser avant le départ',
+  'navplan.notice.qnhMetarUnknownTime':
+    'QNH issu d’un METAR {{icao}} d’heure inconnue, à réactualiser avant le départ',
+  'navplan.notice.tafNotCovering':
+    'TAF {{icao}} ({{role}}) valable du {{from}} au {{to}} : il ne couvre pas l’heure prévue ({{time}}), à consulter de nouveau avant le départ',
+  'navplan.notice.tafValidityUnknown':
+    'TAF {{icao}} ({{role}}) : période de validité illisible, vérifiez qu’il couvre l’heure prévue ({{time}})',
+  'navplan.notice.tafMissing':
+    'Pas de TAF pour {{icao}} ({{role}}) : aucune prévision pour l’heure prévue ({{time}})',
+  'navplan.notice.departureNoForecast':
+    'Pas de TAF pour {{icao}} ({{role}}) : le dernier METAR ({{observed}}) ne décrit pas les conditions du départ prévu à {{time}}',
+  'navplan.notice.windOutOfRange':
+    'Prévision de vent en altitude (run {{run}}) valable du {{from}} au {{to}} : l’heure du vol n’est pas couverte, vent nul supposé sur les branches concernées ; saisissez le vent prévu (WINTEM)',
+  'navplan.role.departure': 'départ',
+  'navplan.role.destination': 'destination',
+  'navplan.role.alternate': 'dégagement',
   'navplan.fuel.alternateRequired':
     'Le club exige un dégagement en VFR : ajoutez un terrain de dégagement',
   'navplan.fuel.aboveUsable':
@@ -533,6 +578,25 @@ export const fr = {
   'navplan.pdf.page': 'Page {{page}}',
   'navplan.pdf.forecastNotice':
     'Prévision automatique non validée par un prévisionniste.',
+  'navplan.pdf.qnhSource.METAR': 'METAR {{icao}} de {{time}}',
+  'navplan.pdf.qnhSource.INPUT': 'saisi par le pilote',
+  'navplan.pdf.qnhSource.DEFAULT': 'QNH inconnu, atmosphère standard',
+  'navplan.pdf.navdata.airac': 'cycle AIRAC {{airac}} du {{date}}',
+  'navplan.pdf.navdata.ourairports':
+    'données aérodromes OurAirports du {{date}}, pas de cycle AIRAC',
+  'navplan.pdf.navdata.none': 'aucune donnée aéronautique importée',
+  'navplan.pdf.navdata.stale': 'PÉRIMÉES',
+  'navplan.pdf.sun': 'Soleil (UTC)',
+  'navplan.pdf.sun.line':
+    '{{icao}} ({{role}}, {{date}}) : début du crépuscule civil {{dawn}}, lever {{sunrise}}, coucher {{sunset}}, fin du crépuscule civil {{dusk}}',
+  'navplan.pdf.sun.night':
+    'Vol en partie de nuit à partir de {{time}} : réserve finale de nuit (45 min).',
+  'navplan.pdf.sun.day':
+    'Vol entièrement de jour (nuit aéronautique : de la fin du crépuscule civil du soir au début du crépuscule civil du matin).',
+  'navplan.pdf.windNone': '* pas de prévision de vent : vent nul supposé',
+  'navplan.pdf.status.OK': 'INFO',
+  'navplan.pdf.status.WARNING': 'ATTENTION',
+  'navplan.pdf.status.BLOCKING': 'BLOQUANT',
 } as const;
 
 export type TranslationKey = keyof typeof fr;

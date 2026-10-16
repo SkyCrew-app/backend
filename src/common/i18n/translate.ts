@@ -24,6 +24,12 @@ export type ParamsArgument<Key extends TranslationKey> = [
   ? []
   : [params: TranslationParams<Key>];
 
+// A parameter made of other messages: each key is written in the language
+// of the message, the whole joined with commas ("pesée, enveloppe").
+const LIST_PREFIX = 'i18n-list:';
+export const translatedList = (keys: TranslationKey[]): string =>
+  `${LIST_PREFIX}${keys.join('|')}`;
+
 // For callers that carry a key and its parameters as data. Everything else
 // goes through translate, which checks the parameters of each key.
 export const renderTranslation = (
@@ -34,9 +40,16 @@ export const renderTranslation = (
   const dictionary = dictionaries[language] ?? dictionaries[DEFAULT_LANGUAGE];
   const text = dictionary[key] ?? fr[key];
 
-  return text.replace(/{{(\w+)}}/g, (placeholder, name: string) =>
-    name in params ? String(params[name]) : placeholder,
-  );
+  return text.replace(/{{(\w+)}}/g, (placeholder, name: string) => {
+    if (!(name in params)) return placeholder;
+    const value = String(params[name]);
+    if (!value.startsWith(LIST_PREFIX)) return value;
+    return value
+      .slice(LIST_PREFIX.length)
+      .split('|')
+      .map((item) => renderTranslation(language, item as TranslationKey))
+      .join(', ');
+  });
 };
 
 export function translate<Key extends TranslationKey>(

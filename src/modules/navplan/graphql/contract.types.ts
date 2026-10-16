@@ -10,6 +10,7 @@ import {
   FlightPhaseEnum,
   FuelTypeEnum,
   NavPointTypeEnum,
+  ReserveCaseEnum,
   StationKindEnum,
 } from './enums';
 
@@ -309,6 +310,10 @@ export class ProfilePoint {
 
 @ObjectType()
 export class FuelPlan {
+  // The pilot's case, or VFR_NIGHT when part of the flight is at night
+  // (null on a plan saved before the night check).
+  @Field(() => ReserveCaseEnum, { nullable: true })
+  reserveCase: ReserveCaseEnum | null;
   @Field(() => Float) taxiL: number;
   @Field(() => Float) tripL: number;
   @Field(() => Float) contingencyL: number;
@@ -370,6 +375,31 @@ export class WeatherReport {
   @Field(() => String, { nullable: true }) metar: string | null;
   @Field(() => String, { nullable: true }) taf: string | null;
   @Field(() => Date, { nullable: true }) observedAt: Date | null;
+  @Field(() => Date, { nullable: true }) tafValidFrom: Date | null;
+  @Field(() => Date, { nullable: true }) tafValidTo: Date | null;
+}
+
+// Twilight, sunrise and sunset (UTC) of an aerodrome of the plan, on the
+// day of the flight there.
+@ObjectType()
+export class AerodromeSun {
+  @Field() icao: string;
+  // departure (off-block), destination (landing) or alternate (arrival).
+  @Field() role: string;
+  @Field() at: Date;
+  @Field() date: string;
+  @Field(() => Date, { nullable: true }) civilDawn: Date | null;
+  @Field(() => Date, { nullable: true }) sunrise: Date | null;
+  @Field(() => Date, { nullable: true }) sunset: Date | null;
+  @Field(() => Date, { nullable: true }) civilDusk: Date | null;
+}
+
+@ObjectType()
+export class Daylight {
+  @Field(() => [AerodromeSun]) aerodromes: AerodromeSun[];
+  // Part of the flight is in the aviation night (SERA).
+  @Field() night: boolean;
+  @Field(() => Date, { nullable: true }) nightFrom: Date | null;
 }
 
 @ObjectType()
@@ -390,6 +420,12 @@ export class FlightPlanResult {
   @Field() encodedPolyline: string;
   // QNH the plan was computed with: the pilot's, the departure METAR's or standard.
   @Field(() => Float, { nullable: true }) qnhHpa: number | null;
+  // INPUT, METAR or DEFAULT; with a METAR, its aerodrome and observation time.
+  @Field(() => String, { nullable: true }) qnhSource: string | null;
+  @Field(() => String, { nullable: true }) qnhStation: string | null;
+  @Field(() => Date, { nullable: true }) qnhObservedAt: Date | null;
+  // Null on a plan saved before the night check.
+  @Field(() => Daylight, { nullable: true }) daylight: Daylight | null;
 }
 
 @ObjectType()

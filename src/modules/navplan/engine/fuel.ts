@@ -88,6 +88,9 @@ export interface FuelInput {
 }
 
 export interface FuelPlan {
+  // The case the final reserve was computed for: the pilot's, or VFR_NIGHT
+  // when part of the flight is at night.
+  reserveCase: ReserveCase;
   taxiL: number;
   tripL: number;
   contingencyL: number;
@@ -182,6 +185,7 @@ export function planFuel(input: FuelInput): FuelPlan {
       : 0;
 
   return {
+    reserveCase: input.reserveCase,
     taxiL: input.taxiL,
     tripL,
     contingencyL,

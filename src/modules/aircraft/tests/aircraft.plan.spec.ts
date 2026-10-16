@@ -39,6 +39,13 @@ const fleet = (
   return { service, repository, manager };
 };
 
+// What the database requires of a new aircraft.
+const REQUIRED = {
+  model: 'DR400',
+  year_of_manufacture: 2000,
+  hourly_cost: 150,
+};
+
 describe('The aircraft limit of the plan', () => {
   beforeEach(() => {
     jest.spyOn(fs, 'existsSync').mockReturnValue(true);
@@ -49,7 +56,11 @@ describe('The aircraft limit of the plan', () => {
   it('adds an aircraft while places are left', async () => {
     const { service, repository } = fleet(2, 3);
 
-    await service.create({ registration_number: 'F-NEW' } as any, [], null);
+    await service.create(
+      { ...REQUIRED, registration_number: 'F-NEW' } as any,
+      [],
+      null,
+    );
 
     expect(repository.save).toHaveBeenCalled();
   });
@@ -59,7 +70,11 @@ describe('The aircraft limit of the plan', () => {
 
     expect(
       await refusal(
-        service.create({ registration_number: 'F-NEW' } as any, ['doc'], null),
+        service.create(
+          { ...REQUIRED, registration_number: 'F-NEW' } as any,
+          ['doc'],
+          null,
+        ),
       ),
     ).toBe('error.plan.aircraftLimit');
     expect(repository.save).not.toHaveBeenCalled();
@@ -70,7 +85,7 @@ describe('The aircraft limit of the plan', () => {
     const { service, manager } = fleet(3, 3);
 
     await service
-      .create({ registration_number: 'F-NEW' } as any, [], null)
+      .create({ ...REQUIRED, registration_number: 'F-NEW' } as any, [], null)
       .catch(() => null);
 
     expect(manager.count).toHaveBeenCalledWith(Aircraft, {
@@ -88,6 +103,7 @@ describe('The aircraft limit of the plan', () => {
 
     await service.create(
       {
+        ...REQUIRED,
         registration_number: 'F-OLD',
         availability_status: AvailabilityStatus.UNAVAILABLE,
       } as any,
@@ -130,7 +146,11 @@ describe('The aircraft limit of the plan', () => {
   it('counts nothing when the plan has no limit', async () => {
     const { service, manager } = fleet(50, null);
 
-    await service.create({ registration_number: 'F-NEW' } as any, [], null);
+    await service.create(
+      { ...REQUIRED, registration_number: 'F-NEW' } as any,
+      [],
+      null,
+    );
 
     expect(manager.count).not.toHaveBeenCalled();
   });

@@ -10,6 +10,7 @@ import { MessageRef } from './engine/types';
 // JSON), airspaces with their limit labels and GeoJSON outline.
 
 const MOMENTS = new Set(['takeoff', 'landing']);
+const ROLES = new Set(['departure', 'destination', 'alternate']);
 
 export function renderMessage(language: Language, message: MessageRef): string {
   const params = { ...(message.params ?? {}) };
@@ -17,6 +18,12 @@ export function renderMessage(language: Language, message: MessageRef): string {
     params.moment = renderTranslation(
       language,
       `navplan.mb.moment.${params.moment}` as TranslationKey,
+    );
+  }
+  if (typeof params.role === 'string' && ROLES.has(params.role)) {
+    params.role = renderTranslation(
+      language,
+      `navplan.role.${params.role}` as TranslationKey,
     );
   }
   return renderTranslation(language, message.key as TranslationKey, params);
@@ -60,6 +67,7 @@ export function renderResult(result: FlightPlanResult, language: Language) {
     })),
     fuel: {
       ...result.fuel,
+      reserveCase: result.fuel.reserveCase ?? null,
       messages: result.fuel.messages.map((m) => renderMessage(language, m)),
     },
     massBalance: {
@@ -78,7 +86,26 @@ export function renderResult(result: FlightPlanResult, language: Language) {
     weather: result.weather.map((w) => ({
       ...w,
       observedAt: date(w.observedAt),
+      tafValidFrom: date(w.tafValidFrom),
+      tafValidTo: date(w.tafValidTo),
     })),
+    qnhSource: result.qnhSource ?? null,
+    qnhStation: result.qnhStation ?? null,
+    qnhObservedAt: date(result.qnhObservedAt),
+    daylight: result.daylight
+      ? {
+          ...result.daylight,
+          nightFrom: date(result.daylight.nightFrom),
+          aerodromes: result.daylight.aerodromes.map((a) => ({
+            ...a,
+            at: date(a.at),
+            civilDawn: date(a.civilDawn),
+            sunrise: date(a.sunrise),
+            sunset: date(a.sunset),
+            civilDusk: date(a.civilDusk),
+          })),
+        }
+      : null,
     navdata: {
       ...result.navdata,
       effectiveFrom: date(result.navdata.effectiveFrom),

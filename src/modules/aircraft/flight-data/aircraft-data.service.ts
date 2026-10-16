@@ -6,6 +6,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { localized } from '../../../common/i18n/localized-exception';
+import { TranslationKey } from '../../../common/i18n/fr';
+import { translatedList } from '../../../common/i18n/translate';
 import { SessionUser } from '../../../common/auth/access';
 import { Aircraft } from '../entity/aircraft.entity';
 import {
@@ -83,6 +85,68 @@ export const toMassBalanceData = (
   combinedLimits: row.combined_limits ?? [],
   envelopes: row.envelopes ?? [],
 });
+
+const positive = (value: unknown) =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+// What is still missing before an administrator may confirm the data: every
+// figure the engine uses, so that a template left incomplete (rather than
+// filled with plausible guesses) cannot be confirmed as it is.
+export function aircraftDataGaps(
+  performance: AircraftPerformanceEntity | null,
+  massBalance: AircraftMassBalanceEntity | null,
+): TranslationKey[] {
+  const missing: TranslationKey[] = [];
+  if (!performanceUsable(performance))
+    missing.push('aircraftData.missing.performance');
+  if (performance) {
+    const tanks = performance.fuel?.tanks ?? [];
+    if (tanks.length === 0 || tanks.some((t) => !positive(t.usableL)))
+      missing.push('aircraftData.missing.tanks');
+    const climb =
+      performance.climb ?? ({} as AircraftPerformanceEntity['climb']);
+    const climbTable = (climb.table ?? []).length >= 2;
+    if (
+      !positive(climb.iasKt) ||
+      (!climbTable &&
+        !(
+          positive(climb.seaLevelRateFpm) &&
+          positive(climb.fuelFlowLph) &&
+          positive(performance.service_ceiling_ft)
+        ))
+    )
+      missing.push('aircraftData.missing.climb');
+    const descent = performance.descent;
+    if (
+      !positive(descent?.iasKt) ||
+      !positive(descent?.rateFpm) ||
+      !positive(descent?.fuelFlowLph)
+    )
+      missing.push('aircraftData.missing.descent');
+    if (
+      !positive(performance.reserve?.holdingFuelFlowLph) ||
+      !positive(performance.reserve?.maxContinuousFuelFlowLph)
+    )
+      missing.push('aircraftData.missing.reserve');
+  }
+  if (!massBalance) missing.push('aircraftData.missing.massBalance');
+  else {
+    if (massBalance.empty_mass_kg == null || massBalance.empty_arm_m == null)
+      missing.push('aircraftData.missing.weighing');
+    if (!massBalance.weighing_date)
+      missing.push('aircraftData.missing.weighingDate');
+    if (massBalance.mtow_kg == null) missing.push('aircraftData.missing.mtow');
+    if (massBalance.mlw_kg == null) missing.push('aircraftData.missing.mlw');
+    const stations = massBalance.stations ?? [];
+    if (!stations.some((st) => st.kind === 'SEAT'))
+      missing.push('aircraftData.missing.seats');
+    if (!(massBalance.envelopes ?? []).some((e) => e.points?.length >= 3))
+      missing.push('aircraftData.missing.envelope');
+    if ((performance?.fuel?.tanks ?? []).some((t) => !Number.isFinite(t.armM)))
+      missing.push('aircraftData.missing.fuelArm');
+  }
+  return missing;
+}
 
 // Performance derived from the fleet sheet (cruise speed in kt, consumption
 // in L/h), for an aircraft without manual data: enough to draw a plan,
@@ -464,20 +528,10 @@ export class AircraftDataService {
       this.performanceRow(aircraftId),
       this.massBalanceRow(aircraftId),
     ]);
-    const missing: string[] = [];
-    if (!performanceUsable(performance)) missing.push('performance');
-    if (!massBalance) missing.push('mass & balance');
-    else {
-      if (massBalance.empty_mass_kg == null || massBalance.empty_arm_m == null)
-        missing.push('weighing (empty mass and arm)');
-      if (!massBalance.weighing_date) missing.push('weighing date');
-      if (massBalance.mtow_kg == null) missing.push('MTOW');
-      if (!(massBalance.envelopes ?? []).some((e) => e.points?.length >= 3))
-        missing.push('envelope');
-    }
+    const missing = aircraftDataGaps(performance, massBalance);
     if (missing.length > 0) {
       throw localized(BadRequestException, 'error.aircraftData.incomplete', {
-        missing: missing.join(', '),
+        missing: translatedList(missing),
       });
     }
     const now = new Date();

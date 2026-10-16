@@ -101,7 +101,7 @@ describe('queryLimitsRule', () => {
     const started = Date.now();
     const errors = errorsOf(query, { maxDepth: 100, maxAliases: 1000 });
 
-    expect(errors).toEqual(['Requête trop volumineuse (300 champs au plus)']);
+    expect(errors).toEqual(['Requête trop volumineuse (400 champs au plus)']);
     expect(Date.now() - started).toBeLessThan(1000);
   });
 
