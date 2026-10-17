@@ -10,6 +10,7 @@ import {
   altitudeLimitLabel,
   AltitudeLimit,
   AirspaceType,
+  hasOutline,
 } from '../navplan/engine/airspace-intersection';
 import {
   EnginePoint,
@@ -89,6 +90,8 @@ export const airspaceView = (record: AirspaceRecord) => ({
   floor: { ...record.floor, label: altitudeLimitLabel(record.floor) },
   ceiling: { ...record.ceiling, label: altitudeLimitLabel(record.ceiling) },
   geometry: { type: 'MultiPolygon', coordinates: record.geometry },
+  // false: the outline is not published (empty geometry), never "no area".
+  outlineKnown: hasOutline(record),
 });
 
 // A floor in feet for filtering the map (FL taken on 1013.25, AGL as AMSL).

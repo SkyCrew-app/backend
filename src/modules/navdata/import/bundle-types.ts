@@ -7,7 +7,10 @@ import { NavPointType } from '../../navplan/engine/engine';
 
 // The normalised navigation data of one AIRAC cycle, as built from the SIA
 // export and OurAirports and as imported into each installation.
-export const BUNDLE_SCHEMA = 1;
+// Schema 2: airspaces whose outline is unknown have an empty geometry (a
+// schema 1 bundle with SIA data drew them as 1 km circles: refused).
+export const BUNDLE_SCHEMA = 2;
+export const UNKNOWN_OUTLINE_COUNT = 'airspace unknown outline';
 
 export type PointSource = 'SIA' | 'OURAIRPORTS' | 'CLUB';
 
@@ -51,8 +54,12 @@ export interface BundleAirspace {
   scheduleCode: string | null;
   frequencies: RadioFrequency[];
   remarks: string | null;
-  // GeoJSON MultiPolygon coordinates, [lon, lat].
+  // GeoJSON MultiPolygon coordinates, [lon, lat]; empty when the outline is
+  // not published (géométrie inconnue).
   geometry: number[][][][];
+  // Without an outline: the point the SIA gives, null when it cannot be
+  // located (defined in words).
+  referencePoint?: { lat: number; lon: number } | null;
 }
 
 export interface NavdataBundle {

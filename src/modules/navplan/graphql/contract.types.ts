@@ -83,6 +83,7 @@ export class Airspace {
   @Field(() => [RadioFrequency]) frequencies: RadioFrequency[];
   @Field(() => String, { nullable: true }) remarks: string | null;
   @Field(() => GraphQLJSON) geometry: unknown;
+  @Field() outlineKnown: boolean;
 }
 
 // ---------- Aircraft data ----------
@@ -275,6 +276,16 @@ export class AirspaceCrossing {
   @Field() activityKnown: boolean;
 }
 
+// An area near the route whose outline is not published.
+@ObjectType()
+export class UnverifiedAirspace {
+  @Field(() => Airspace) airspace: Airspace;
+  // Distance from the route to its published point; null = not located.
+  @Field(() => Float, { nullable: true }) distanceNm: number | null;
+  @Field(() => CheckStatusEnum) status: CheckStatusEnum;
+  @Field() message: string;
+}
+
 @ObjectType()
 export class Leg {
   @Field(() => Int) index: number;
@@ -417,6 +428,8 @@ export class FlightPlanResult {
   @Field() engineVersion: string;
   @Field(() => CheckStatusEnum) status: CheckStatusEnum;
   @Field(() => [Notice]) notices: Notice[];
+  @Field(() => [UnverifiedAirspace])
+  unverifiedAirspaces: UnverifiedAirspace[];
   @Field() encodedPolyline: string;
   // QNH the plan was computed with: the pilot's, the departure METAR's or standard.
   @Field(() => Float, { nullable: true }) qnhHpa: number | null;

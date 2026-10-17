@@ -681,7 +681,11 @@ export async function buildDossierPdf(
     const crossings = legs.flatMap((leg) =>
       leg.crossings.map((c) => ({ leg, c })),
     );
-    if (crossings.length === 0) {
+    const unverified = result.unverifiedAirspaces ?? [];
+    for (const u of unverified) {
+      w.text(renderMessage(language, u.message), { size: 7, color: ORANGE });
+    }
+    if (crossings.length === 0 && unverified.length === 0) {
       const key = emptyAirspacesKey(result.notices);
       w.text(t(language, key), {
         color: key === 'navplan.pdf.airspaces.none' ? BLACK : ORANGE,
