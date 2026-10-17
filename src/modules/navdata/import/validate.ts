@@ -20,6 +20,12 @@ export const REFERENCE_AERODROMES = [
 export const COUNT_TOLERANCE = 0.1;
 export const POSITION_TOLERANCE_M = 100;
 const REQUIRED_TYPES = ['CTR', 'TMA', 'P', 'R'];
+// Share of airspaces without an outline above which a cycle is rejected
+// (unless forced). Protected areas are left out of the share: the SIA
+// publishes most of them as a single point (111 of 137 in AIRAC 2310),
+// they are still flagged one by one in the report and in the plans.
+export const MAX_UNKNOWN_OUTLINE_SHARE = 0.05;
+const UNKNOWN_OUTLINE_SHARE_EXCLUDES = new Set(['PROTECTED']);
 
 export interface PreviousCycleSummary {
   airspaceCountByType: Record<string, number>;
@@ -148,6 +154,18 @@ export function validateBundle(
           );
         }
       }
+    }
+    const counted = bundle.airspaces.filter(
+      (a) => !UNKNOWN_OUTLINE_SHARE_EXCLUDES.has(a.type),
+    );
+    const unknown = counted.filter((a) => a.geometry.length === 0).length;
+    if (
+      counted.length > 0 &&
+      unknown / counted.length > MAX_UNKNOWN_OUTLINE_SHARE
+    ) {
+      errors.push(
+        `${unknown} of ${counted.length} airspaces (protected areas left out) have no outline (géométrie inconnue), more than ${MAX_UNKNOWN_OUTLINE_SHARE * 100} %`,
+      );
     }
     const previousCounts = previous?.airspaceCountByType ?? {};
     if (Object.keys(previousCounts).length > 0) {

@@ -29,6 +29,7 @@ import {
 import { DEFAULT_FUEL_SETTINGS, fuelSettingsProblems } from './engine/fuel';
 import { inverse, pointAlong } from './engine/geodesy';
 import { STANDARD_PRESSURE_HPA } from './engine/atmosphere';
+import { hasOutline } from './engine/airspace-intersection';
 import { FlightPlanEntity } from './entity/flight-plan.entity';
 import { FlightPlanningSettingsEntity } from './entity/flight-planning-settings.entity';
 import {
@@ -251,12 +252,15 @@ export class NavplanService {
     const lats = route.map((p) => p.lat);
     const lons = route.map((p) => p.lon);
     const allAirspaces = await this.navdata.allAirspaces();
+    // Areas without an outline are all kept: the engine lists those near
+    // the route from their point (UNVERIFIED_AIRSPACE_NEAR_NM).
     const airspaces = allAirspaces.filter(
       (a) =>
-        a.maxLat >= Math.min(...lats) - 0.2 &&
-        a.minLat <= Math.max(...lats) + 0.2 &&
-        a.maxLon >= Math.min(...lons) - 0.3 &&
-        a.minLon <= Math.max(...lons) + 0.3,
+        !hasOutline(a) ||
+        (a.maxLat >= Math.min(...lats) - 0.2 &&
+          a.minLat <= Math.max(...lats) + 0.2 &&
+          a.maxLon >= Math.min(...lons) - 0.3 &&
+          a.minLon <= Math.max(...lons) + 0.3),
     );
     const [nearby, destinationDetails] = await Promise.all([
       this.nearbyMetars(route).catch(() => []),

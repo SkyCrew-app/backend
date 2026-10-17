@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import { deflateRawSync } from 'zlib';
 import {
   airacCycleAt,
@@ -12,11 +13,22 @@ import {
   sha256,
   siaXmlOf,
 } from '../bundle';
-import { emptyReport } from '../bundle-types';
+import {
+  BundleAirspace,
+  emptyReport,
+  UNKNOWN_OUTLINE_COUNT,
+} from '../bundle-types';
+import { bboxOf } from '../navdata-import.service';
 import { parseCsv, parseOurAirports } from '../ourairports';
 import { parseSiaXml } from '../sia-xml.parser';
-import { isSimpleRing, summarize, validateBundle } from '../validate';
+import {
+  isSimpleRing,
+  MAX_UNKNOWN_OUTLINE_SHARE,
+  summarize,
+  validateBundle,
+} from '../validate';
 import { siaSampleBuffer, SIA_SAMPLE_XML } from './fixtures/sia-sample';
+import { sia2310ExcerptsBuffer } from './fixtures/sia-2310-excerpts';
 import { decodeXmlBuffer, walkXml } from '../xml';
 
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -307,5 +319,151 @@ describe('OurAirports and the bundle', () => {
     expect(third.errors).toContain(
       'BOW: outline crosses itself or has no area',
     );
+  });
+});
+
+// Real records of AIRAC 2310 whose outline the reader once drew as a 1 km
+// circle, or rejected.
+describe('SIA XML parser on the real export (AIRAC 2310 extracts)', () => {
+  const report = emptyReport();
+  const parsed = parseSiaXml(decodeXmlBuffer(sia2310ExcerptsBuffer()), report);
+  const airspace = (name: string) =>
+    parsed.airspaces.find((a) => a.name.startsWith(name))!;
+
+  it('keeps an area published as a single point with no outline and its point, never as a small circle', () => {
+    const park = airspace('PRN 390');
+    expect(park.name).toBe('PRN 390 PARC NATIONAL DES CEVENNES');
+    expect(park.geometry).toEqual([]);
+    expect(park.referencePoint).toEqual({ lat: 44.25, lon: 3.583333 });
+    expect(park.ceiling).toEqual({ ref: 'AGL', value: 3300 });
+    expect(airspace('D 595').geometry).toEqual([]);
+    expect(report.warnings).toContain(
+      'PRN 390 PARC NATIONAL DES CEVENNES: géométrie inconnue / unknown outline (published as the point 44.25 3.583333 only), listed in the plans near it',
+    );
+    expect(report.warnings.some((w) => /circle/.test(w))).toBe(false);
+  });
+
+  it('a part defined in words cannot be located', () => {
+    const lta = airspace('LTA FRANCE 2');
+    expect(lta.geometry).toEqual([]);
+    expect(lta.referencePoint).toBeNull();
+    expect(lta.floor).toEqual({ ref: 'FL', value: 115 });
+  });
+
+  it('counts the areas without an outline in the report, with a total', () => {
+    expect(report.counts[UNKNOWN_OUTLINE_COUNT]).toBe(3);
+    expect(report.warnings).toContain(
+      'Géométrie inconnue / unknown outline: 3 airspace(s) of 7, not drawn, flagged in the plans',
+    );
+  });
+
+  it('rebuilds the rings of a part made of several islets from its Contour', () => {
+    const islets = airspace('PRN 25');
+    expect(islets.geometry).toHaveLength(2);
+    expect(islets.geometry[0][0][0]).toEqual([-61.777778, 16.363889]);
+    for (const [ring] of islets.geometry) expect(isSimpleRing(ring)).toBe(true);
+  });
+
+  it('drops a repeated point so that the outline is simple', () => {
+    const tma = airspace('TMA BALE deleg.LANGEN S-E');
+    const ring = tma.geometry[0][0];
+    expect(ring).toHaveLength(18);
+    expect(isSimpleRing(ring)).toBe(true);
+  });
+
+  it('no zone falls back to a point or a circle', () => {
+    for (const a of parsed.airspaces) {
+      for (const polygon of a.geometry) {
+        expect(polygon[0].length).toBeGreaterThanOrEqual(4);
+        expect(polygon[0]).not.toHaveLength(73);
+      }
+    }
+  });
+
+  it('stores the point as the box of an area without outline, the world when not located', () => {
+    expect(bboxOf([], { lat: 44.25, lon: 3.583333 })).toEqual({
+      min_lat: 44.25,
+      max_lat: 44.25,
+      min_lon: 3.583333,
+      max_lon: 3.583333,
+    });
+    expect(bboxOf([], null)).toEqual({
+      min_lat: -90,
+      max_lat: 90,
+      min_lon: -180,
+      max_lon: 180,
+    });
+  });
+});
+
+// The whole export (26 MB, not kept in the repository): run with
+// SIA_REAL_EXPORT=<path to export_xml_bd_sia_*.zip>.
+const realExport = process.env.SIA_REAL_EXPORT;
+(realExport ? describe : describe.skip)('the whole real SIA export', () => {
+  it('builds a cycle that passes validation, with no zone drawn as a point or a circle', () => {
+    const { bundle, report } = buildBundle({
+      sia: {
+        fileName: 'export.zip',
+        data: readFileSync(realExport as string),
+      },
+    });
+    expect(report.errors).toEqual([]);
+    expect(report.warnings.some((w) => /circle/.test(w))).toBe(false);
+    const unknown = bundle.airspaces.filter((a) => a.geometry.length === 0);
+    expect(report.counts[UNKNOWN_OUTLINE_COUNT] ?? 0).toBe(unknown.length);
+    for (const a of bundle.airspaces) {
+      for (const polygon of a.geometry) {
+        expect(polygon[0].length).toBeGreaterThanOrEqual(4);
+        expect(isSimpleRing(polygon[0])).toBe(true);
+      }
+    }
+    const validation = emptyReport();
+    expect(validateBundle(bundle, null, validation)).toBe(true);
+  });
+});
+
+describe('cycles with areas without an outline', () => {
+  const { bundle } = buildBundle({
+    sia: { fileName: 'XML_SIA_2026-10-29.xml', data: siaSampleBuffer() },
+    now: day('2026-10-16'),
+  });
+  const withUnknown = (type: string, count: number) => ({
+    ...bundle,
+    airspaces: [
+      ...bundle.airspaces,
+      ...Array.from({ length: count }, (_, i) => ({
+        ...bundle.airspaces[0],
+        name: `${type} ${i}`,
+        type: type as BundleAirspace['type'],
+        geometry: [],
+        referencePoint: { lat: 45, lon: 5 },
+      })),
+    ],
+  });
+
+  it(`rejects a cycle where more than ${MAX_UNKNOWN_OUTLINE_SHARE * 100} % of the airspaces have no outline, protected areas left out`, () => {
+    const counted = bundle.airspaces.filter(
+      (a) => a.type !== 'PROTECTED',
+    ).length;
+    const report = emptyReport();
+    expect(validateBundle(withUnknown('R', 1), null, report)).toBe(false);
+    expect(report.errors).toContain(
+      `1 of ${counted + 1} airspaces (protected areas left out) have no outline (géométrie inconnue), more than 5 %`,
+    );
+    expect(
+      validateBundle(withUnknown('PROTECTED', 20), null, emptyReport()),
+    ).toBe(true);
+  });
+
+  it('refuses a schema 1 bundle with SIA data, still reads an aerodromes-only one', () => {
+    const old = encodeBundle({ ...bundle, schema: 1 });
+    expect(() => decodeBundle(old)).toThrow(/rebuild/);
+    const aerodromesOnly = encodeBundle({
+      ...bundle,
+      schema: 1,
+      sources: {},
+      airspaces: [],
+    });
+    expect(decodeBundle(aerodromesOnly).schema).toBe(1);
   });
 });

@@ -398,6 +398,8 @@ export const en: Record<TranslationKey, string> = {
     'Aeronautical data of cycle {{airac}} ({{date}}) OUT OF DATE — check the publications in force',
   'navplan.notice.noAirspaceData':
     'No airspace data imported: the airspaces crossed are not checked',
+  'navplan.notice.unverified':
+    '{{count}} area(s) near the route without a published outline, not checked: {{names}} — find them on the current chart',
   'navplan.notice.qnhDefaulted':
     'QNH unknown: computed on 1013.25 hPa, flight levels and pressure altitudes are approximate',
   'navplan.notice.perfNotValidated':
@@ -494,6 +496,10 @@ export const en: Record<TranslationKey, string> = {
   'navplan.airspace.classE':
     'No clearance in VFR; radio and transponder as RMZ/TMZ require.',
   'navplan.airspace.other': 'Airspace to check on the current chart.',
+  'navplan.airspace.unverified':
+    'Unverified area: {{name}}, outline not available — find it on the current chart.',
+  'navplan.airspace.unverifiedUnlocated':
+    'Unverified area: {{name}}, outline not available and position unknown — find it on the current chart.',
   'navplan.airspace.checkHeight':
     'Limit given as a height above ground: check on the chart. Unknown activity ≠ inactive area.',
   'navplan.pdf.title': 'Flight file',

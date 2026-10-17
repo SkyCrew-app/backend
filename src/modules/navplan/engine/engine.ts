@@ -3,6 +3,7 @@ import {
   AirspaceCrossing,
   AirspaceRecord,
   legCrossings,
+  unverifiedAirspaces,
 } from './airspace-intersection';
 import {
   isaTemperatureC,
@@ -193,6 +194,15 @@ export interface LegResult {
   crossings: AirspaceCrossing[];
 }
 
+// An area near the route whose outline is not published: to be checked on
+// the chart (never "not crossed").
+export interface UnverifiedAirspaceResult {
+  airspace: AirspaceRecord;
+  distanceNm: number | null;
+  status: CheckStatus;
+  message: MessageRef;
+}
+
 export interface Notice {
   code: string;
   status: CheckStatus;
@@ -219,6 +229,8 @@ export interface FlightPlanResult {
   engineVersion: string;
   status: CheckStatus;
   notices: Notice[];
+  // Absent from plans saved before it existed and from failed plans.
+  unverifiedAirspaces?: UnverifiedAirspaceResult[];
   encodedPolyline: string;
   daylight: Daylight;
   qnhHpa: number;
@@ -724,10 +736,42 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     });
   }
 
-  const crossingStatuses = [
-    ...legs,
-    ...(alternateLeg ? [alternateLeg] : []),
-  ].flatMap((leg) => leg.crossings.map((c) => c.status));
+  const flownLegs = [...legs, ...(alternateLeg ? [alternateLeg] : [])];
+  const altitudes = [
+    startAlt,
+    ...built.profile.points.map((p) => p.altitudeFt),
+    ...flownLegs.map((leg) => leg.altitudeFt),
+  ];
+  const unverified: UnverifiedAirspaceResult[] = unverifiedAirspaces(
+    flownLegs,
+    input.airspaces,
+    navdataTooOld
+      ? null
+      : { minAltFt: Math.min(...altitudes), maxAltFt: Math.max(...altitudes) },
+    input.qnhHpa,
+    input.settings.verticalMarginFt,
+  ).map(({ airspace, distanceNm }) => ({
+    airspace,
+    distanceNm,
+    status: 'WARNING',
+    message: {
+      key:
+        distanceNm === null
+          ? 'navplan.airspace.unverifiedUnlocated'
+          : 'navplan.airspace.unverified',
+      params: { name: airspace.name },
+    },
+  }));
+  if (unverified.length > 0) {
+    notice('AIRSPACE_UNVERIFIED', 'WARNING', 'navplan.notice.unverified', {
+      count: unverified.length,
+      names: unverified.map((u) => u.airspace.name).join(', '),
+    });
+  }
+
+  const crossingStatuses = flownLegs.flatMap((leg) =>
+    leg.crossings.map((c) => c.status),
+  );
   const status = worstStatus(
     ...notices.map((n) => n.status),
     fuel.status,
@@ -756,6 +800,7 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     engineVersion: ENGINE_VERSION,
     status,
     notices,
+    unverifiedAirspaces: unverified,
     encodedPolyline: polyline.encode(route),
     daylight,
     qnhHpa: input.qnhHpa,

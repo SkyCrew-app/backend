@@ -410,6 +410,8 @@ export const fr = {
     'Données aéronautiques du cycle {{airac}} ({{date}}) PÉRIMÉES — vérifier les publications en vigueur',
   'navplan.notice.noAirspaceData':
     'Aucune donnée d’espace aérien importée : les zones traversées ne sont pas vérifiées',
+  'navplan.notice.unverified':
+    '{{count}} zone(s) proche(s) de la route sans tracé publié, non vérifiée(s) : {{names}} — repérez-les sur la carte en vigueur',
   'navplan.notice.qnhDefaulted':
     'QNH inconnu : calcul sur 1013,25 hPa, les niveaux de vol et altitudes-pression sont approximatifs',
   'navplan.notice.perfNotValidated':
@@ -511,6 +513,10 @@ export const fr = {
   'navplan.airspace.classE':
     'Pas de clairance en VFR ; contact radio et transpondeur selon RMZ/TMZ.',
   'navplan.airspace.other': 'Espace à vérifier sur la carte en vigueur.',
+  'navplan.airspace.unverified':
+    'Zone non vérifiée : {{name}}, tracé non disponible — la repérer sur la carte en vigueur.',
+  'navplan.airspace.unverifiedUnlocated':
+    'Zone non vérifiée : {{name}}, tracé non disponible et position non localisable — la repérer sur la carte en vigueur.',
   'navplan.airspace.checkHeight':
     'Limite exprimée en hauteur sol : vérifier sur la carte. Activité inconnue ≠ zone inactive.',
   'navplan.pdf.title': 'Dossier de vol',

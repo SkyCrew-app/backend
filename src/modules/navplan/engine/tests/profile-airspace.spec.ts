@@ -5,7 +5,14 @@ import {
   AirspaceRecord,
   lateralIntervals,
   legCrossings,
+  referencePointOf,
+  UNLOCATED_BOX,
+  UNVERIFIED_AIRSPACE_NEAR_NM,
+  unverifiedAirspaces,
 } from '../airspace-intersection';
+import { computeFlightPlan } from '../engine';
+import { renderResult } from '../../render';
+import { engineInput, LFRN, LFRS } from './fixture';
 import { direct, inverse, METRES_PER_NM } from '../geodesy';
 import { cruiseAt, PerformanceError } from '../performance';
 
@@ -327,5 +334,120 @@ describe('airspace crossings', () => {
     const intervals = lateralIntervals(at(-20, 0), at(20, 0), 40, two.geometry);
     expect(intervals).toHaveLength(2);
     expect(intervals[0][0]).toBeLessThan(intervals[1][0]);
+  });
+});
+
+// An area published without an outline (géométrie inconnue): empty
+// geometry, its point as the box, or the whole world when not located.
+const pointOnly = (
+  name: string,
+  point: { lat: number; lon: number } | null,
+  overrides: Partial<AirspaceRecord> = {},
+): AirspaceRecord =>
+  zone({
+    id: name,
+    name,
+    type: 'PROTECTED',
+    icaoClass: null,
+    ceiling: { ref: 'AGL', value: 3300 },
+    geometry: [],
+    ...(point
+      ? {
+          minLat: point.lat,
+          maxLat: point.lat,
+          minLon: point.lon,
+          maxLon: point.lon,
+        }
+      : UNLOCATED_BOX),
+    ...overrides,
+  });
+
+describe('areas without an outline', () => {
+  const leg = legThrough(2500);
+  const flight = { minAltFt: 0, maxAltFt: 2500 };
+
+  it('are never crossed laterally but are listed when their point is near the route', () => {
+    const near = pointOnly('PRN NEAR', at(0, 10));
+    const far = pointOnly('PRN FAR', at(0, 40));
+    expect(legCrossings(leg, [near, far], 1013.25, 300)).toEqual([]);
+    const listed = unverifiedAirspaces(
+      [leg],
+      [near, far, zone()],
+      flight,
+      1013.25,
+      300,
+    );
+    expect(listed.map((u) => u.airspace.name)).toEqual(['PRN NEAR']);
+    expect(listed[0].distanceNm).toBeCloseTo(10, 1);
+    expect(referencePointOf(near)?.lat).toBeCloseTo(at(0, 10).lat, 9);
+    expect(
+      unverifiedAirspaces(
+        [leg],
+        [pointOnly('PRN EDGE', at(0, UNVERIFIED_AIRSPACE_NEAR_NM - 0.5))],
+        flight,
+        1013.25,
+        300,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('an area that cannot be located is always listed, unless the flight stays below its floor', () => {
+    const words = pointOnly('LTA FRANCE 2', null, {
+      type: 'CTA',
+      floor: { ref: 'FL', value: 115 },
+      ceiling: { ref: 'FL', value: 195 },
+    });
+    const low = pointOnly('PRN SOMEWHERE', null);
+    const listed = unverifiedAirspaces(
+      [leg],
+      [words, low],
+      flight,
+      1013.25,
+      300,
+    );
+    expect(listed).toEqual([{ airspace: low, distanceNm: null }]);
+    // Navigation data too old: no vertical filter.
+    expect(
+      unverifiedAirspaces([leg], [words, low], null, 1013.25, 300),
+    ).toHaveLength(2);
+  });
+
+  it('a plan near one says so in its result and is not "Conforme"', () => {
+    const middle = {
+      lat: (LFRS.lat + LFRN.lat) / 2,
+      lon: (LFRS.lon + LFRN.lon) / 2 + 0.1,
+    };
+    const park = pointOnly('PRN 390 PARC NATIONAL DES CEVENNES', middle);
+    const plan = computeFlightPlan(engineInput({ airspaces: [park] }));
+    expect(plan.unverifiedAirspaces).toEqual([
+      expect.objectContaining({
+        airspace: park,
+        status: 'WARNING',
+        message: {
+          key: 'navplan.airspace.unverified',
+          params: { name: 'PRN 390 PARC NATIONAL DES CEVENNES' },
+        },
+      }),
+    ]);
+    expect(plan.notices).toContainEqual(
+      expect.objectContaining({
+        code: 'AIRSPACE_UNVERIFIED',
+        status: 'WARNING',
+      }),
+    );
+    expect(plan.status).not.toBe('OK');
+    const rendered = renderResult(plan, 'fr');
+    expect(rendered.unverifiedAirspaces[0].message).toBe(
+      'Zone non vérifiée : PRN 390 PARC NATIONAL DES CEVENNES, tracé non disponible — la repérer sur la carte en vigueur.',
+    );
+    expect(rendered.unverifiedAirspaces[0].airspace.outlineKnown).toBe(false);
+    expect(renderResult(plan, 'en').unverifiedAirspaces[0].message).toBe(
+      'Unverified area: PRN 390 PARC NATIONAL DES CEVENNES, outline not available — find it on the current chart.',
+    );
+    const without = computeFlightPlan(engineInput());
+    expect(without.unverifiedAirspaces).toEqual([]);
+    expect(without.notices.some((n) => n.code === 'AIRSPACE_UNVERIFIED')).toBe(
+      false,
+    );
   });
 });

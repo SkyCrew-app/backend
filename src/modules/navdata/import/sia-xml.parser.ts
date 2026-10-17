@@ -10,6 +10,7 @@ import {
   BundleRunway,
   bump,
   ImportReport,
+  UNKNOWN_OUTLINE_COUNT,
 } from './bundle-types';
 import { child, childText, walkXml, XmlElement } from './xml';
 
@@ -36,6 +37,19 @@ import { child, childText, walkXml, XmlElement } from './xml';
 // the SIA. Checked against the published structure of the file as read by
 // open-source readers of it (AIPP region LF, sia-aero, archive.aero), see
 // the import report for what is skipped.
+// Contour lines are "<seq>,Cloture=<id>,<lat lon of the start>,<segment>
+// (<args>)[TAB<flag>[TAB<text>]]", segment grc (great circle), rhl (rhumb
+// line), cwa / cca (arcs), cir (circle), fnt (along a Bordure). Checked on
+// the AIRAC 2310 export (2023-10-05):
+// - a part made of several closed rings (islets) keeps only the last one in
+//   its Geometrie: the rings are rebuilt from the Contour when it has only
+//   straight segments;
+// - protected areas (PRN), D 595, R 1 (NW) and part 2 of LTA FRANCE are
+//   published as a single point, or a point and a text: the same in the
+//   AIXM 4.5 file of the same zip. Their outline is unknown: they are kept
+//   with an empty geometry and their point (none when a text defines the
+//   part), never drawn as a small circle, and listed in the plans near
+//   them (see unverifiedAirspaces in airspace-intersection.ts).
 
 const AIRSPACE_TYPES: Record<string, AirspaceType[]> = {
   P: ['P'],
@@ -67,9 +81,10 @@ const NAVAID_TYPES: Record<string, BundlePoint['type']> = {
   TACAN: 'TACAN',
 };
 
-// Radius of a zone published as a single point without radius.
-const POINT_ZONE_RADIUS_NM = 0.54; // 1 km
 const CIRCLE_POINTS = 72;
+// A text this long after the point of a Contour defines the part in words:
+// the point is then only an anchor, not a position of the area.
+const TEXT_DEFINITION_MIN_LENGTH = 20;
 
 export interface SiaParseResult {
   effectiveDate: string | null;
@@ -121,7 +136,12 @@ const parseGeometrie = (text: string | null): number[][] => {
   const ring: number[][] = [];
   for (const line of text.split(/\r?\n/)) {
     const [lat, lon] = line.trim().split(',').map(Number);
-    if (Number.isFinite(lat) && Number.isFinite(lon)) ring.push([lon, lat]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    // A segment ending where a border starts repeats the point (TMA BALE
+    // 09, 10 and deleg.LANGEN S-E in AIRAC 2310): one is kept.
+    const last = ring[ring.length - 1];
+    if (last && last[0] === lon && last[1] === lat) continue;
+    ring.push([lon, lat]);
   }
   return ring;
 };
@@ -158,6 +178,53 @@ const circleOfContour = (
         ? (value * 1000) / METRES_PER_NM
         : value / METRES_PER_NM;
   return { lat: Number(match[1]), lon: Number(match[2]), radiusNm };
+};
+
+interface ContourSegment {
+  lat: number;
+  lon: number;
+  kind: string;
+  text: string;
+}
+
+const contourSegments = (contour: string | null): ContourSegment[] => {
+  const segments: ContourSegment[] = [];
+  for (const line of (contour ?? '').split(/\r?\n/)) {
+    const match =
+      /^\s*\d+,Cloture=\d+,(-?[\d.]+) (-?[\d.]+),([a-z]{3})\([^)]*\)(.*)$/.exec(
+        line,
+      );
+    if (!match) continue;
+    segments.push({
+      lat: Number(match[1]),
+      lon: Number(match[2]),
+      kind: match[3],
+      text: (match[4].split('\t')[2] ?? '').trim(),
+    });
+  }
+  return segments;
+};
+
+// Closed rings of a Contour made of straight segments only; a ring closes
+// when a segment starts back on its first point.
+const straightContourRings = (segments: ContourSegment[]): number[][][] => {
+  if (segments.some((s) => s.kind !== 'grc' && s.kind !== 'rhl')) return [];
+  const rings: number[][][] = [];
+  let ring: number[][] = [];
+  for (const segment of segments) {
+    const point = [segment.lon, segment.lat];
+    if (
+      ring.length >= 3 &&
+      ring[0][0] === point[0] &&
+      ring[0][1] === point[1]
+    ) {
+      rings.push([...ring, ring[0]]);
+      ring = [];
+      continue;
+    }
+    ring.push(point);
+  }
+  return rings;
 };
 
 const closeRing = (ring: number[][]): number[][] => {
@@ -363,6 +430,7 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
   const espaces = new Map(list('EspaceS').map((e) => [e.attributes.pk, e]));
   const parties = new Map(list('PartieS').map((p) => [p.attributes.pk, p]));
   const airspaces: BundleAirspace[] = [];
+  let unknownOutlines = 0;
   for (const volume of list('VolumeS')) {
     const partie = parties.get(ref(volume, 'Partie') ?? '');
     const espace = partie
@@ -393,20 +461,28 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
       );
       continue;
     }
-    let ring = closeRing(parseGeometrie(childText(partie, 'Geometrie')));
-    if (ring.length < 4) {
-      const circleSpec = circleOfContour(childText(partie, 'Contour'));
-      if (circleSpec) {
-        ring = circle(circleSpec.lat, circleSpec.lon, circleSpec.radiusNm);
-      } else if (ring.length >= 1) {
-        ring = circle(ring[0][1], ring[0][0], POINT_ZONE_RADIUS_NM);
-        report.warnings.push(
-          `${spaceName}: published as a point, drawn as a 1 km circle`,
-        );
-      } else {
-        bump(report.skipped, 'airspace without geometry');
-        continue;
-      }
+    const segments = contourSegments(childText(partie, 'Contour'));
+    let geometry: number[][][][] = [];
+    let referencePoint: BundleAirspace['referencePoint'] = null;
+    const contourRings = straightContourRings(segments);
+    const ring = closeRing(parseGeometrie(childText(partie, 'Geometrie')));
+    const circleSpec = circleOfContour(childText(partie, 'Contour'));
+    if (contourRings.length > 1) {
+      geometry = contourRings.map((r) => [r]);
+    } else if (ring.length >= 4) {
+      geometry = [[ring]];
+    } else if (circleSpec) {
+      geometry = [
+        [circle(circleSpec.lat, circleSpec.lon, circleSpec.radiusNm)],
+      ];
+    } else {
+      const anchor =
+        ring[0] ?? (segments[0] && [segments[0].lon, segments[0].lat]);
+      const definedInWords = segments.some(
+        (s) => s.text.length >= TEXT_DEFINITION_MIN_LENGTH,
+      );
+      referencePoint =
+        anchor && !definedInWords ? { lat: anchor[1], lon: anchor[0] } : null;
     }
     const partName = childText(partie, 'NomPartie');
     const usualName = childText(partie, 'NomUsuel');
@@ -446,10 +522,26 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
         scheduleCode,
         frequencies: radioByOwner.get(espace.attributes.pk) ?? [],
         remarks: remarks || null,
-        geometry: [[ring]],
+        geometry,
+        referencePoint,
       });
       bump(report.counts, `airspace ${type}`);
+      if (geometry.length === 0) {
+        unknownOutlines++;
+        report.warnings.push(
+          referencePoint
+            ? `${name}: géométrie inconnue / unknown outline (published as the point ${referencePoint.lat} ${referencePoint.lon} only), listed in the plans near it`
+            : `${name}: géométrie inconnue / unknown outline and position, listed in every plan that reaches its levels`,
+        );
+      }
     }
+  }
+
+  if (unknownOutlines > 0) {
+    report.counts[UNKNOWN_OUTLINE_COUNT] = unknownOutlines;
+    report.warnings.push(
+      `Géométrie inconnue / unknown outline: ${unknownOutlines} airspace(s) of ${airspaces.length}, not drawn, flagged in the plans`,
+    );
   }
 
   return { effectiveDate, version, points, airspaces };
