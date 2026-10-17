@@ -20,6 +20,7 @@ import {
   validateBundle,
 } from './validate';
 import { CLUB_TIME_ZONE } from '../../reservations/booking-rules';
+import { UNLOCATED_BOX } from '../../navplan/engine/airspace-intersection';
 
 // Loads the navigation data bundles into the database and switches cycles
 // on their effective date.
@@ -36,7 +37,28 @@ export const BASELINE_FILE = 'navdata-baseline.json.gz';
 const LOCK_KEY = 1797_0001;
 const CHUNK = 500;
 
-const bboxOf = (geometry: number[][][][]) => {
+// Without an outline the box is the published point, or the whole world
+// when the area cannot be located (see referencePointOf).
+export const bboxOf = (
+  geometry: number[][][][],
+  referencePoint?: { lat: number; lon: number } | null,
+) => {
+  if (geometry.length === 0) {
+    const box = referencePoint
+      ? {
+          minLat: referencePoint.lat,
+          maxLat: referencePoint.lat,
+          minLon: referencePoint.lon,
+          maxLon: referencePoint.lon,
+        }
+      : UNLOCATED_BOX;
+    return {
+      min_lat: box.minLat,
+      max_lat: box.maxLat,
+      min_lon: box.minLon,
+      max_lon: box.maxLon,
+    };
+  }
   let minLat = Infinity;
   let maxLat = -Infinity;
   let minLon = Infinity;
@@ -247,7 +269,7 @@ export class NavdataImportService implements OnApplicationBootstrap {
             ceiling_ref: a.ceiling.ref,
             ceiling_value: a.ceiling.value,
             geometry: a.geometry,
-            ...bboxOf(a.geometry),
+            ...bboxOf(a.geometry, a.referencePoint),
             activity: a.activity,
             schedule_code: a.scheduleCode?.slice(0, 16) ?? null,
             frequencies: a.frequencies,

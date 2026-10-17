@@ -33,9 +33,13 @@ export function decodeBundle(
     throw new BundleError('SHA-256 of the bundle does not match');
   }
   const bundle = JSON.parse(gunzipSync(data).toString('utf8')) as NavdataBundle;
-  if (bundle.schema !== BUNDLE_SCHEMA) {
+  // Schema 1 is still read for aerodromes-only bundles (no airspace).
+  const readable =
+    bundle.schema === BUNDLE_SCHEMA ||
+    (bundle.schema === 1 && !bundle.sources?.sia);
+  if (!readable) {
     throw new BundleError(
-      `Bundle schema ${bundle.schema} is not ${BUNDLE_SCHEMA}`,
+      `Bundle schema ${bundle.schema} is not ${BUNDLE_SCHEMA}${bundle.schema === 1 ? ' (SIA data built before the unknown-outline rule: rebuild it)' : ''}`,
     );
   }
   return bundle;

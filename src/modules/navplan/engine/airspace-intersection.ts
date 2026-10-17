@@ -412,3 +412,93 @@ export function legCrossings(
   }
   return crossings.sort((a, b) => a.entryNm - b.entryNm);
 }
+
+// Airspaces whose outline is not published (géométrie inconnue): never
+// drawn, never "not crossed". The import keeps the point the SIA gives as
+// their box, or UNLOCATED_BOX when they cannot be located.
+export const UNLOCATED_BOX = {
+  minLat: -90,
+  maxLat: 90,
+  minLon: -180,
+  maxLon: 180,
+};
+// Distance from the published point within which such an area is listed
+// in a plan: the cores of the metropolitan national parks reach 25 NM from
+// their published point (Mercantour, AIRAC 2310).
+export const UNVERIFIED_AIRSPACE_NEAR_NM = 30;
+
+export const hasOutline = (airspace: Pick<AirspaceRecord, 'geometry'>) =>
+  airspace.geometry.length > 0;
+
+export const referencePointOf = (
+  airspace: Pick<
+    AirspaceRecord,
+    'geometry' | 'minLat' | 'maxLat' | 'minLon' | 'maxLon'
+  >,
+): LatLon | null =>
+  !hasOutline(airspace) &&
+  airspace.minLat === airspace.maxLat &&
+  airspace.minLon === airspace.maxLon
+    ? { lat: airspace.minLat, lon: airspace.maxLon }
+    : null;
+
+export interface UnverifiedAirspace {
+  airspace: AirspaceRecord;
+  // Distance from the route to the published point; null = not located.
+  distanceNm: number | null;
+}
+
+const distanceToLegNm = (point: LatLon, from: LatLon, to: LatLon) => {
+  const projection = localProjection(point);
+  const a = projection.forward(from);
+  const b = projection.forward(to);
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const length2 = dx * dx + dy * dy;
+  const t =
+    length2 === 0
+      ? 0
+      : Math.min(1, Math.max(0, -(a[0] * dx + a[1] * dy) / length2));
+  return Math.hypot(a[0] + t * dx, a[1] + t * dy);
+};
+
+// The areas without an outline that the route may meet: near their point
+// (or anywhere when they cannot be located), unless the whole flight is
+// known to stay below their floor or above their ceiling.
+export function unverifiedAirspaces(
+  legs: { from: LatLon; to: LatLon }[],
+  airspaces: AirspaceRecord[],
+  flight: { minAltFt: number; maxAltFt: number } | null,
+  qnhHpa: number,
+  marginFt: number,
+): UnverifiedAirspace[] {
+  const found: UnverifiedAirspace[] = [];
+  for (const airspace of airspaces) {
+    if (hasOutline(airspace)) continue;
+    if (flight) {
+      const relation = verticalRelation(
+        flight.minAltFt,
+        flight.maxAltFt,
+        airspace,
+        qnhHpa,
+        marginFt,
+      );
+      if (relation === 'BELOW' || relation === 'ABOVE') continue;
+    }
+    const point = referencePointOf(airspace);
+    if (!point) {
+      found.push({ airspace, distanceNm: null });
+      continue;
+    }
+    const distanceNm = Math.min(
+      ...legs.map((leg) => distanceToLegNm(point, leg.from, leg.to)),
+    );
+    if (distanceNm <= UNVERIFIED_AIRSPACE_NEAR_NM)
+      found.push({ airspace, distanceNm });
+  }
+  return found.sort(
+    (a, b) =>
+      (a.distanceNm ?? Infinity) - (b.distanceNm ?? Infinity) ||
+      a.airspace.name.localeCompare(b.airspace.name),
+  );
+}

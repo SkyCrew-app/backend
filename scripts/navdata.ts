@@ -34,7 +34,11 @@ import {
   encodeBundle,
   sha256,
 } from '../src/modules/navdata/import/bundle';
-import { NavdataBundle } from '../src/modules/navdata/import/bundle-types';
+import {
+  emptyReport,
+  NavdataBundle,
+} from '../src/modules/navdata/import/bundle-types';
+import { validateBundle } from '../src/modules/navdata/import/validate';
 import {
   OURAIRPORTS_BASE_URL,
   OurAirportsFiles,
@@ -132,6 +136,9 @@ async function bundleFromArguments(): Promise<{
     ourAirportsPoints: shipped,
     airac: option('airac'),
   });
+  // What the import will check (without the previous cycle to compare to).
+  const validation = emptyReport();
+  const accepted = validateBundle(bundle, null, validation);
   console.log(
     JSON.stringify(
       {
@@ -139,6 +146,7 @@ async function bundleFromArguments(): Promise<{
         skipped: report.skipped,
         warnings: report.warnings,
         errors: report.errors,
+        validation: { accepted, errors: validation.errors },
       },
       null,
       2,

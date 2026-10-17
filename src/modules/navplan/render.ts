@@ -111,6 +111,12 @@ export function renderResult(result: FlightPlanResult, language: Language) {
       effectiveFrom: date(result.navdata.effectiveFrom),
       effectiveTo: date(result.navdata.effectiveTo),
     },
+    unverifiedAirspaces: (result.unverifiedAirspaces ?? []).map((u) => ({
+      airspace: airspaceView(u.airspace),
+      distanceNm: u.distanceNm,
+      status: u.status,
+      message: renderMessage(language, u.message),
+    })),
     notices: result.notices.map((n) => ({
       code: n.code,
       status: n.status,
