@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.20.3](https://github.com/SkyCrew-app/backend/compare/2.20.2...2.20.3) (2026-10-17)
+
+
+### Bug Fixes
+
+* **flight-plans:** :bug: flag SIA areas without outline instead of drawing 1 km circles ([#214](https://github.com/SkyCrew-app/backend/issues/214)) ([dade0b0](https://github.com/SkyCrew-app/backend/commit/dade0b0f224c8b8dbba17782b5820416f1a5f225))
+
 ## [2.20.2](https://github.com/SkyCrew-app/backend/compare/2.20.1...2.20.2) (2026-10-17)
 
 
