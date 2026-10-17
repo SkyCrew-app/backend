@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.20.2](https://github.com/SkyCrew-app/backend/compare/2.20.1...2.20.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **flight-plans:** :bug: accept template sources up to 2000 characters ([#210](https://github.com/SkyCrew-app/backend/issues/210)) ([016cfb6](https://github.com/SkyCrew-app/backend/commit/016cfb606ba959d7da186c69bc48aba1b659fceb))
+
 ## [2.20.1](https://github.com/SkyCrew-app/backend/compare/2.20.0...2.20.1) (2026-10-16)
 
 
