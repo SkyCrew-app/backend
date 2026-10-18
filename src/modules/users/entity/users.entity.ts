@@ -136,6 +136,13 @@ export class User {
   @Column({ type: 'int', default: 0 })
   sessionVersion: number;
 
+  // When the member last opened a session (password, then the code of their
+  // authenticator when they use one). Kept after the connection log is
+  // purged. Set by the connection log only.
+  @Field({ nullable: true, middleware: [privateField] })
+  @Column({ name: 'last_sign_in_at', type: 'timestamptz', nullable: true })
+  lastSignInAt: Date;
+
   // Language the member is written to (e-mails, notifications): 'fr' or 'en'.
   @Field({ nullable: true, middleware: [privateField] })
   @Column({ type: 'varchar', default: 'fr' })

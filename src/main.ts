@@ -14,6 +14,7 @@ import {
 } from './common/middleware/protect-uploads.middleware';
 import { validationPipeOptions } from './config/validation.config';
 import { allowedOrigins } from './config/cors.config';
+import { trustProxySetting } from './config/trust-proxy.config';
 import { DataSource } from 'typeorm';
 import { ensureBaseData } from './db/ensure-base-data';
 import { User } from './modules/users/entity/users.entity';
@@ -27,12 +28,10 @@ async function bootstrap() {
     rawBody: true,
   });
 
-  // Behind a reverse proxy, the client address comes from X-Forwarded-For.
-  // TRUST_PROXY is the number of proxies in front of the application; leave
-  // it unset when the application is reached directly.
-  if (process.env.TRUST_PROXY) {
-    app.set('trust proxy', Number(process.env.TRUST_PROXY));
-  }
+  // Behind the reverse proxies (nginx, then Caddy), the client address comes
+  // from X-Forwarded-For, believed only from proxies on the loopback or a
+  // private network: see config/trust-proxy.config.ts.
+  app.set('trust proxy', trustProxySetting());
   const port = process.env.PORT || 3000;
   const enableSwagger =
     process.env.NODE_ENV !== 'production' ||

@@ -39,7 +39,10 @@ services:
       BASE_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
       FRONTEND_URL: ${PUBLIC_URL}
       ALLOWED_ORIGINS: ${PUBLIC_URL}
-      TRUST_PROXY: 1
+      # The visitor's address is read from X-Forwarded-For as set by the
+      # proxies on the private network only (Caddy, and a web server of the
+      # host in front of it): see src/config/trust-proxy.config.ts.
+      TRUST_PROXY: private
       DATABASE_URL: postgresql://skycrew:${DB_PASSWORD:?set DB_PASSWORD in .env}@db:5432/skycrew
       DB_HOST: db
       DB_PORT: 5432
