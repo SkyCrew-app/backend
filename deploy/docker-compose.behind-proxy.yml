@@ -22,8 +22,9 @@ services:
 
   backend:
     environment:
-      # The web server of the host, then the proxy above.
-      TRUST_PROXY: 2
+      # The web server of the host, then the proxy above: both on the
+      # loopback or a private network, hence trusted.
+      TRUST_PROXY: private
     mem_limit: 1g
     cpus: 1.5
 

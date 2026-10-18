@@ -5,6 +5,7 @@ import { LoginInput } from './dto/login-input.dto';
 import { Response, Request } from 'express';
 import {
   BadRequestException,
+  Optional,
   UnauthorizedException,
   UseFilters,
   UseGuards,
@@ -17,13 +18,36 @@ import {
 } from '../../common/guards/gql-throttler.guard';
 import { Throttle } from '@nestjs/throttler';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
+import { LoginEventsService } from '../../common/login-events/login-events.service';
+import {
+  LoginMethod,
+  LoginOutcome,
+} from '../../common/login-events/login-events';
 
 const TWO_FACTOR_CHALLENGE_COOKIE = 'two_factor_challenge';
 
 @Resolver()
 @UseFilters(LocalizedExceptionFilter)
 export class AuthResolver {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    // Every attempt goes to the connection log; it never blocks a sign-in.
+    @Optional() private readonly loginEvents?: LoginEventsService,
+  ) {}
+
+  private async log(
+    outcome: LoginOutcome,
+    method: LoginMethod | null,
+    userId: number | null,
+    email: string | null,
+    req: Request | undefined,
+  ): Promise<void> {
+    try {
+      await this.loginEvents?.record({ outcome, method, userId, email, req });
+    } catch {
+      // The log never holds a sign-in back (record() does not throw anyway).
+    }
+  }
 
   private getCookieOptions() {
     return {
@@ -46,12 +70,24 @@ export class AuthResolver {
   async login(
     @Args('loginInput') loginInput: LoginInput,
     @Context('res') res: Response,
+    @Context('req') req?: Request,
   ) {
-    const user = await this.authService.validateSignIn(
+    const attempt = await this.authService.attemptSignIn(
       loginInput.email,
       loginInput.password,
     );
+    await this.log(
+      attempt.outcome,
+      LoginMethod.PASSWORD,
+      attempt.userId,
+      loginInput.email,
+      req,
+    );
 
+    if (attempt.outcome === LoginOutcome.ACCOUNT_DEACTIVATED) {
+      throw this.authService.deactivatedAccountError();
+    }
+    const user = attempt.user;
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -175,7 +211,15 @@ export class AuthResolver {
       );
     }
 
-    const jwt = await this.authService.verify2FAAndLogin(email, token);
+    const attempt = await this.authService.attemptSecondFactor(email, token);
+    await this.log(
+      attempt.outcome,
+      LoginMethod.TWO_FACTOR_CODE,
+      attempt.userId,
+      email,
+      req,
+    );
+    const jwt = attempt.jwt;
 
     if (!jwt) {
       throw new UnauthorizedException('Invalid 2FA code');
@@ -197,7 +241,16 @@ export class AuthResolver {
 
   @Public()
   @Mutation(() => Boolean)
-  async logout(@Context('res') res: Response): Promise<boolean> {
+  async logout(
+    @Context('res') res: Response,
+    @Context('req') req?: Request,
+  ): Promise<boolean> {
+    // Only a session the API itself opened is logged as closed.
+    const userId = this.authService.sessionUserIdOf(req?.cookies?.token);
+    if (userId != null) {
+      await this.log(LoginOutcome.LOGOUT, null, userId, null, req);
+    }
+
     res.clearCookie('token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

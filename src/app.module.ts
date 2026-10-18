@@ -51,6 +51,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { DemoModeGuard } from './common/guards/demo-mode.guard';
 import { AuthenticatedByDefaultGuard } from './common/guards/authenticated-by-default.guard';
 import { AdminActionsModule } from './common/admin-actions/admin-actions.module';
+import { LoginEventsModule } from './common/login-events/login-events.module';
+import { graphqlContext } from './common/http/graphql-context';
 import { MemberDepartureModule } from './modules/users/member-departure.module';
 import { PlanModule } from './common/plan/plan.module';
 import { SuspensionModule } from './common/suspension/suspension.module';
@@ -135,10 +137,7 @@ import { PlanFeatureGuard } from './common/plan/plan-feature.guard';
             ignoreIntrospection: process.env.NODE_ENV !== 'production',
           }),
         ],
-        context: ({ req, res }: { req: Request; res: Response }) => ({
-          req,
-          res,
-        }),
+        context: graphqlContext,
       }),
     }),
 
@@ -148,6 +147,8 @@ import { PlanFeatureGuard } from './common/plan/plan-feature.guard';
     MailerModule,
 
     AdminActionsModule,
+
+    LoginEventsModule,
 
     UsersModule,
 

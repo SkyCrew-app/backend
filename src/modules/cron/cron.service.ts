@@ -24,6 +24,7 @@ import {
 } from '../../common/i18n/translate';
 import { PlanService } from '../../common/plan/plan.service';
 import { PlanFeature } from '../../common/plan/plan';
+import { LoginEventsService } from '../../common/login-events/login-events.service';
 
 // The jobs run on the club's clock (midnight in Paris), not the server's.
 const CLUB_SCHEDULE = { timeZone: CLUB_TIME_ZONE };
@@ -48,7 +49,32 @@ export class CronService {
     private readonly financialService: FinancialService,
     private readonly licenceReminders: LicenceRemindersService,
     @Optional() private readonly plan: PlanService = new PlanService(),
+    @Optional() private readonly loginEvents?: LoginEventsService,
   ) {}
+
+  // Every night, the connection log loses the lines older than its
+  // retention period (LOGIN_EVENTS_RETENTION_MONTHS).
+  @Cron('15 3 * * *', CLUB_SCHEDULE)
+  async purgeExpiredLoginEvents(): Promise<number> {
+    if (!this.loginEvents) {
+      return 0;
+    }
+    try {
+      const removed = await this.loginEvents.purgeExpired();
+      if (removed > 0) {
+        this.logger.log(
+          `Journal des connexions : ${removed} ligne(s) de plus de six mois supprimée(s).`,
+        );
+      }
+      return removed;
+    } catch (error) {
+      this.logger.error(
+        'Erreur lors de la purge du journal des connexions',
+        error,
+      );
+      return 0;
+    }
+  }
 
   // Vérification quotidienne des statuts des cours
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, CLUB_SCHEDULE)

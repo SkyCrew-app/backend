@@ -7,6 +7,7 @@ import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
 import { localized } from '../../common/i18n/localized-exception';
 import { normalizeEmail } from '../../common/validation/email';
+import { LoginOutcome } from '../../common/login-events/login-events';
 
 export const TWO_FACTOR_PURPOSE = '2fa';
 
@@ -34,12 +35,64 @@ export class AuthService {
     return null;
   }
 
+  // The password check of a sign-in, with what the connection log needs to
+  // know: no account, a wrong password, a deactivated account or a match.
+  // The user is returned only when the password is right.
+  async attemptSignIn(
+    email: string,
+    password: string,
+  ): Promise<{
+    user: User | null;
+    outcome: LoginOutcome;
+    userId: number | null;
+  }> {
+    const account = await this.usersService.findOneByEmail(email);
+    if (!account) {
+      return {
+        user: null,
+        outcome: LoginOutcome.UNKNOWN_ACCOUNT,
+        userId: null,
+      };
+    }
+    const matches =
+      !!account.password &&
+      !!password &&
+      (await bcrypt.compare(password, account.password));
+    if (!matches) {
+      return {
+        user: null,
+        outcome: LoginOutcome.WRONG_PASSWORD,
+        userId: account.id,
+      };
+    }
+    if (account.is_active === false) {
+      return {
+        user: account,
+        outcome: LoginOutcome.ACCOUNT_DEACTIVATED,
+        userId: account.id,
+      };
+    }
+    return {
+      user: account,
+      outcome: account.twoFactorAuthSecret
+        ? LoginOutcome.SECOND_FACTOR_REQUIRED
+        : LoginOutcome.SUCCESS,
+      userId: account.id,
+    };
+  }
+
+  // A deactivated member is told so, but only once the password is right:
+  // nobody else learns the account exists.
+  deactivatedAccountError() {
+    return localized(ForbiddenException, 'error.auth.accountDeactivated');
+  }
+
   // The password check of a sign-in. A deactivated member is told so, but
   // only once the password is right: nobody else learns the account exists.
   async validateSignIn(email: string, password: string): Promise<User | null> {
     const user = await this.validateUser(email, password);
     if (user && user.is_active === false) {
-      throw localized(ForbiddenException, 'error.auth.accountDeactivated');
+      throw this.deactivatedAccountError();
     }
     return user;
   }
@@ -184,14 +237,24 @@ export class AuthService {
     }
   }
 
-  async verify2FAAndLogin(
+  // The second step of a sign-in, with what the connection log needs to
+  // know. The session token is returned only when the code is right.
+  async attemptSecondFactor(
     userEmail: string,
     token: string,
-  ): Promise<string | null> {
+  ): Promise<{
+    jwt: string | null;
+    outcome: LoginOutcome;
+    userId: number | null;
+  }> {
     const user = await this.usersService.findOneByEmail(userEmail);
+    const userId = user?.id ?? null;
 
-    if (!user?.twoFactorAuthSecret || user.is_active === false) {
-      return null;
+    if (!user?.twoFactorAuthSecret) {
+      return { jwt: null, outcome: LoginOutcome.SECOND_FACTOR_FAILED, userId };
+    }
+    if (user.is_active === false) {
+      return { jwt: null, outcome: LoginOutcome.ACCOUNT_DEACTIVATED, userId };
     }
 
     const isValid = speakeasy.totp.verify({
@@ -201,9 +264,41 @@ export class AuthService {
     });
 
     if (!isValid) {
-      return null;
+      return { jwt: null, outcome: LoginOutcome.SECOND_FACTOR_FAILED, userId };
     }
 
-    return this.login(user);
+    return {
+      jwt: await this.login(user),
+      outcome: LoginOutcome.SUCCESS,
+      userId,
+    };
+  }
+
+  async verify2FAAndLogin(
+    userEmail: string,
+    token: string,
+  ): Promise<string | null> {
+    return (await this.attemptSecondFactor(userEmail, token)).jwt;
+  }
+
+  // The member of a session token, for the connection log of a sign-out:
+  // only a genuine session token counts (not a two-factor challenge, not a
+  // token signed with another key). Expired or not, it names its member.
+  sessionUserIdOf(token: string | null | undefined): number | null {
+    if (!token) {
+      return null;
+    }
+    try {
+      const payload = this.jwtService.verify(token, {
+        ignoreExpiration: true,
+      });
+      if (payload?.purpose || payload?.sub == null) {
+        return null;
+      }
+      const id = Number(payload.sub);
+      return Number.isFinite(id) ? id : null;
+    } catch {
+      return null;
+    }
   }
 }
