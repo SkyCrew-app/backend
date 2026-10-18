@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.21.0](https://github.com/SkyCrew-app/backend/compare/2.20.3...2.21.0) (2026-10-18)
+
+
+### Features
+
+* **security:** :sparkles: add a login journal with client IP behind trusted proxies ([#218](https://github.com/SkyCrew-app/backend/issues/218)) ([493869c](https://github.com/SkyCrew-app/backend/commit/493869caa566ffde09fa9fa42e4363e8cfba0b61))
+
 ## [2.20.3](https://github.com/SkyCrew-app/backend/compare/2.20.2...2.20.3) (2026-10-17)
 
 
