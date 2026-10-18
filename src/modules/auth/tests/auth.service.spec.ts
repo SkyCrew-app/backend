@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
 import { User } from '../../users/entity/users.entity';
+import { LoginOutcome } from '../../../common/login-events/login-events';
 
 jest.mock('bcrypt');
 jest.mock('speakeasy');
@@ -107,6 +108,130 @@ describe('AuthService', () => {
       await expect(
         service.validateSignIn('a@example.com', 'wrong'),
       ).resolves.toBeNull();
+    });
+  });
+
+  // What the connection log is told about the password step.
+  describe('attemptSignIn', () => {
+    const account = (overrides: Partial<User> = {}) =>
+      ({
+        id: 3,
+        email: 'a@example.com',
+        password: 'hashed',
+        is_active: true,
+        twoFactorAuthSecret: null,
+        ...overrides,
+      }) as User;
+
+    it('names an address that matches no account', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(null);
+      await expect(
+        service.attemptSignIn('x@example.com', 'pw'),
+      ).resolves.toEqual({
+        user: null,
+        outcome: LoginOutcome.UNKNOWN_ACCOUNT,
+        userId: null,
+      });
+    });
+
+    it('names a wrong password, without giving the account back', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(account());
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      await expect(
+        service.attemptSignIn('a@example.com', 'pw'),
+      ).resolves.toEqual({
+        user: null,
+        outcome: LoginOutcome.WRONG_PASSWORD,
+        userId: 3,
+      });
+    });
+
+    it('names a deactivated account once the password is right', async () => {
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(
+        account({ is_active: false }),
+      );
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      const attempt = await service.attemptSignIn('a@example.com', 'pw');
+      expect(attempt.outcome).toBe(LoginOutcome.ACCOUNT_DEACTIVATED);
+      expect(attempt.userId).toBe(3);
+    });
+
+    it('tells a full sign-in from one awaiting the code of the authenticator', async () => {
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(account());
+      expect((await service.attemptSignIn('a@example.com', 'pw')).outcome).toBe(
+        LoginOutcome.SUCCESS,
+      );
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(
+        account({ twoFactorAuthSecret: 'SECRET' }),
+      );
+      expect((await service.attemptSignIn('a@example.com', 'pw')).outcome).toBe(
+        LoginOutcome.SECOND_FACTOR_REQUIRED,
+      );
+    });
+  });
+
+  describe('attemptSecondFactor', () => {
+    it('names a wrong code, a deactivated account and a success', async () => {
+      const user = {
+        id: 3,
+        email: 'a@example.com',
+        twoFactorAuthSecret: 'SECRET',
+        is_active: true,
+        role: { role_name: 'Pilote' },
+      } as unknown as User;
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue(user);
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(false);
+      await expect(
+        service.attemptSecondFactor('a@example.com', '000000'),
+      ).resolves.toEqual({
+        jwt: null,
+        outcome: LoginOutcome.SECOND_FACTOR_FAILED,
+        userId: 3,
+      });
+
+      (speakeasy.totp.verify as jest.Mock).mockReturnValue(true);
+      (jwtService.sign as jest.Mock).mockReturnValue('jwt');
+      await expect(
+        service.attemptSecondFactor('a@example.com', '123456'),
+      ).resolves.toEqual({
+        jwt: 'jwt',
+        outcome: LoginOutcome.SUCCESS,
+        userId: 3,
+      });
+
+      (usersService.findOneByEmail as jest.Mock).mockResolvedValue({
+        ...user,
+        is_active: false,
+      });
+      await expect(
+        service.attemptSecondFactor('a@example.com', '123456'),
+      ).resolves.toMatchObject({
+        jwt: null,
+        outcome: LoginOutcome.ACCOUNT_DEACTIVATED,
+      });
+    });
+  });
+
+  describe('sessionUserIdOf', () => {
+    it('names the member of a genuine session token only', () => {
+      (jwtService.verify as jest.Mock).mockReturnValueOnce({ sub: 3 });
+      expect(service.sessionUserIdOf('token')).toBe(3);
+      expect(jwtService.verify).toHaveBeenCalledWith('token', {
+        ignoreExpiration: true,
+      });
+
+      (jwtService.verify as jest.Mock).mockReturnValueOnce({
+        sub: 3,
+        purpose: '2fa',
+      });
+      expect(service.sessionUserIdOf('challenge')).toBeNull();
+
+      (jwtService.verify as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('invalid signature');
+      });
+      expect(service.sessionUserIdOf('forged')).toBeNull();
+      expect(service.sessionUserIdOf(undefined)).toBeNull();
     });
   });
 

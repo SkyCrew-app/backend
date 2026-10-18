@@ -35,6 +35,7 @@ const marie = {
   distance_unit: 'nm',
   timezone: 'Europe/Paris',
   preferred_aerodrome: 'LFPN',
+  lastSignInAt: new Date('2026-10-12T08:30:00.000Z'),
   licenses: [],
   invoices: [],
   payments: [],
@@ -68,7 +69,7 @@ const DIRECTORY = 'id first_name last_name email phone_number profile_picture';
 const PROFILE = 'address date_of_birth total_flight_hours licenses { id }';
 const PRIVATE = `user_account_balance is2FAEnabled isEmailConfirmed is_active
   email_notifications_enabled sms_notifications_enabled newsletter_subscribed
-  language speed_unit distance_unit timezone preferred_aerodrome
+  language speed_unit distance_unit timezone preferred_aerodrome lastSignInAt
   invoices { id } payments { id } flights { id } answers { id }
   userProgresses { id } dashboard_widgets { widgetId }`;
 
