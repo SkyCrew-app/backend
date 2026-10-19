@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.21.1](https://github.com/SkyCrew-app/backend/compare/2.21.0...2.21.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **flight-plans:** :bug: attach SIA services to airspaces and clean zone texts ([#223](https://github.com/SkyCrew-app/backend/issues/223)) ([488c766](https://github.com/SkyCrew-app/backend/commit/488c76660eb1af080757cc7c3ac9b28ade0362f1))
+
 ## [2.21.0](https://github.com/SkyCrew-app/backend/compare/2.20.3...2.21.0) (2026-10-18)
 
 
