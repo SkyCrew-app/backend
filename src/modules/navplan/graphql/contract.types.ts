@@ -48,12 +48,37 @@ export class NavPoint {
 }
 
 @ObjectType()
+export class GeoPoint {
+  @Field(() => Float) lat: number;
+  @Field(() => Float) lon: number;
+}
+
+// One direction of a runway (QFU) with its declared distances (AIXM Rdd;
+// LDA also from the XML SIA): what is usable, not the physical length.
+@ObjectType()
+export class RunwayEnd {
+  @Field() designator: string;
+  @Field(() => Float, { nullable: true }) trueBearingDeg: number | null;
+  @Field(() => Float, { nullable: true }) magneticBearingDeg: number | null;
+  @Field(() => Int, { nullable: true }) toraM: number | null;
+  @Field(() => Int, { nullable: true }) todaM: number | null;
+  @Field(() => Int, { nullable: true }) asdaM: number | null;
+  @Field(() => Int, { nullable: true }) ldaM: number | null;
+  @Field(() => Int, { nullable: true }) thresholdElevationFt: number | null;
+  @Field() displacedThreshold: boolean;
+  // Why the distances are reduced (SIA RemDecDist).
+  @Field(() => String, { nullable: true }) remarks: string | null;
+}
+
+@ObjectType()
 export class Runway {
   @Field() designator: string;
   @Field(() => Float, { nullable: true }) trueHeadingDeg: number | null;
   @Field(() => Int, { nullable: true }) lengthM: number | null;
   @Field(() => Int, { nullable: true }) widthM: number | null;
   @Field(() => String, { nullable: true }) surface: string | null;
+  @Field(() => Boolean, { nullable: true }) main: boolean | null;
+  @Field(() => [RunwayEnd]) ends: RunwayEnd[];
 }
 
 @ObjectType()
@@ -61,14 +86,71 @@ export class RadioFrequency {
   @Field() service: string;
   @Field(() => String, { nullable: true }) callsign: string | null;
   @Field() mhz: string;
+  // H24, HO, HX, HJ, NOTAM; with the published text.
+  @Field(() => String, { nullable: true }) hoursCode: string | null;
+  @Field(() => String, { nullable: true }) hours: string | null;
+  // Coverage, sector, "Absence ATS"...
+  @Field(() => String, { nullable: true }) remark: string | null;
+  // An auxiliary frequency of the service (SIA "supplétive").
+  @Field(() => Boolean, { nullable: true }) auxiliary: boolean | null;
+}
+
+// AD 2 data of an aerodrome (SIA), texts in the language of the request.
+@ObjectType()
+export class AerodromeSheet {
+  @Field() icao: string;
+  @Field(() => String, { nullable: true }) name: string | null;
+  @Field(() => Int, { nullable: true }) elevationFt: number | null;
+  // SIA, OURAIRPORTS or CLUB.
+  @Field() source: string;
+  // CAP (open to public air traffic), RST (restricted use), PRV (private),
+  // MIL (military), OFF (not an aerodrome); null when unknown.
+  @Field(() => String, { nullable: true }) status: string | null;
+  @Field(() => Boolean, { nullable: true }) vfr: boolean | null;
+  @Field(() => Boolean, { nullable: true }) ifr: boolean | null;
+  @Field(() => Boolean, { nullable: true }) privateFlights: boolean | null;
+  @Field(() => Float, { nullable: true })
+  magneticVariationDeg: number | null;
+  @Field(() => String, { nullable: true })
+  magneticVariationYear: string | null;
+  @Field(() => String, { nullable: true }) atsHoursCode: string | null;
+  @Field(() => String, { nullable: true }) atsHours: string | null;
+  @Field(() => String, { nullable: true }) fuelHours: string | null;
+  @Field(() => String, { nullable: true }) fuel: string | null;
+  @Field(() => String, { nullable: true }) fuelRemarks: string | null;
+  @Field(() => [String]) fuelTypes: string[];
+  @Field(() => String, { nullable: true }) remarks: string | null;
+  @Field(() => String, { nullable: true }) phone: string | null;
+  @Field(() => String, { nullable: true }) operator: string | null;
+  @Field(() => [Runway]) runways: Runway[];
+  @Field(() => [RadioFrequency]) frequencies: RadioFrequency[];
+  // The VAC PDF of the cycle in the SIA eAIP; null when none is known.
+  @Field(() => String, { nullable: true }) vacUrl: string | null;
+  @Field() chartsUrl: string;
+  // What the nav log prints for it (tower, AFIS or A/A, see the API rule).
+  @Field(() => String, { nullable: true }) navLogFrequency: string | null;
 }
 
 @ObjectType()
 export class AerodromeDetails {
   @Field(() => NavPoint) point: NavPoint;
+  @Field(() => AerodromeSheet) sheet: AerodromeSheet;
   @Field(() => [Runway]) runways: Runway[];
   @Field(() => [RadioFrequency]) frequencies: RadioFrequency[];
   @Field(() => Int, { nullable: true }) circuitHeightFt: number | null;
+}
+
+// An obstacle of the SIA, for the map.
+@ObjectType()
+export class Obstacle {
+  @Field() ident: string;
+  @Field() type: string;
+  @Field(() => Float) lat: number;
+  @Field(() => Float) lon: number;
+  @Field(() => Int) amslFt: number;
+  @Field(() => Int, { nullable: true }) aglFt: number | null;
+  @Field(() => Int) count: number;
+  @Field(() => String, { nullable: true }) lighting: string | null;
 }
 
 @ObjectType()
@@ -80,10 +162,17 @@ export class Airspace {
   @Field(() => AltitudeLimit) floor: AltitudeLimit;
   @Field(() => AltitudeLimit) ceiling: AltitudeLimit;
   @Field(() => String, { nullable: true }) activity: string | null;
+  // Published hours (SIA HorTxt), apart from the activity.
+  @Field(() => String, { nullable: true }) hours: string | null;
   @Field(() => [RadioFrequency]) frequencies: RadioFrequency[];
   @Field(() => String, { nullable: true }) remarks: string | null;
   @Field(() => GraphQLJSON) geometry: unknown;
   @Field() outlineKnown: boolean;
+  // Without an outline: the published point (activities, protected areas).
+  @Field(() => GeoPoint, { nullable: true }) referencePoint: GeoPoint | null;
+  // For an activity published at a point: the distance the plans look
+  // around it.
+  @Field(() => Float, { nullable: true }) radiusNm: number | null;
 }
 
 // ---------- Aircraft data ----------
@@ -286,6 +375,23 @@ export class UnverifiedAirspace {
   @Field() message: string;
 }
 
+// Obstacles near a leg whose top is less than 500 ft below its altitude.
+@ObjectType()
+export class LegObstacle {
+  @Field() type: string;
+  @Field(() => Int) count: number;
+  @Field() ident: string;
+  @Field(() => Int) amslFt: number;
+  @Field(() => Int, { nullable: true }) aglFt: number | null;
+  @Field(() => Float) lat: number;
+  @Field(() => Float) lon: number;
+  @Field(() => String, { nullable: true }) lighting: string | null;
+  @Field(() => Float) alongNm: number;
+  @Field(() => Float) offsetNm: number;
+  @Field(() => Int) marginFt: number;
+  @Field(() => CheckStatusEnum) status: CheckStatusEnum;
+}
+
 @ObjectType()
 export class Leg {
   @Field(() => Int) index: number;
@@ -310,6 +416,9 @@ export class Leg {
   @Field(() => Float) fuelL: number;
   @Field(() => Float) fuelRemainingL: number;
   @Field(() => [AirspaceCrossing]) crossings: AirspaceCrossing[];
+  @Field(() => [LegObstacle]) obstacles: LegObstacle[];
+  // Top of the highest obstacle within 2 NM of the leg, ft AMSL.
+  @Field(() => Int, { nullable: true }) highestObstacleFt: number | null;
 }
 
 @ObjectType()
@@ -413,6 +522,60 @@ export class Daylight {
   @Field(() => Date, { nullable: true }) nightFrom: Date | null;
 }
 
+// Wind components on a runway direction from the METAR wind (true).
+@ObjectType()
+export class RunwayWind {
+  @Field() designator: string;
+  // Positive: head wind; negative: tail wind.
+  @Field(() => Int) headwindKt: number;
+  // Positive: from the right; negative: from the left.
+  @Field(() => Int) crosswindKt: number;
+  @Field(() => Int, { nullable: true }) gustHeadwindKt: number | null;
+  @Field(() => Int, { nullable: true }) gustCrosswindKt: number | null;
+  @Field() best: boolean;
+}
+
+@ObjectType()
+export class AerodromeConditions {
+  @Field() station: string;
+  @Field(() => Date, { nullable: true }) observedAt: Date | null;
+  @Field(() => Int, { nullable: true }) windDirectionDeg: number | null;
+  @Field(() => Int, { nullable: true }) windSpeedKt: number | null;
+  @Field(() => Int, { nullable: true }) gustKt: number | null;
+  @Field() windVariable: boolean;
+  @Field(() => Int, { nullable: true }) temperatureC: number | null;
+  @Field(() => Int, { nullable: true }) dewpointC: number | null;
+  @Field(() => Int, { nullable: true }) qnhHpa: number | null;
+  @Field(() => Int, { nullable: true }) pressureAltitudeFt: number | null;
+  @Field(() => Int, { nullable: true }) densityAltitudeFt: number | null;
+  @Field(() => [RunwayWind]) runways: RunwayWind[];
+}
+
+@ObjectType()
+export class PlanAerodrome {
+  // departure, destination or alternate.
+  @Field() role: string;
+  @Field() icao: string;
+  @Field(() => AerodromeSheet, { nullable: true })
+  sheet: AerodromeSheet | null;
+  @Field(() => AerodromeConditions, { nullable: true })
+  conditions: AerodromeConditions | null;
+}
+
+// The 0 °C isotherm from the winds aloft forecast.
+@ObjectType()
+export class FreezingLevel {
+  // DEPARTURE, ROUTE (middle of the route) or DESTINATION.
+  @Field() place: string;
+  @Field(() => String, { nullable: true }) ident: string | null;
+  @Field() at: Date;
+  @Field(() => Int, { nullable: true }) altitudeFt: number | null;
+  // LEVEL, SURFACE (0 °C or less at the ground), ABOVE (above topFt, the
+  // top of the forecast) or UNKNOWN.
+  @Field() state: string;
+  @Field(() => Int, { nullable: true }) topFt: number | null;
+}
+
 @ObjectType()
 export class FlightPlanResult {
   @Field(() => [Leg]) legs: Leg[];
@@ -439,6 +602,9 @@ export class FlightPlanResult {
   @Field(() => Date, { nullable: true }) qnhObservedAt: Date | null;
   // Null on a plan saved before the night check.
   @Field(() => Daylight, { nullable: true }) daylight: Daylight | null;
+  // Empty on a plan saved before them.
+  @Field(() => [PlanAerodrome]) aerodromes: PlanAerodrome[];
+  @Field(() => [FreezingLevel]) freezingLevels: FreezingLevel[];
 }
 
 @ObjectType()

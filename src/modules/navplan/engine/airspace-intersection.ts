@@ -35,7 +35,15 @@ export type AirspaceType =
   | 'TSA'
   | 'PROTECTED'
   | 'GLIDING'
-  | 'OTHER';
+  | 'OTHER'
+  // Activities the SIA publishes at a point (see ACTIVITY_NEAR_NM).
+  | 'PARACHUTING'
+  | 'AEROBATICS'
+  | 'WINCH'
+  | 'MODEL_AIRCRAFT'
+  | 'BALLOON'
+  | 'DRONE'
+  | 'LOW_OVERFLIGHT';
 export type AirspaceRelation =
   | 'INSIDE'
   | 'NEAR_FLOOR'
@@ -53,6 +61,13 @@ export interface RadioFrequency {
   service: string;
   callsign: string | null;
   mhz: string;
+  // Published hours (Frequence/HorCode: H24, HO, HX...) and their text.
+  hoursCode?: string | null;
+  hours?: string | null;
+  // Frequence/Remarque: coverage, sector, "Absence ATS"...
+  remark?: string | null;
+  // Frequence/Suppletive: an auxiliary frequency of the service.
+  auxiliary?: boolean;
 }
 
 export interface AirspaceRecord {
@@ -62,8 +77,11 @@ export interface AirspaceRecord {
   icaoClass: string | null;
   floor: AltitudeLimit;
   ceiling: AltitudeLimit;
-  // Published activity text; null = unknown.
+  // Published activity text (Volume/Activite); null = unknown.
   activity: string | null;
+  // Published hours (Volume/HorTxt), kept apart from the activity: "R 3 B"
+  // has both "Ballon captif" and "Possible activation H24 by NOTAM".
+  hours?: string | null;
   // Published schedule code (H24, HJ, HX, NOTAM...).
   scheduleCode?: string | null;
   frequencies: RadioFrequency[];
@@ -152,6 +170,39 @@ export function verticalRelation(
   return 'NEAR_FLOOR';
 }
 
+// Activities the SIA publishes as a point only (ENR 5.5 / 5.7: "Pje 602",
+// "Aer 8430", "SUR 231": 1900 of them in AIRAC 2610, 20 as a circle): their
+// extent is not published, the chart shows a symbol. Skycrew lists those
+// whose point is within this distance of the route (its own choice, larger
+// for parachuting whose jumpers drift), never "not crossed" further out.
+export const ACTIVITY_NEAR_NM: Record<string, number> = {
+  PARACHUTING: 3,
+  AEROBATICS: 2,
+  WINCH: 2,
+  BALLOON: 2,
+  LOW_OVERFLIGHT: 2,
+  MODEL_AIRCRAFT: 1,
+  DRONE: 1,
+};
+
+export const isActivityType = (type: AirspaceType | string): boolean =>
+  type in ACTIVITY_NEAR_NM;
+
+// What each activity asks of a pilot passing at its levels. Parachuting,
+// aerobatics, winch cables, captive balloons and low-level overflight bans
+// are hazards or rules to plan around; model aircraft and drones fly below
+// the VFR minimum heights and are listed only when the route is at their
+// levels.
+const ACTIVITY_KEYS: Record<string, string> = {
+  PARACHUTING: 'navplan.airspace.parachuting',
+  AEROBATICS: 'navplan.airspace.aerobatics',
+  WINCH: 'navplan.airspace.winch',
+  BALLOON: 'navplan.airspace.balloon',
+  LOW_OVERFLIGHT: 'navplan.airspace.lowOverflight',
+  MODEL_AIRCRAFT: 'navplan.airspace.modelAircraft',
+  DRONE: 'navplan.airspace.drone',
+};
+
 const CONTROLLED = new Set<AirspaceType>(['CTR', 'TMA', 'CTA']);
 const RESTRICTED_LIKE = new Set<AirspaceType>(['R', 'TRA', 'TSA']);
 
@@ -161,7 +212,9 @@ export function requirementOf(
 ): { status: CheckStatus; requirement: MessageRef; activityKnown: boolean } {
   const activityKnown = (airspace.scheduleCode ?? '').toUpperCase() === 'H24';
   // The published activity, on one line in the sentence.
-  const activity = (airspace.activity ?? '').split('\n').join(' · ');
+  const activity = (airspace.activity ?? airspace.hours ?? '')
+    .split('\n')
+    .join(' · ');
   // A VHF frequency of the air band first: the UHF ones are military.
   const frequency =
     airspace.frequencies.find((f) => isAirbandVhf(f.mhz)) ??
@@ -180,6 +233,19 @@ export function requirementOf(
           : 'WARNING'
         : status;
 
+  if (isActivityType(airspace.type)) {
+    return {
+      status: passive ? 'OK' : 'WARNING',
+      requirement: {
+        key: ACTIVITY_KEYS[airspace.type],
+        params: {
+          limit: altitudeLimitLabel(airspace.ceiling),
+          activity: activity || '?',
+        },
+      },
+      activityKnown,
+    };
+  }
   if (airspace.type === 'P') {
     return {
       status: passive ? 'OK' : 'BLOCKING',
@@ -383,14 +449,21 @@ export function legCrossings(
     maxLon: Math.max(...lons) + 0.05,
   };
   const crossings: AirspaceCrossing[] = [];
+  // Activities at a point: 3 NM is 0.05 degree of latitude and up to 0.08
+  // of longitude in France.
+  const activityBox = {
+    minLat: box.minLat - 0.05,
+    maxLat: box.maxLat + 0.05,
+    minLon: box.minLon - 0.1,
+    maxLon: box.maxLon + 0.1,
+  };
   for (const airspace of airspaces) {
-    if (!bboxOverlaps(airspace, box)) continue;
-    for (const [entry, exit] of lateralIntervals(
-      leg.from,
-      leg.to,
-      leg.distanceNm,
-      airspace.geometry,
-    )) {
+    const atPoint = !hasOutline(airspace) && isActivityType(airspace.type);
+    if (!bboxOverlaps(airspace, atPoint ? activityBox : box)) continue;
+    const intervals = atPoint
+      ? activityInterval(leg, airspace)
+      : lateralIntervals(leg.from, leg.to, leg.distanceNm, airspace.geometry);
+    for (const [entry, exit] of intervals) {
       // The profile is piecewise linear: its extremes over the interval are
       // at the ends or at its vertices; sampling every 0.25 NM finds them.
       let minAlt = Infinity;
@@ -404,6 +477,12 @@ export function legCrossings(
       const relation = options.verticalUnknown
         ? 'UNKNOWN_VERTICAL'
         : verticalRelation(minAlt, maxAlt, airspace, qnhHpa, marginFt);
+      // Model aircraft and drones under the route: not worth a line.
+      if (
+        relation === 'ABOVE' &&
+        (airspace.type === 'MODEL_AIRCRAFT' || airspace.type === 'DRONE')
+      )
+        continue;
       const { status, requirement, activityKnown } = requirementOf(
         airspace,
         relation,
@@ -422,6 +501,52 @@ export function legCrossings(
     }
   }
   return crossings.sort((a, b) => a.entryNm - b.entryNm);
+}
+
+// The stretch of a leg within ACTIVITY_NEAR_NM of an activity published at
+// a point, as [entry, exit] from the leg start; none further away.
+function activityInterval(
+  leg: LegForCrossings,
+  airspace: AirspaceRecord,
+): [number, number][] {
+  const point = referencePointOf(airspace);
+  const radius = ACTIVITY_NEAR_NM[airspace.type];
+  if (!point || !radius || leg.distanceNm <= 0) return [];
+  const { offsetNm, alongNm } = positionAlongLeg(
+    point,
+    leg.from,
+    leg.to,
+    leg.distanceNm,
+  );
+  if (offsetNm > radius) return [];
+  const half = Math.sqrt(radius * radius - offsetNm * offsetNm);
+  const entry = Math.max(0, alongNm - half);
+  const exit = Math.min(leg.distanceNm, alongNm + half);
+  return exit > entry ? [[entry, exit]] : [];
+}
+
+// Where a point stands from a leg: its distance to the leg and the distance
+// along the leg of its nearest point, NM (local plane centred on the point).
+export function positionAlongLeg(
+  point: LatLon,
+  from: LatLon,
+  to: LatLon,
+  distanceNm: number,
+): { offsetNm: number; alongNm: number } {
+  const projection = localProjection(point);
+  const a = projection.forward(from);
+  const b = projection.forward(to);
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const length2 = dx * dx + dy * dy;
+  const t =
+    length2 === 0
+      ? 0
+      : Math.min(1, Math.max(0, -(a[0] * dx + a[1] * dy) / length2));
+  return {
+    offsetNm: Math.hypot(a[0] + t * dx, a[1] + t * dy),
+    alongNm: t * distanceNm,
+  };
 }
 
 // Airspaces whose outline is not published (géométrie inconnue): never
@@ -485,7 +610,8 @@ export function unverifiedAirspaces(
 ): UnverifiedAirspace[] {
   const found: UnverifiedAirspace[] = [];
   for (const airspace of airspaces) {
-    if (hasOutline(airspace)) continue;
+    // Activities at a point are crossings of the legs near them.
+    if (hasOutline(airspace) || isActivityType(airspace.type)) continue;
     if (flight) {
       const relation = verticalRelation(
         flight.minAltFt,

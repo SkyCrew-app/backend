@@ -6,6 +6,19 @@ import {
   unverifiedAirspaces,
 } from './airspace-intersection';
 import {
+  AerodromeConditions,
+  aerodromeConditions,
+  AerodromeSheet,
+} from './aerodrome';
+import { FreezingLevel, freezingLevelAt } from './freezing';
+import {
+  LegObstacle,
+  legObstacles,
+  OBSTACLE_CORRIDOR_NM,
+  OBSTACLE_MARGIN_FT,
+  ObstacleRecord,
+} from './obstacles';
+import {
   isaTemperatureC,
   pressureAltitudeFt,
   STANDARD_PRESSURE_HPA,
@@ -20,7 +33,7 @@ import {
   weatherConditions,
 } from './conditions';
 import { FuelPlan, FuelSettings, planFuel, ReserveCase } from './fuel';
-import { legGeometry, normalizeDeg } from './geodesy';
+import { legGeometry, normalizeDeg, pointAlong } from './geodesy';
 import {
   burnFuel,
   computeMassBalance,
@@ -159,6 +172,21 @@ export interface EngineInput {
   // Times the winds aloft forecast covers; null without a forecast.
   windCoverage?: WindCoverage | null;
   weather: WeatherReport[];
+  // AD 2 data of the departure, destination and alternate (null: unknown,
+  // such as an aerodrome of OurAirports without it).
+  aerodromes?: Partial<Record<PlanAerodromeRole, AerodromeSheet | null>>;
+  // Obstacles around the route (the engine keeps those near each leg).
+  obstacles?: ObstacleRecord[];
+}
+
+export type PlanAerodromeRole = 'departure' | 'destination' | 'alternate';
+
+export interface PlanAerodrome {
+  role: PlanAerodromeRole;
+  icao: string;
+  sheet: AerodromeSheet | null;
+  // From the METAR of the aerodrome; null without one.
+  conditions: AerodromeConditions | null;
 }
 
 export interface LegWind {
@@ -192,6 +220,9 @@ export interface LegResult {
   fuelL: number;
   fuelRemainingL: number;
   crossings: AirspaceCrossing[];
+  // Absent from plans saved before the obstacles were imported.
+  obstacles?: LegObstacle[];
+  highestObstacleFt?: number | null;
 }
 
 // An area near the route whose outline is not published: to be checked on
@@ -237,6 +268,9 @@ export interface FlightPlanResult {
   qnhSource: 'INPUT' | 'METAR' | 'DEFAULT';
   qnhStation: string | null;
   qnhObservedAt: Date | null;
+  // Absent from plans saved before them.
+  aerodromes?: PlanAerodrome[];
+  freezingLevels?: FreezingLevel[];
   // Not in the GraphQL result: kept with the saved plan for the PDF.
   departureTime: Date;
 }
@@ -510,7 +544,18 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
         input.settings.verticalMarginFt,
         { verticalUnknown: navdataTooOld },
       ),
+      ...obstaclesOf(context, geometry.distanceNm),
     };
+  };
+  const obstaclesOf = (context: LegContext, distanceNm: number) => {
+    const near = legObstacles(
+      context.from,
+      context.to,
+      distanceNm,
+      context.input.altitudeFt,
+      input.obstacles ?? [],
+    );
+    return { obstacles: near.obstacles, highestObstacleFt: near.highestFt };
   };
 
   contexts.forEach((context, i) => {
@@ -769,6 +814,41 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     });
   }
 
+  const closeObstacles = flownLegs.flatMap((leg) =>
+    (leg.obstacles ?? []).map((o) => ({ leg, obstacle: o })),
+  );
+  if (closeObstacles.length > 0) {
+    const lowest = closeObstacles.reduce((a, b) =>
+      b.obstacle.marginFt < a.obstacle.marginFt ? b : a,
+    );
+    notice('OBSTACLE_MARGIN', 'WARNING', 'navplan.notice.obstacleMargin', {
+      count: closeObstacles.length,
+      corridor: OBSTACLE_CORRIDOR_NM,
+      margin: OBSTACLE_MARGIN_FT,
+      point: lowest.leg.to.ident,
+      amsl: lowest.obstacle.amslFt,
+    });
+  }
+
+  const aerodromes = planAerodromes(input);
+  for (const aerodrome of aerodromes) {
+    const status = aerodrome.sheet?.status;
+    if (status === 'RST' || status === 'PRV' || status === 'MIL') {
+      notice(
+        'AERODROME_USE_LIMITED',
+        'WARNING',
+        `navplan.notice.aerodrome${status === 'RST' ? 'Restricted' : status === 'PRV' ? 'Private' : 'Military'}`,
+        { icao: aerodrome.icao, role: aerodrome.role },
+      );
+    }
+    if (aerodrome.sheet?.vfr === false) {
+      notice('AERODROME_NO_VFR', 'WARNING', 'navplan.notice.aerodromeNoVfr', {
+        icao: aerodrome.icao,
+        role: aerodrome.role,
+      });
+    }
+  }
+
   const crossingStatuses = flownLegs.flatMap((leg) =>
     leg.crossings.map((c) => c.status),
   );
@@ -805,8 +885,104 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     daylight,
     qnhHpa: input.qnhHpa,
     ...qnhOrigin(input),
+    aerodromes,
+    freezingLevels: freezingLevels(input, legs, takeoffTime, landing),
     departureTime: input.departureTime,
   };
+}
+
+// The departure, destination and alternate with their AD 2 data and the
+// wind and density altitude of their METAR.
+function planAerodromes(input: EngineInput): PlanAerodrome[] {
+  const roles: [PlanAerodromeRole, EnginePoint | null][] = [
+    ['departure', input.departure],
+    ['destination', input.destination],
+    ['alternate', input.alternate],
+  ];
+  return roles
+    .filter((entry): entry is [PlanAerodromeRole, EnginePoint] => !!entry[1])
+    .map(([role, point]) => {
+      const sheet = input.aerodromes?.[role] ?? null;
+      const report = input.weather.find((w) => w.icao === point.ident) ?? null;
+      return {
+        role,
+        icao: point.ident,
+        sheet,
+        conditions: aerodromeConditions(
+          {
+            icao: point.ident,
+            elevationFt: point.elevationFt,
+            runways: sheet?.runways ?? [],
+            magneticVariationDeg: sheet?.magneticVariationDeg ?? null,
+          },
+          report,
+        ),
+      };
+    });
+}
+
+// The 0 °C isotherm from the forecast temperatures: at the departure at
+// take-off, in the middle of the route halfway through the flight, at the
+// destination at landing.
+function freezingLevels(
+  input: EngineInput,
+  legs: LegResult[],
+  takeoff: Date,
+  landing: Date,
+): FreezingLevel[] {
+  const wind = input.wind;
+  if (!wind || legs.length === 0) return [];
+  const total = legs.reduce((sum, leg) => sum + leg.distanceNm, 0);
+  let middle = { lat: input.departure.lat, lon: input.departure.lon };
+  let run = 0;
+  for (const leg of legs) {
+    if (run + leg.distanceNm >= total / 2) {
+      middle = pointAlong(leg.from, leg.to, total / 2 - run);
+      break;
+    }
+    run += leg.distanceNm;
+  }
+  const halfway = new Date((takeoff.getTime() + landing.getTime()) / 2);
+  const places: {
+    place: FreezingLevel['place'];
+    ident: string | null;
+    lat: number;
+    lon: number;
+    groundFt: number;
+    at: Date;
+  }[] = [
+    {
+      place: 'DEPARTURE',
+      ident: input.departure.ident,
+      lat: input.departure.lat,
+      lon: input.departure.lon,
+      groundFt: input.departure.elevationFt ?? 0,
+      at: takeoff,
+    },
+    {
+      place: 'ROUTE',
+      ident: null,
+      lat: middle.lat,
+      lon: middle.lon,
+      groundFt: 0,
+      at: halfway,
+    },
+    {
+      place: 'DESTINATION',
+      ident: input.destination.ident,
+      lat: input.destination.lat,
+      lon: input.destination.lon,
+      groundFt: input.destination.elevationFt ?? 0,
+      at: landing,
+    },
+  ];
+  return places.map(({ groundFt, lat, lon, ...place }) => ({
+    ...place,
+    ...freezingLevelAt(
+      (altitude) => wind(lat, lon, altitude, place.at)?.temperatureC ?? null,
+      groundFt,
+    ),
+  }));
 }
 
 const qnhOrigin = (input: EngineInput) => ({
@@ -952,6 +1128,8 @@ function failedPlan(
       fuelL: 0,
       fuelRemainingL: 0,
       crossings: [],
+      obstacles: [],
+      highestObstacleFt: null,
     };
   });
   const loadedL = input.fuel.reduce(

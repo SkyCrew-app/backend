@@ -4,6 +4,7 @@ import {
   segmentIntersection,
   signedArea,
 } from '../../navplan/engine/polygon';
+import { isActivityType } from '../../navplan/engine/airspace-intersection';
 import { ImportReport, NavdataBundle } from './bundle-types';
 
 // What a cycle must pass before it replaces the one in force. A failing
@@ -155,8 +156,11 @@ export function validateBundle(
         }
       }
     }
+    // Activities (parachuting, model aircraft...) are published as a point:
+    // no outline is expected.
     const counted = bundle.airspaces.filter(
-      (a) => !UNKNOWN_OUTLINE_SHARE_EXCLUDES.has(a.type),
+      (a) =>
+        !UNKNOWN_OUTLINE_SHARE_EXCLUDES.has(a.type) && !isActivityType(a.type),
     );
     const unknown = counted.filter((a) => a.geometry.length === 0).length;
     if (
@@ -181,5 +185,6 @@ export function validateBundle(
   }
   report.counts.points = bundle.points.length;
   report.counts.airspaces = bundle.airspaces.length;
+  if (bundle.obstacles) report.counts.obstacles = bundle.obstacles.length;
   return errors.length === 0;
 }

@@ -9,9 +9,11 @@ import GraphQLJSON from 'graphql-type-json';
 import * as request from 'supertest';
 import { JwtAuthGuard } from '../../../common/guards/jwt.guard';
 import {
+  aerodromeSheetOf,
   NavdataService,
   toAirspaceRecord,
 } from '../../navdata/navdata.service';
+import { NavPointEntity } from '../../navdata/entity/navdata.entity';
 import { NavdataResolver } from '../../navdata/navdata.resolver';
 import { buildBundle } from '../../navdata/import/bundle';
 import { siaSampleBuffer } from '../../navdata/import/tests/fixtures/sia-sample';
@@ -109,11 +111,34 @@ const windGrid = (): WindsGrid => {
 class InMemoryNavdata {
   points: EnginePoint[];
   airspaces: ReturnType<typeof toAirspaceRecord>[];
+  rows = new Map<string, NavPointEntity>();
+  // A wind turbine 1 NM north of the leg NW -> LFOP, its top 2200 ft AMSL:
+  // less than 500 ft under the 2500 ft of the leg.
+  obstacles = [
+    {
+      ident: 'E9999-1',
+      type: 'Eolienne(s)',
+      lat: 49.12,
+      lon: 1.6,
+      amslFt: 2200,
+      aglFt: 500,
+      count: 1,
+      lighting: 'jour et nuit',
+    },
+  ];
   constructor() {
     const { bundle } = buildBundle({
       sia: { fileName: 'XML_SIA_2026-10-29.xml', data: siaSampleBuffer() },
       now: new Date('2026-10-16'),
     });
+    for (const p of bundle.points)
+      this.rows.set(p.ident, {
+        ident: p.ident,
+        name: p.name,
+        elevation_ft: p.elevationFt,
+        source: p.source,
+        extra: p.extra,
+      } as NavPointEntity);
     this.points = bundle.points.map((p) => ({
       id: randomUUID(),
       type: p.type,
@@ -177,9 +202,18 @@ class InMemoryNavdata {
     const point = this.points.find(
       (p) => p.type === 'AERODROME' && p.ident === icao,
     );
-    return point
-      ? { point, runways: [], frequencies: [], circuitHeightFt: null }
-      : null;
+    if (!point) return null;
+    const sheet = aerodromeSheetOf(this.rows.get(icao)!, this.cycle);
+    return {
+      point,
+      sheet,
+      runways: sheet.runways,
+      frequencies: sheet.frequencies,
+      circuitHeightFt: null,
+    };
+  }
+  async obstaclesInBox() {
+    return this.obstacles;
   }
   async search(text: string) {
     return this.points.filter(
@@ -635,6 +669,98 @@ describe('Flight preparation through GraphQL (LFPN -> LFOP, DR400-180)', () => {
     // The QNH used (here the departure METAR's) is given back for the paper log.
     expect(plan.qnhHpa).toBe(1021);
     expect(plan.status).toBe('WARNING');
+  });
+
+  it('gives the aerodromes, their nav log frequency, the runway wind, the obstacles and the freezing level', async () => {
+    const { data, errors } = await gql(
+      'pilot',
+      `query ($input: FlightPlanInput!) {
+      computeFlightPlan(input: $input) {
+        notices { code status }
+        legs { from { ident frequency } to { ident type aerodromeIcao frequency } altitudeFt highestObstacleFt
+          obstacles { ident type count amslFt marginFt status } }
+        aerodromes { role icao
+          sheet { status vfr navLogFrequency vacUrl chartsUrl runways { designator ends { designator trueBearingDeg } } frequencies { service mhz hoursCode } }
+          conditions { windDirectionDeg windSpeedKt temperatureC qnhHpa pressureAltitudeFt densityAltitudeFt runways { designator headwindKt crosswindKt best } } }
+        freezingLevels { place ident state altitudeFt topFt }
+      }
+    }`,
+      { input: planInput() },
+    );
+    expect(errors).toBeUndefined();
+    const plan = data.computeFlightPlan;
+    // TWR TOUSSUS 119.300 on the departure line (HX hours, no A/A).
+    expect(plan.legs[0].from.frequency).toBe('TWR 119.300');
+    expect(plan.legs[1].to.frequency).toBe('TWR 118.900');
+    // The VFR point keeps its aerodrome for the nav log label.
+    expect(plan.legs[0].to).toMatchObject({
+      ident: 'NW',
+      type: 'VRP',
+      aerodromeIcao: 'LFPN',
+    });
+    const departure = plan.aerodromes.find((a: any) => a.role === 'departure');
+    expect(departure.sheet).toMatchObject({
+      status: 'CAP',
+      navLogFrequency: 'TWR 119.300',
+      vacUrl:
+        'https://www.sia.aviation-civile.gouv.fr/media/dvd/eAIP_29_OCT_2026/Atlas-VAC/PDF_AIPparSSection/VAC/AD/AD-2.LFPN.pdf',
+    });
+    // METAR 27012KT on 07L/25R (true 67/247): 25R into the wind.
+    expect(departure.conditions).toMatchObject({
+      windDirectionDeg: 270,
+      windSpeedKt: 12,
+      temperatureC: 14,
+      qnhHpa: 1021,
+    });
+    expect(departure.conditions.runways).toEqual([
+      { designator: '07L', headwindKt: -11, crosswindKt: -5, best: false },
+      { designator: '25R', headwindKt: 11, crosswindKt: 5, best: true },
+    ]);
+    expect(departure.conditions.densityAltitudeFt).toBeGreaterThan(200);
+    expect(departure.conditions.densityAltitudeFt).toBeLessThan(400);
+    // The wind turbine 1 NM from the leg NW -> LFOP, 300 ft under it.
+    expect(plan.legs[1].obstacles).toEqual([
+      {
+        ident: 'E9999-1',
+        type: 'Eolienne(s)',
+        count: 1,
+        amslFt: 2200,
+        marginFt: 300,
+        status: 'WARNING',
+      },
+    ]);
+    expect(plan.legs[1].highestObstacleFt).toBe(2200);
+    expect(plan.legs[0].obstacles).toEqual([]);
+    expect(plan.notices).toEqual(
+      expect.arrayContaining([{ code: 'OBSTACLE_MARGIN', status: 'WARNING' }]),
+    );
+    // 10 °C up to 700 hPa: still above 0 °C at the top of the forecast.
+    expect(plan.freezingLevels.map((f: any) => [f.place, f.state])).toEqual([
+      ['DEPARTURE', 'ABOVE'],
+      ['ROUTE', 'ABOVE'],
+      ['DESTINATION', 'ABOVE'],
+    ]);
+    expect(plan.freezingLevels[0].topFt).toBeGreaterThan(9000);
+  });
+
+  it('serves the aerodrome sheet and the obstacles of the map', async () => {
+    const { data, errors } = await gql(
+      'pilot',
+      `{
+      aerodrome(icao: "LFOP") { point { ident } sheet { icao name status fuelTypes navLogFrequency runways { designator } } }
+      obstaclesInBox(bbox: { south: 49, west: 1.5, north: 49.2, east: 1.7 }) { ident amslFt lighting }
+    }`,
+    );
+    expect(errors).toBeUndefined();
+    expect(data.aerodrome.sheet).toMatchObject({
+      icao: 'LFOP',
+      status: 'CAP',
+      navLogFrequency: 'TWR 118.900',
+      runways: [{ designator: '04/22' }],
+    });
+    expect(data.obstaclesInBox).toEqual([
+      { ident: 'E9999-1', amslFt: 2200, lighting: 'jour et nuit' },
+    ]);
   });
 
   it('answers in English when the interface is in English', async () => {

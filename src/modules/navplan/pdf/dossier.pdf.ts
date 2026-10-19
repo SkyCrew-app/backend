@@ -10,6 +10,9 @@ import {
 import { utcTime } from '../engine/conditions';
 import { renderMessage } from '../render';
 import { altitudeLimitLabel } from '../engine/airspace-intersection';
+import { pointLabel } from '../engine/point-label';
+import { navLogFrequency } from '../engine/aerodrome';
+import { renderSheet } from '../../navdata/navdata.service';
 import { embedDossierFonts } from './truetype-font';
 
 // The flight file: navigation log, fuel, mass and balance with the envelope,
@@ -278,7 +281,10 @@ function legRows(legs: LegResult[], result: FlightPlanResult): string[][] {
   const takeoff = new Date(
     new Date(result.departureTime).getTime() + TAXI_OUT_MINUTES * 60000,
   );
-  const departure = blankRow(first.from.ident, first.from.elevationFt ?? 0);
+  const departure = blankRow(
+    pointLabel(first.from),
+    first.from.elevationFt ?? 0,
+  );
   departure[13] = hhmm(takeoff);
   departure[15] = one(result.fuel.loadedL - result.fuel.taxiL);
   departure[17] = first.from.frequency ?? '';
@@ -303,7 +309,7 @@ function legRows(legs: LegResult[], result: FlightPlanResult): string[][] {
         return `${c.airspace.name}${radio ? ` ${radio.mhz}` : ''}`;
       });
     rows.push([
-      leg.to.ident,
+      pointLabel(leg.to),
       String(leg.altitudeFt),
       deg(leg.trueCourseDeg),
       deg(leg.magneticCourseDeg),
@@ -498,6 +504,148 @@ export function sunLines(
   ];
 }
 
+// Obstacles less than 500 ft below the planned altitude, one line per leg.
+export function obstacleLines(legs: LegResult[], language: Language): string[] {
+  return legs
+    .filter((leg) => (leg.obstacles ?? []).length > 0)
+    .map(
+      (leg) =>
+        `${t(language, 'navplan.pdf.obstacles', {
+          leg: `${pointLabel(leg.from)}-${pointLabel(leg.to)}`,
+        })} ${(leg.obstacles ?? [])
+          .map(
+            (o) =>
+              `${o.type}${o.count > 1 ? ` x${o.count}` : ''} ${o.amslFt} ft (+${one(o.alongNm)} NM)`,
+          )
+          .join(', ')}`,
+    );
+}
+
+const signed = (value: number, positive: string, negative: string) =>
+  `${Math.abs(value)} ${value >= 0 ? positive : negative}`;
+
+// The heading line of an aerodrome, then status, frequencies, hours, fuel,
+// METAR wind and density altitude; warn: worth the pilot's attention.
+export function aerodromeLines(
+  aerodrome: NonNullable<FlightPlanResult['aerodromes']>[number],
+  language: Language,
+): { text: string; warn: boolean }[] {
+  const role = renderTranslation(
+    language,
+    `navplan.role.${aerodrome.role}` as TranslationKey,
+  );
+  const sheet = aerodrome.sheet ? renderSheet(aerodrome.sheet, language) : null;
+  const lines: { text: string; warn: boolean }[] = [
+    {
+      text: `${role} ${aerodrome.icao}${sheet?.name ? ` ${sheet.name}` : ''}${sheet?.elevationFt != null ? ` — ${sheet.elevationFt} ft` : ''}`,
+      warn: false,
+    },
+  ];
+  if (!sheet) return lines;
+  if (sheet.status)
+    lines.push({
+      text: t(language, `navplan.aerodrome.status.${sheet.status}`),
+      warn: sheet.status !== 'CAP',
+    });
+  const radio = aerodrome.sheet
+    ? navLogFrequency(aerodrome.sheet, aerodrome.role)
+    : null;
+  if (radio) lines.push({ text: radio, warn: false });
+  if (sheet.atsHours)
+    lines.push({
+      text: `${t(language, 'navplan.pdf.atsHours')} : ${sheet.atsHours.split('\n').join(' · ')}`,
+      warn: false,
+    });
+  lines.push({
+    text: `${t(language, 'navplan.pdf.fuelAvailable')} : ${sheet.fuelTypes.length ? sheet.fuelTypes.join(', ') : t(language, 'navplan.pdf.fuelNone')}${sheet.fuelHours ? ` (${sheet.fuelHours.split('\n')[0]})` : ''}`,
+    warn: sheet.fuelTypes.length === 0,
+  });
+  if (sheet.vacUrl) lines.push({ text: `VAC : ${sheet.vacUrl}`, warn: false });
+  const c = aerodrome.conditions;
+  if (c) {
+    const wind =
+      c.metar.windSpeedKt === null
+        ? '?'
+        : c.metar.windDirectionDeg === null
+          ? `${c.metar.variable ? 'VRB' : '000'}/${c.metar.windSpeedKt} kt`
+          : `${deg(c.metar.windDirectionDeg)}/${c.metar.windSpeedKt}${c.metar.gustKt ? `G${c.metar.gustKt}` : ''} kt`;
+    lines.push({
+      text: t(language, 'navplan.pdf.metarConditions', {
+        wind,
+        temperature: c.metar.temperatureC ?? '?',
+        qnh: c.metar.qnhHpa ?? '?',
+        da: c.densityAltitudeFt ?? '?',
+      }),
+      warn: false,
+    });
+  }
+  return lines;
+}
+
+// One row per runway direction: QFU, declared distances, size, METAR wind.
+export function aerodromeRunwayRows(
+  aerodrome: NonNullable<FlightPlanResult['aerodromes']>[number],
+  language: Language,
+): string[][] {
+  const rows: string[][] = [];
+  const winds = aerodrome.conditions?.runways ?? [];
+  for (const runway of aerodrome.sheet?.runways ?? []) {
+    for (const end of runway.ends ?? []) {
+      const wind = winds.find((r) => r.designator === end.designator);
+      rows.push([
+        `${end.designator}${end.magneticBearingDeg !== null ? ` QFU ${deg(end.magneticBearingDeg)}` : ''}`,
+        end.toraM !== null ? `${end.toraM} m` : '—',
+        end.ldaM !== null ? `${end.ldaM} m` : '—',
+        `${runway.lengthM ?? '?'} x ${runway.widthM ?? '?'} m ${runway.surface ?? ''}`.trim(),
+        wind
+          ? `${wind.best ? '* ' : ''}${t(
+              language,
+              'navplan.pdf.rwy.components',
+              {
+                head: signed(
+                  wind.headwindKt,
+                  t(language, 'navplan.pdf.rwy.head'),
+                  t(language, 'navplan.pdf.rwy.tail'),
+                ),
+                cross: signed(
+                  wind.crosswindKt,
+                  t(language, 'navplan.pdf.rwy.right'),
+                  t(language, 'navplan.pdf.rwy.left'),
+                ),
+              },
+            )}`
+          : '',
+      ]);
+    }
+  }
+  return rows;
+}
+
+// The 0 °C isotherm at the departure, along the route and at the
+// destination.
+export function freezingLine(
+  result: Pick<FlightPlanResult, 'freezingLevels'>,
+  language: Language,
+): string | null {
+  const levels = result.freezingLevels ?? [];
+  if (levels.length === 0) return null;
+  return `${t(language, 'navplan.pdf.freezing')} : ${levels
+    .map((level) => {
+      const place = level.ident ?? t(language, 'navplan.pdf.freezing.route');
+      switch (level.state) {
+        case 'LEVEL':
+          return `${place} ${level.altitudeFt} ft`;
+        case 'SURFACE':
+          return `${place} ${t(language, 'navplan.pdf.freezing.surface')}`;
+        case 'ABOVE':
+          return `${place} > ${level.topFt} ft`;
+        default:
+          return `${place} ?`;
+      }
+    })
+    .join(' · ')}`;
+}
+
 export async function buildDossierPdf(
   options: DossierOptions,
 ): Promise<string> {
@@ -514,8 +662,8 @@ export async function buildDossierPdf(
   const w = new Writer(doc, size, font, bold, 24, footer, language);
 
   const route = [
-    result.legs[0]?.from.ident,
-    ...result.legs.map((l) => l.to.ident),
+    result.legs[0] ? pointLabel(result.legs[0].from) : '',
+    ...result.legs.map((l) => pointLabel(l.to)),
   ].join(' - ');
   w.text(`${t(language, 'navplan.pdf.title')} — ${route}`, {
     size: 13,
@@ -598,6 +746,37 @@ export async function buildDossierPdf(
   );
   if (legs.some((leg) => leg.wind.source === 'NONE'))
     w.text(t(language, 'navplan.pdf.windNone'), { size: 7, color: ORANGE });
+  obstacleLines(legs, language).forEach((line) =>
+    w.text(line, { size: 7, color: ORANGE }),
+  );
+
+  // Aerodromes: what the VAC reader checks before leaving.
+  if ((result.aerodromes ?? []).length > 0) {
+    w.heading(t(language, 'navplan.pdf.aerodromes'));
+    for (const aerodrome of result.aerodromes ?? []) {
+      aerodromeLines(aerodrome, language).forEach((line, i) =>
+        w.text(line.text, {
+          size: i === 0 ? 8 : 7,
+          bold: i === 0,
+          color: line.warn ? ORANGE : BLACK,
+        }),
+      );
+      const runways = aerodromeRunwayRows(aerodrome, language);
+      if (runways.length)
+        w.table(
+          [
+            t(language, 'navplan.pdf.rwy.qfu'),
+            t(language, 'navplan.pdf.rwy.tora'),
+            t(language, 'navplan.pdf.rwy.lda'),
+            t(language, 'navplan.pdf.rwy.size'),
+            t(language, 'navplan.pdf.rwy.wind'),
+          ],
+          runways,
+          [3, 1.4, 1.4, 3, 3],
+          6.5,
+        );
+    }
+  }
 
   // Fuel.
   w.heading(t(language, 'navplan.pdf.fuel'));
@@ -693,7 +872,7 @@ export async function buildDossierPdf(
     }
     for (const { leg, c } of crossings) {
       w.text(
-        `${leg.from.ident}-${leg.to.ident} ${one(c.entryNm)}-${one(c.exitNm)} NM : ${c.airspace.name} [${altitudeLimitLabel(c.airspace.floor)} / ${altitudeLimitLabel(c.airspace.ceiling)}] ${c.relation} — ${renderMessage(language, c.requirement)}`,
+        `${pointLabel(leg.from)}-${pointLabel(leg.to)} ${one(c.entryNm)}-${one(c.exitNm)} NM : ${c.airspace.name}${c.airspace.icaoClass ? ` (${c.airspace.icaoClass})` : ''} [${altitudeLimitLabel(c.airspace.floor)} / ${altitudeLimitLabel(c.airspace.ceiling)}] ${t(language, `navplan.pdf.relation.${c.relation}`)} — ${renderMessage(language, c.requirement)}`,
         {
           size: 7,
           color:
@@ -704,6 +883,18 @@ export async function buildDossierPdf(
                 : BLACK,
         },
       );
+      // Hours and the first remark (bypass, PPR, phone): the rest is on the
+      // screen.
+      const hours = c.airspace.hours;
+      const remark = (c.airspace.remarks ?? '').split('\n')[0];
+      const details = [
+        hours
+          ? `${t(language, 'navplan.pdf.hours')} : ${hours.split('\n').join(' · ')}`
+          : null,
+        remark || null,
+      ].filter(Boolean);
+      if (details.length)
+        w.text(details.join(' — '), { size: 6.5, color: GREY, indent: 10 });
     }
 
     // Weather.
@@ -712,6 +903,8 @@ export async function buildDossierPdf(
       if (report.metar) w.text(report.metar, { size: 7 });
       if (report.taf) w.text(report.taf, { size: 7, color: GREY });
     }
+    const freezing = freezingLine(result, language);
+    if (freezing) w.text(freezing, { size: 7 });
   }
 
   await font.embed();

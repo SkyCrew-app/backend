@@ -6,14 +6,17 @@ import {
   RadioFrequency,
 } from '../../navplan/engine/airspace-intersection';
 import {
+  BundleAerodromeInfo,
   BundleAirspace,
+  BundleObstacle,
   BundlePoint,
   BundleRunway,
+  BundleRunwayEnd,
   bump,
   ImportReport,
   UNKNOWN_OUTLINE_COUNT,
 } from './bundle-types';
-import { siaText } from './sia-text';
+import { siaInLanguage, siaText } from './sia-text';
 import { child, childText, walkXml, XmlElement } from './xml';
 
 // Reads the SIA "XML SIA" export (file XML_SIA_yyyy-mm-dd.xml of the zip
@@ -71,7 +74,33 @@ const AIRSPACE_TYPES: Record<string, AirspaceType[]> = {
   TRA: ['TRA'],
   TSA: ['TSA'],
   PRN: ['PROTECTED'],
+  // Activities published at a point (ENR 5.5 / 5.7), checked against the
+  // AIRAC 2610 records: Pje "parachutage", Vol "voltige", TrPla / TrVL /
+  // TrPVL "treuillage planeurs / vol libre / parachutisme ascensionnel",
+  // Aer "vols radiocommandés", Bal "ballon captif", AP "aéronefs sans
+  // équipage à bord", SUR "survols interdits à basse altitude, 1000 ft MNM
+  // monomoteurs à piston" (sites the law protects, see PRN). FBZ (flight
+  // planning buffer zones, FL195 and above) stays out.
+  Pje: ['PARACHUTING'],
+  Vol: ['AEROBATICS'],
+  TrPla: ['WINCH'],
+  TrVL: ['WINCH'],
+  TrPVL: ['WINCH'],
+  Aer: ['MODEL_AIRCRAFT'],
+  Bal: ['BALLOON'],
+  AP: ['DRONE'],
+  SUR: ['LOW_OVERFLIGHT'],
 };
+
+const ACTIVITY_TYPES = new Set<AirspaceType>([
+  'PARACHUTING',
+  'AEROBATICS',
+  'WINCH',
+  'MODEL_AIRCRAFT',
+  'BALLOON',
+  'DRONE',
+  'LOW_OVERFLIGHT',
+]);
 
 const NAVAID_TYPES: Record<string, BundlePoint['type']> = {
   VOR: 'VOR',
@@ -93,6 +122,7 @@ export interface SiaParseResult {
   version: string | null;
   points: BundlePoint[];
   airspaces: BundleAirspace[];
+  obstacles: BundleObstacle[];
 }
 
 const ref = (element: XmlElement, name: string): string | null =>
@@ -235,6 +265,92 @@ const closeRing = (ring: number[][]): number[][] => {
   return first[0] === last[0] && first[1] === last[1] ? ring : [...ring, first];
 };
 
+const yesNo = (value: string | null): boolean | null =>
+  value === 'oui' ? true : value === 'non' ? false : null;
+
+// The grades named in SvcEscaleFuel (French part): "Carburants : 100 LL -
+// JET A1 - JET SAF - UL AERO SUPER +" at LFPN, "UL91 - JET A1" at LFRS,
+// "NIL" where there is none. F18 / F34 / F35 are the military grades.
+const FUEL_GRADES: [RegExp, string][] = [
+  [/100\s*LL/i, '100LL'],
+  [/UL\s*91/i, 'UL91'],
+  [/UL\s*AERO\s*SUPER\s*\+?/i, 'UL AERO SUPER+'],
+  [/JET\s*A-?1/i, 'JET A1'],
+  [/JET\s*SAF/i, 'JET SAF'],
+  [/MOGAS|SP\s*98/i, 'MOGAS'],
+  [/\bTR0\b|\bTRO\b/, 'TR0'],
+  [/\bF\s?18\b/, 'F18'],
+  [/\bF\s?34\b/, 'F34'],
+  [/\bF\s?35\b/, 'F35'],
+];
+
+export function fuelGrades(text: string | null): string[] {
+  const french = siaInLanguage(text, 'fr');
+  if (!french) return [];
+  const grades = FUEL_GRADES.filter(([pattern]) => pattern.test(french)).map(
+    ([, grade]) => grade,
+  );
+  // "AVGAS" alone is 100LL in France; with 100LL it is the same grade.
+  if (/AVGAS/i.test(french) && !grades.includes('100LL'))
+    grades.unshift('100LL');
+  return grades;
+}
+
+// The SIA codes ground and delivery as TWR "Sol" / "Prévol" (LFBO): named
+// as a pilot calls them.
+const serviceOf = (code: string, indic: string | null): string => {
+  if (code !== 'TWR') return code;
+  if (/^(Sol|Ground)$/i.test(indic ?? '')) return 'GND';
+  if (/^(Prévol|Prevol|Delivery)$/i.test(indic ?? '')) return 'DEL';
+  return code;
+};
+
+// Runway "07R/25L": end 1 is 07R (threshold 1, Lda1...), end 2 is 25L.
+function runwayEnds(rwy: XmlElement): BundleRunwayEnd[] {
+  const designators = (childText(rwy, 'Rwy') ?? '').split('/');
+  const bearing = number(childText(rwy, 'OrientationGeo'));
+  return designators.slice(0, 2).map((designator, i) => {
+    const n = i + 1;
+    return {
+      designator: designator.trim(),
+      trueBearingDeg:
+        bearing === null
+          ? null
+          : Math.round(((bearing + i * 180) % 360) * 100) / 100,
+      magneticBearingDeg: null,
+      toraM: null,
+      todaM: null,
+      asdaM: null,
+      ldaM: number(childText(rwy, `Lda${n}`)),
+      thresholdElevationFt: number(childText(rwy, `AltFtThr${n}`)),
+      displacedThreshold: childText(rwy, `LatDThr${n}`) !== null,
+      remarks: childText(rwy, `RemDecDist${n}`),
+    };
+  });
+}
+
+function aerodromeInfo(ad: XmlElement): BundleAerodromeInfo {
+  const fuel = childText(ad, 'SvcEscaleFuel');
+  return {
+    status: childText(ad, 'AdStatut'),
+    vfr: yesNo(childText(ad, 'TfcVfr')),
+    ifr: yesNo(childText(ad, 'TfcIfr')),
+    privateFlights: yesNo(childText(ad, 'TfcPrive')),
+    magneticVariationDeg: number(childText(ad, 'AdMagVar')),
+    magneticVariationYear: childText(ad, 'MagVarDate'),
+    atsHoursCode: childText(ad, 'HorAtsCode'),
+    atsHours: childText(ad, 'HorAtsTxt'),
+    fuelHours: childText(ad, 'HorAvtTxt'),
+    fuel,
+    fuelRemarks: childText(ad, 'SvcEscaleFuelRem'),
+    fuelTypes: fuelGrades(fuel),
+    remarks: childText(ad, 'AdRem'),
+    phone: childText(ad, 'AdTel'),
+    operator: childText(ad, 'AdGestion'),
+    ad2: childText(ad, 'AdAd2') === 'oui',
+  };
+}
+
 const mandatoryOf = (description: string | null): boolean | null => {
   if (!description) return null;
   if (/obligatoire|compulsory|mandatory/i.test(description)) return true;
@@ -270,9 +386,17 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
   // Auxiliary frequencies (Suppletive), military UHF ones and the emergency
   // one (TMA EVREUX: 362.300, 243.000, 121.500 first) come after the main
   // VHF ones: the first frequency of a service is the one a plan names.
+  // Hours and remarks are kept: at LFOP, A/A 120.200 (HX, "Absence ATS")
+  // and TWR 120.200 (HO) are told apart only by them.
   const frequenciesByService = new Map<
     string,
-    { mhz: string; auxiliary: boolean }[]
+    {
+      mhz: string;
+      auxiliary: boolean;
+      hoursCode: string | null;
+      hours: string | null;
+      remark: string | null;
+    }[]
   >();
   for (const frequency of list('FrequenceS')) {
     const service = ref(frequency, 'Service');
@@ -282,8 +406,18 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
     values.push({
       mhz: Number(mhz).toFixed(3),
       auxiliary: childText(frequency, 'Suppletive') === 'oui',
+      hoursCode: childText(frequency, 'HorCode'),
+      hours: siaText(childText(frequency, 'HorTxt')),
+      remark: siaText(childText(frequency, 'Remarque')),
     });
     frequenciesByService.set(service, values);
+  }
+  // The aerodrome of a CTR (Espace/AdAssocie): the tower of LFBO is
+  // published on the CTR BLAGNAC only.
+  const adOfEspace = new Map<string, string>();
+  for (const espace of list('EspaceS')) {
+    const ad = ref(espace, 'AdAssocie');
+    if (ad) adOfEspace.set(espace.attributes.pk, ad);
   }
   // A service names its aerodrome, its airspace, or both (APP ORLY: LFPO
   // and CTR PARIS; TWR AGEN: LFBA and CTR AGEN LA GARENNE): it belongs to
@@ -292,8 +426,8 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
   const radioByAd = new Map<string, RadioFrequency[]>();
   const radioByEspace = new Map<string, RadioFrequency[]>();
   for (const service of list('ServiceS')) {
-    const ad = ref(service, 'Ad');
     const espace = ref(service, 'Espace');
+    const ad = ref(service, 'Ad') ?? (espace ? adOfEspace.get(espace) : null);
     if (!ad && !espace) continue;
     const code = childText(service, 'Service') ?? '';
     const indic = childText(service, 'IndicService');
@@ -315,7 +449,15 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
           Number(!isAirbandVhf(a.mhz)) - Number(!isAirbandVhf(b.mhz)) ||
           Number(a.auxiliary) - Number(b.auxiliary),
       )
-      .map(({ mhz }) => ({ service: code, callsign, mhz }));
+      .map(({ mhz, auxiliary, hoursCode, hours, remark }) => ({
+        service: serviceOf(code, indic),
+        callsign,
+        mhz,
+        hoursCode,
+        hours,
+        remark,
+        auxiliary,
+      }));
     if (frequencies.length === 0) continue;
     for (const [owners, owner] of [
       [radioByAd, ad],
@@ -338,6 +480,8 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
       lengthM: number(childText(rwy, 'Longueur')),
       widthM: number(childText(rwy, 'Largeur')),
       surface: childText(rwy, 'Revetement'),
+      main: childText(rwy, 'Principale') === 'oui',
+      ends: runwayEnds(rwy),
     });
     runwaysByAd.set(ad, runways);
   }
@@ -370,8 +514,14 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
       sourceId: ad.attributes.pk ?? null,
       extra: {
         runways: runwaysByAd.get(ad.attributes.pk) ?? [],
-        frequencies: radioByAd.get(ad.attributes.pk) ?? [],
+        // Once each: the tower of a CTR may also be on its aerodrome.
+        frequencies: (radioByAd.get(ad.attributes.pk) ?? []).filter(
+          (f, i, all) =>
+            all.findIndex((g) => g.service === f.service && g.mhz === f.mhz) ===
+            i,
+        ),
         status: childText(ad, 'AdStatut'),
+        info: aerodromeInfo(ad),
       },
     });
     bump(report.counts, 'AERODROME');
@@ -503,8 +653,12 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
       const definedInWords = segments.some(
         (s) => s.text.length >= TEXT_DEFINITION_MIN_LENGTH,
       );
+      // An activity is at its point whatever text comes with it ("Axe RWY
+      // 08/26" for Vol 6105).
       referencePoint =
-        anchor && !definedInWords ? { lat: anchor[1], lon: anchor[0] } : null;
+        anchor && (!definedInWords || types.some((t) => ACTIVITY_TYPES.has(t)))
+          ? { lat: anchor[1], lon: anchor[0] }
+          : null;
     }
     const partName = childText(partie, 'NomPartie');
     const usualName = childText(partie, 'NomUsuel');
@@ -529,10 +683,10 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
         .join('\n'),
     );
     const scheduleCode = childText(volume, 'HorCode');
-    const activity = siaText(
-      childText(volume, 'Activite') ??
-        childText(volume, 'HorTxt') ??
-        (scheduleCode === 'H24' ? 'H24' : null),
+    // Activity and hours apart: 1196 volumes have both.
+    const activity = siaText(childText(volume, 'Activite'));
+    const hours = siaText(
+      childText(volume, 'HorTxt') ?? (scheduleCode === 'H24' ? 'H24' : null),
     );
     for (const type of types) {
       airspaces.push({
@@ -543,6 +697,7 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
         floor,
         ceiling,
         activity,
+        hours,
         scheduleCode,
         frequencies: radioByEspace.get(espace.attributes.pk) ?? [],
         remarks: remarks || null,
@@ -550,7 +705,8 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
         referencePoint,
       });
       bump(report.counts, `airspace ${type}`);
-      if (geometry.length === 0) {
+      // Activities at a point are expected without an outline.
+      if (geometry.length === 0 && !ACTIVITY_TYPES.has(type)) {
         unknownOutlines++;
         report.warnings.push(
           referencePoint
@@ -568,5 +724,31 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
     );
   }
 
-  return { effectiveDate, version, points, airspaces };
+  // Obstacles of metropolitan France (the territories overseas are out of
+  // the planner's reach).
+  const obstacles: BundleObstacle[] = [];
+  for (const obstacle of list('ObstacleS')) {
+    if (territoryCode(obstacle) !== 'LF') continue;
+    const lat = number(childText(obstacle, 'Latitude'));
+    const lon = number(childText(obstacle, 'Longitude'));
+    const amslFt = number(childText(obstacle, 'AmslFt'));
+    if (lat === null || lon === null || amslFt === null) {
+      bump(report.skipped, 'obstacle without position or height');
+      continue;
+    }
+    obstacles.push({
+      ident: childText(obstacle, 'NumeroNom') ?? obstacle.attributes.pk,
+      type: childText(obstacle, 'TypeObst') ?? '?',
+      lat,
+      lon,
+      amslFt,
+      aglFt: number(childText(obstacle, 'AglFt')),
+      count: number(childText(obstacle, 'Combien')) ?? 1,
+      lighting: childText(obstacle, 'Balisage'),
+      remark: siaText(childText(obstacle, 'Remarque')),
+    });
+  }
+  if (obstacles.length) report.counts.obstacles = obstacles.length;
+
+  return { effectiveDate, version, points, airspaces, obstacles };
 }

@@ -4,6 +4,7 @@ import {
   AirspaceEntity,
   NavdataCycle,
   NavPointEntity,
+  ObstacleEntity,
 } from './entity/navdata.entity';
 import { NavdataImportService } from './import/navdata-import.service';
 import { NavdataResolver } from './navdata.resolver';
@@ -11,7 +12,12 @@ import { NavdataService } from './navdata.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([NavdataCycle, NavPointEntity, AirspaceEntity]),
+    TypeOrmModule.forFeature([
+      NavdataCycle,
+      NavPointEntity,
+      AirspaceEntity,
+      ObstacleEntity,
+    ]),
   ],
   providers: [NavdataService, NavdataImportService, NavdataResolver],
   exports: [NavdataService, NavdataImportService],

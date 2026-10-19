@@ -14,12 +14,62 @@ export const UNKNOWN_OUTLINE_COUNT = 'airspace unknown outline';
 
 export type PointSource = 'SIA' | 'OURAIRPORTS' | 'CLUB';
 
+// One direction of a runway (a QFU): "07R" of "07R/25L".
+export interface BundleRunwayEnd {
+  designator: string;
+  trueBearingDeg: number | null;
+  // AIXM Rdn/valMagBrg: the QFU as published.
+  magneticBearingDeg: number | null;
+  // Declared distances, m: AIXM Rdd (TORA, TODA, ASDA, LDA); the LDA also
+  // from XML SIA Rwy/Lda1, Lda2 when the AIXM file is not there.
+  toraM: number | null;
+  todaM: number | null;
+  asdaM: number | null;
+  ldaM: number | null;
+  thresholdElevationFt: number | null;
+  displacedThreshold: boolean;
+  // Rwy/RemDecDist1, 2: why the distances are reduced.
+  remarks: string | null;
+}
+
 export interface BundleRunway {
   designator: string;
   trueHeadingDeg: number | null;
   lengthM: number | null;
   widthM: number | null;
   surface: string | null;
+  // Absent from bundles built before the declared distances.
+  main?: boolean;
+  ends?: BundleRunwayEnd[];
+}
+
+// What a pilot reads in AD 2 of the aerodrome, raw as the SIA writes it
+// (bilingual texts keep their "#" and "\\": see siaInLanguage).
+export interface BundleAerodromeInfo {
+  // AdStatut: CAP (open to public air traffic), RST (restricted use), PRV
+  // (private), MIL (military), OFF (not an aerodrome: CROSS, ACC...).
+  status: string | null;
+  // TfcVfr, TfcIfr, TfcPrive: oui / non.
+  vfr: boolean | null;
+  ifr: boolean | null;
+  privateFlights: boolean | null;
+  magneticVariationDeg: number | null;
+  magneticVariationYear: string | null;
+  atsHoursCode: string | null;
+  atsHours: string | null;
+  fuelHours: string | null;
+  fuel: string | null;
+  fuelRemarks: string | null;
+  // 100LL, UL91, JET A1... read from SvcEscaleFuel.
+  fuelTypes: string[];
+  remarks: string | null;
+  phone: string | null;
+  operator: string | null;
+  // AdAd2: the aerodrome has a page in AD 2 of the AIP.
+  ad2: boolean;
+  // Whether the VAC of the cycle answered when the bundle was built
+  // (navdata:build --check-vac); absent when not checked.
+  vac?: boolean;
 }
 
 export interface BundlePoint {
@@ -40,7 +90,23 @@ export interface BundlePoint {
     frequencies?: RadioFrequency[];
     status?: string | null;
     description?: string | null;
+    info?: BundleAerodromeInfo;
   } | null;
+}
+
+// An obstacle of the SIA (ObstacleS, metropolitan France).
+export interface BundleObstacle {
+  ident: string;
+  // TypeObst: "Eolienne(s)", "Pylône", "Mât"...
+  type: string;
+  lat: number;
+  lon: number;
+  amslFt: number;
+  aglFt: number | null;
+  count: number;
+  // Balisage: "jour et nuit", "jour", "nuit", "non balisé".
+  lighting: string | null;
+  remark: string | null;
 }
 
 export interface BundleAirspace {
@@ -54,6 +120,8 @@ export interface BundleAirspace {
   scheduleCode: string | null;
   frequencies: RadioFrequency[];
   remarks: string | null;
+  // Volume/HorTxt; absent from bundles built before it was kept apart.
+  hours?: string | null;
   // GeoJSON MultiPolygon coordinates, [lon, lat]; empty when the outline is
   // not published (géométrie inconnue).
   geometry: number[][][][];
@@ -80,6 +148,8 @@ export interface NavdataBundle {
   };
   points: BundlePoint[];
   airspaces: BundleAirspace[];
+  // Absent from bundles built before the obstacles were imported.
+  obstacles?: BundleObstacle[];
 }
 
 export interface ImportReport {

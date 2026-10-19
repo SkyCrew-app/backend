@@ -1,8 +1,9 @@
 import { TranslationKey } from '../../common/i18n/fr';
 import { Language } from '../../common/i18n/languages';
 import { renderTranslation } from '../../common/i18n/translate';
-import { airspaceView } from '../navdata/navdata.service';
-import { FlightPlanResult, LegResult } from './engine/engine';
+import { airspaceView, renderSheet } from '../navdata/navdata.service';
+import { navLogFrequency } from './engine/aerodrome';
+import { FlightPlanResult, LegResult, PlanAerodrome } from './engine/engine';
 import { MessageRef } from './engine/types';
 
 // The engine's result as the API returns it: messages written out in the
@@ -51,6 +52,38 @@ function renderLeg(leg: LegResult, language: Language) {
           ? ` ${renderTranslation(language, 'navplan.airspace.checkHeight')}`
           : ''),
     })),
+    obstacles: leg.obstacles ?? [],
+    highestObstacleFt: leg.highestObstacleFt ?? null,
+  };
+}
+
+function renderAerodrome(aerodrome: PlanAerodrome, language: Language) {
+  const { conditions, sheet } = aerodrome;
+  return {
+    role: aerodrome.role,
+    icao: aerodrome.icao,
+    sheet: sheet
+      ? {
+          ...renderSheet(sheet, language),
+          navLogFrequency: navLogFrequency(sheet, aerodrome.role),
+        }
+      : null,
+    conditions: conditions
+      ? {
+          station: conditions.station,
+          observedAt: date(conditions.observedAt),
+          windDirectionDeg: conditions.metar.windDirectionDeg,
+          windSpeedKt: conditions.metar.windSpeedKt,
+          gustKt: conditions.metar.gustKt,
+          windVariable: conditions.metar.variable,
+          temperatureC: conditions.metar.temperatureC,
+          dewpointC: conditions.metar.dewpointC,
+          qnhHpa: conditions.metar.qnhHpa,
+          pressureAltitudeFt: conditions.pressureAltitudeFt,
+          densityAltitudeFt: conditions.densityAltitudeFt,
+          runways: conditions.runways,
+        }
+      : null,
   };
 }
 
@@ -116,6 +149,13 @@ export function renderResult(result: FlightPlanResult, language: Language) {
       distanceNm: u.distanceNm,
       status: u.status,
       message: renderMessage(language, u.message),
+    })),
+    aerodromes: (result.aerodromes ?? []).map((a) =>
+      renderAerodrome(a, language),
+    ),
+    freezingLevels: (result.freezingLevels ?? []).map((f) => ({
+      ...f,
+      at: date(f.at),
     })),
     notices: result.notices.map((n) => ({
       code: n.code,

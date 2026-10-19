@@ -9,6 +9,7 @@ import {
 } from 'pdf-lib';
 import { computeFlightPlan, FlightPlanResult } from '../../engine/engine';
 import { engineInput } from '../../engine/tests/fixture';
+import { AerodromeSheet } from '../../engine/aerodrome';
 import { buildDossierPdf, navdataLabel, qnhOrigin } from '../dossier.pdf';
 import { readTrueType } from '../truetype-font';
 import { readFileSync } from 'fs';
@@ -205,5 +206,138 @@ describe('flight file PDF: fonts and contents', () => {
         'fr',
       ),
     ).toBe('cycle AIRAC 2611 du 2026-10-01 — PÉRIMÉES');
+  });
+
+  // LFRS of AIRAC 2610: runway 03/21, 21 with its displaced threshold (LDA
+  // 2591 m), UL91 and JET A1 only.
+  const lfrs: AerodromeSheet = {
+    icao: 'LFRS',
+    name: 'NANTES ATLANTIQUE',
+    elevationFt: 90,
+    source: 'SIA',
+    status: 'CAP',
+    vfr: true,
+    ifr: true,
+    privateFlights: true,
+    magneticVariationDeg: 0.72,
+    magneticVariationYear: '2025',
+    atsHoursCode: 'H24',
+    atsHours: 'H 24',
+    fuelHours: null,
+    fuel: 'UL91 - JET A1',
+    fuelRemarks: null,
+    fuelTypes: ['UL91', 'JET A1'],
+    remarks: null,
+    phone: null,
+    operator: null,
+    runways: [
+      {
+        designator: '03/21',
+        trueHeadingDeg: 27.44,
+        lengthM: 2853,
+        widthM: 45,
+        surface: 'macadam',
+        main: true,
+        ends: [
+          ['03', 27.44, 28.37, 2001, 2853],
+          ['21', 207.44, 208.37, 2853, 2591],
+        ].map(
+          ([designator, trueBearingDeg, magneticBearingDeg, toraM, ldaM]) => ({
+            designator: designator as string,
+            trueBearingDeg: trueBearingDeg as number,
+            magneticBearingDeg: magneticBearingDeg as number,
+            toraM: toraM as number,
+            todaM: null,
+            asdaM: null,
+            ldaM: ldaM as number,
+            thresholdElevationFt: null,
+            displacedThreshold: designator === '21',
+            remarks: null,
+          }),
+        ),
+      },
+    ],
+    frequencies: [
+      { service: 'TWR', callsign: 'NANTES Tour', mhz: '118.655' },
+      { service: 'GND', callsign: 'NANTES Sol', mhz: '121.655' },
+      { service: 'ATIS', callsign: 'NANTES', mhz: '126.930' },
+    ],
+    vacUrl:
+      'https://www.sia.aviation-civile.gouv.fr/media/dvd/eAIP_01_OCT_2026/Atlas-VAC/PDF_AIPparSSection/VAC/AD/AD-2.LFRS.pdf',
+    chartsUrl: 'https://www.sia.aviation-civile.gouv.fr/',
+  };
+
+  it('prints the aerodromes, the runway wind, the obstacles, the VFR points with their aerodrome and the freezing level', async () => {
+    const point = {
+      id: 'VRP:LFRN-S',
+      type: 'VRP' as const,
+      ident: 'S',
+      name: 'S',
+      lat: 47.75,
+      lon: -1.7,
+      elevationFt: null,
+      frequency: null,
+      aerodromeIcao: 'LFRN',
+      mandatory: null,
+    };
+    const result = computeFlightPlan(
+      engineInput({
+        waypoints: [point],
+        legs: [
+          { altitudeFt: 2500, cruiseSetting: null, windOverride: null },
+          { altitudeFt: 2500, cruiseSetting: null, windOverride: null },
+        ],
+        weather: [
+          {
+            icao: 'LFRS',
+            metar: 'LFRS 161000Z 24012KT CAVOK 18/09 Q1015',
+            taf: null,
+            observedAt: new Date('2026-10-16T10:00:00Z'),
+          },
+        ],
+        aerodromes: { departure: lfrs, destination: null },
+        obstacles: [
+          {
+            ident: 'E1',
+            type: 'Eolienne(s)',
+            lat: 47.5,
+            lon: -1.66,
+            amslFt: 2150,
+            aglFt: 500,
+            count: 1,
+            lighting: 'jour et nuit',
+          },
+        ],
+        wind: () => ({
+          fromDeg: 240,
+          speedKt: 10,
+          temperatureC: 5,
+          validAt: null,
+        }),
+      }),
+    );
+    const text = pageText(
+      await load(await buildDossierPdf(options(result))),
+    ).join('\n');
+    expect(text).toMatch(/LFRS - LFRN S - LFRN/);
+    expect(text).toMatch(/^Terrains$/m);
+    expect(text).toMatch(/^départ LFRS NANTES ATLANTIQUE — 90 ft$/m);
+    expect(text).toMatch(/Ouvert à la circulation aérienne publique/);
+    expect(text).toMatch(/TWR 118\.655 · GND 121\.655 · ATIS 126\.930/);
+    expect(text).toMatch(/Carburant : UL91, JET A1/);
+    expect(text).toMatch(/AD-2\.LFRS\.pdf/);
+    expect(text).toMatch(
+      /METAR : vent 240\/12 kt, 18 °C, QNH 1015 — altitude densité \d+ ft/,
+    );
+    // 21 (true 207.44): 240 is 32.6° to the right, 10 kt head and 6 kt across.
+    expect(text).toMatch(/21 QFU 208/);
+    expect(text).toMatch(/2591 m/);
+    expect(text).toMatch(/\* 10 kt face, travers 6 kt de droite/);
+    expect(text).toMatch(
+      /Obstacles à moins de 500 ft sous l’altitude prévue, LFRS-LFRN S : Eolienne\(s\) 2150 ft/,
+    );
+    expect(text).toMatch(
+      /Isotherme 0 °C \(prévision ICON-EU\) : LFRS > \d+ ft/,
+    );
   });
 });

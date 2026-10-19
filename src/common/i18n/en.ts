@@ -500,8 +500,67 @@ export const en: Record<TranslationKey, string> = {
     'Unverified area: {{name}}, outline not available — find it on the current chart.',
   'navplan.airspace.unverifiedUnlocated':
     'Unverified area: {{name}}, outline not available and position unknown — find it on the current chart.',
+  'navplan.airspace.parachuting':
+    'Parachuting up to {{limit}} (hours: {{activity}}) — keep clear or ask the unit for the activity; do not overfly without contact.',
+  'navplan.airspace.aerobatics':
+    'Aerobatic area up to {{limit}} (hours: {{activity}}) — avoid it when active.',
+  'navplan.airspace.winch':
+    'Winch launching (cable) up to {{limit}} (hours: {{activity}}) — do not overfly below that altitude.',
+  'navplan.airspace.balloon':
+    'Captive balloon (cable) up to {{limit}} (hours: {{activity}}) — do not overfly below that altitude.',
+  'navplan.airspace.lowOverflight':
+    'Low-level overflight prohibited: stay above {{limit}} (single piston engine; higher for other aircraft, see the instructions).',
+  'navplan.airspace.modelAircraft':
+    'Model aircraft up to {{limit}} (hours: {{activity}}) — keep a lookout.',
+  'navplan.airspace.drone':
+    'Drone activity up to {{limit}} (hours: {{activity}}) — keep a lookout.',
+  'navplan.notice.obstacleMargin':
+    '{{count}} obstacle(s) within {{corridor}} NM of the route top out less than {{margin}} ft below the planned altitude (closest to it: {{amsl}} ft before {{point}}) — see the legs and climb if needed.',
+  'navplan.notice.aerodromeRestricted':
+    '{{icao}} ({{role}}) is a restricted-use aerodrome: prior permission of the operator (see the aerodrome sheet and the VAC).',
+  'navplan.notice.aerodromePrivate':
+    "{{icao}} ({{role}}) is a private aerodrome: the owner's permission is needed.",
+  'navplan.notice.aerodromeMilitary':
+    '{{icao}} ({{role}}) is a military aerodrome: access by permission only (PPR).',
+  'navplan.notice.aerodromeNoVfr':
+    '{{icao}} ({{role}}) is not open to VFR traffic according to the SIA: check the VAC.',
   'navplan.airspace.checkHeight':
     'Limit given as a height above ground: check on the chart. Unknown activity ≠ inactive area.',
+  'navplan.aerodrome.status.CAP': 'Open to public air traffic (CAP)',
+  'navplan.aerodrome.status.RST':
+    'Restricted use: prior permission of the operator',
+  'navplan.aerodrome.status.PRV': "Private aerodrome: owner's permission",
+  'navplan.aerodrome.status.MIL':
+    'Military aerodrome: access by permission (PPR)',
+  'navplan.aerodrome.status.OFF': 'Not an aerodrome (agency, control centre)',
+  'navplan.pdf.aerodromes': 'Aerodromes',
+  'navplan.pdf.rwy.qfu': 'Runway / QFU',
+  'navplan.pdf.rwy.tora': 'TORA',
+  'navplan.pdf.rwy.lda': 'LDA',
+  'navplan.pdf.rwy.size': 'Size, surface',
+  'navplan.pdf.rwy.wind': 'METAR wind (* suggested runway)',
+  'navplan.pdf.rwy.components': '{{head}}, cross {{cross}}',
+  'navplan.pdf.rwy.head': 'kt head',
+  'navplan.pdf.rwy.tail': 'kt tail',
+  'navplan.pdf.rwy.right': 'kt from the right',
+  'navplan.pdf.rwy.left': 'kt from the left',
+  'navplan.pdf.atsHours': 'ATS hours',
+  'navplan.pdf.fuelAvailable': 'Fuel',
+  'navplan.pdf.fuelNone': 'none published',
+  'navplan.pdf.metarConditions':
+    'METAR: wind {{wind}}, {{temperature}} °C, QNH {{qnh}} — density altitude {{da}} ft',
+  'navplan.pdf.hours': 'Hours',
+  'navplan.pdf.obstacles':
+    'Obstacles less than 500 ft below the planned altitude, {{leg}}:',
+  'navplan.pdf.freezing': '0 °C isotherm (ICON-EU forecast)',
+  'navplan.pdf.freezing.route': 'halfway',
+  'navplan.pdf.freezing.surface': 'at the surface',
+  'navplan.pdf.relation.INSIDE': 'inside',
+  'navplan.pdf.relation.NEAR_FLOOR': 'near the floor',
+  'navplan.pdf.relation.NEAR_CEILING': 'near the ceiling',
+  'navplan.pdf.relation.UNKNOWN_VERTICAL': 'height to check',
+  'navplan.pdf.relation.BELOW': 'below',
+  'navplan.pdf.relation.ABOVE': 'above',
   'navplan.pdf.title': 'Flight file',
   'navplan.pdf.navLog': 'Navigation log',
   'navplan.pdf.aircraft': 'Aircraft',
