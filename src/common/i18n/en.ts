@@ -515,7 +515,7 @@ export const en: Record<TranslationKey, string> = {
   'navplan.airspace.drone':
     'Drone activity up to {{limit}} (hours: {{activity}}) — keep a lookout.',
   'navplan.notice.obstacleMargin':
-    '{{count}} obstacle(s) within {{corridor}} NM of the route top out less than {{margin}} ft below the planned altitude (closest to it: {{amsl}} ft before {{point}}) — see the legs and climb if needed.',
+    '{{count}} obstacle(s) within {{corridor}} NM of the route top out less than {{margin}} ft below the planned altitude (highest against the altitude: {{amsl}} ft, leg to {{point}}) — see the legs and climb if needed.',
   'navplan.notice.aerodromeRestricted':
     '{{icao}} ({{role}}) is a restricted-use aerodrome: prior permission of the operator (see the aerodrome sheet and the VAC).',
   'navplan.notice.aerodromePrivate':

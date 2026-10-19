@@ -234,8 +234,14 @@ export function requirementOf(
         : status;
 
   if (isActivityType(airspace.type)) {
+    // Model aircraft and drones fly below 500 ft or so above their field:
+    // a limit given above the ground the plan cannot place is only a
+    // lookout, never a warning (Aer 8539: 80 ft ASFC under a 2500 ft leg).
+    const lookout =
+      (airspace.type === 'MODEL_AIRCRAFT' || airspace.type === 'DRONE') &&
+      relation === 'UNKNOWN_VERTICAL';
     return {
-      status: passive ? 'OK' : 'WARNING',
+      status: passive || lookout ? 'OK' : 'WARNING',
       requirement: {
         key: ACTIVITY_KEYS[airspace.type],
         params: {

@@ -532,7 +532,7 @@ export const fr = {
   'navplan.airspace.drone':
     'Activité de drones jusqu’à {{limit}} (horaires : {{activity}}) — veille visuelle.',
   'navplan.notice.obstacleMargin':
-    '{{count}} obstacle(s) à moins de {{corridor}} NM de la route culminent à moins de {{margin}} ft sous l’altitude prévue (le plus proche de l’altitude : {{amsl}} ft avant {{point}}) — voir les branches et relever l’altitude si besoin.',
+    '{{count}} obstacle(s) à moins de {{corridor}} NM de la route culminent à moins de {{margin}} ft sous l’altitude prévue (le plus haut par rapport à l’altitude : {{amsl}} ft, branche vers {{point}}) — voir les branches et relever l’altitude si besoin.',
   'navplan.notice.aerodromeRestricted':
     '{{icao}} ({{role}}) est à usage restreint : autorisation préalable de l’exploitant (voir la fiche terrain et la VAC).',
   'navplan.notice.aerodromePrivate':

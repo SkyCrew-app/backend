@@ -108,6 +108,23 @@ describe('runway wind', () => {
     });
   });
 
+  it('suggests the main runway of two parallel ones (LFMT 30R, not 30L)', () => {
+    const runway = (designator: string, main: boolean, lengthM: number) => ({
+      designator,
+      trueHeadingDeg: 124.69,
+      lengthM,
+      widthM: 45,
+      surface: 'macadam',
+      main,
+    });
+    const winds = runwayWinds(
+      [runway('12R/30L', false, 1100), runway('12L/30R', true, 2600)],
+      decodeMetar('LFMT 191230Z 32016KT 20/10 Q1019'),
+      2.29,
+    );
+    expect(winds.find((w) => w.best)?.designator).toBe('30R');
+  });
+
   it('gives no component for a variable or calm wind', () => {
     expect(
       runwayWinds(
@@ -311,6 +328,14 @@ describe('activities published at a point', () => {
         1200,
       )[0].status,
     ).toBe('WARNING');
+  });
+
+  it('lists model aircraft whose limit is above the ground as a lookout only', () => {
+    const [crossing] = cross([
+      zone('MODEL_AIRCRAFT', 0.5, { ref: 'AGL', value: 80 }),
+    ]);
+    expect(crossing.relation).toBe('UNKNOWN_VERTICAL');
+    expect(crossing.status).toBe('OK');
   });
 
   it('asks to check the height over a low-level overflight ban given above the ground', () => {

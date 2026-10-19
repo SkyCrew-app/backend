@@ -263,10 +263,24 @@ export function runwayWinds(
       });
     }
   }
+  // Parallel runways get the same components: the main one, else the
+  // longest, is suggested (LFMT 30R, 2600 m, rather than 30L, 1100 m).
+  const rank = new Map<RunwayWind, { main: number; length: number }>();
+  let i = 0;
+  for (const runway of runways)
+    for (const end of runwayEndsOf(runway)) {
+      if (trueBearingOf(end, magneticVariationDeg) === null) continue;
+      rank.set(winds[i++], {
+        main: runway.main ? 1 : 0,
+        length: runway.lengthM ?? 0,
+      });
+    }
   const best = [...winds].sort(
     (a, b) =>
       b.headwindKt - a.headwindKt ||
-      Math.abs(a.crosswindKt) - Math.abs(b.crosswindKt),
+      Math.abs(a.crosswindKt) - Math.abs(b.crosswindKt) ||
+      rank.get(b)!.main - rank.get(a)!.main ||
+      rank.get(b)!.length - rank.get(a)!.length,
   )[0];
   if (best) best.best = true;
   return winds;
