@@ -494,9 +494,9 @@ export const fr = {
   'navplan.mb.moment.landing': 'atterrissage',
   'navplan.airspace.prohibited': 'Zone interdite : pénétration interdite.',
   'navplan.airspace.restricted':
-    'Zone réglementée : pénétration soumise à conditions. Activité : {{activity}} — vérifier le NOTAM, le SUP AIP et, pour le RTBA, l’activité AZBA du jour.',
+    'Zone réglementée : pénétration soumise à conditions. Activité : {{activity}} — vérifier l’activité du jour (NOTAM, SUP AIP, AZBA pour le RTBA).',
   'navplan.airspace.danger':
-    'Zone dangereuse : activité {{activity}} — vérifier le NOTAM / SUP AIP.',
+    'Zone dangereuse : activité {{activity}} — vérifier l’activité du jour (NOTAM, SUP AIP).',
   'navplan.airspace.rmz': 'Contact radio obligatoire {{radio}}.',
   'navplan.airspace.rmzNoRadio':
     'Contact radio obligatoire (fréquence : voir la carte en vigueur).',
