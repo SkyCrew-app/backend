@@ -477,9 +477,9 @@ export const en: Record<TranslationKey, string> = {
   'navplan.mb.moment.landing': 'landing',
   'navplan.airspace.prohibited': 'Prohibited area: entry prohibited.',
   'navplan.airspace.restricted':
-    'Restricted area: entry subject to conditions. Activity: {{activity}} — check the NOTAM, the AIP SUP and, for the RTBA, the day’s AZBA activity.',
+    'Restricted area: entry subject to conditions. Activity: {{activity}} — check the day’s activity (NOTAM, AIP SUP, AZBA for the RTBA).',
   'navplan.airspace.danger':
-    'Danger area: activity {{activity}} — check the NOTAM / AIP SUP.',
+    'Danger area: activity {{activity}} — check the day’s activity (NOTAM, AIP SUP).',
   'navplan.airspace.rmz': 'Radio contact mandatory {{radio}}.',
   'navplan.airspace.rmzNoRadio':
     'Radio contact mandatory (frequency: see the current chart).',

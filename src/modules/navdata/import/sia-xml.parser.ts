@@ -2,6 +2,7 @@ import { direct, METRES_PER_NM } from '../../navplan/engine/geodesy';
 import {
   AirspaceType,
   AltitudeLimit,
+  isAirbandVhf,
   RadioFrequency,
 } from '../../navplan/engine/airspace-intersection';
 import {
@@ -12,6 +13,7 @@ import {
   ImportReport,
   UNKNOWN_OUTLINE_COUNT,
 } from './bundle-types';
+import { siaText } from './sia-text';
 import { child, childText, walkXml, XmlElement } from './xml';
 
 // Reads the SIA "XML SIA" export (file XML_SIA_yyyy-mm-dd.xml of the zip
@@ -265,19 +267,34 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
   const list = (table: string) => tables[table] ?? [];
 
   // Services and their frequencies.
-  const frequenciesByService = new Map<string, string[]>();
+  // Auxiliary frequencies (Suppletive), military UHF ones and the emergency
+  // one (TMA EVREUX: 362.300, 243.000, 121.500 first) come after the main
+  // VHF ones: the first frequency of a service is the one a plan names.
+  const frequenciesByService = new Map<
+    string,
+    { mhz: string; auxiliary: boolean }[]
+  >();
   for (const frequency of list('FrequenceS')) {
     const service = ref(frequency, 'Service');
     const mhz = childText(frequency, 'Frequence');
     if (!service || !mhz) continue;
     const values = frequenciesByService.get(service) ?? [];
-    values.push(Number(mhz).toFixed(3));
+    values.push({
+      mhz: Number(mhz).toFixed(3),
+      auxiliary: childText(frequency, 'Suppletive') === 'oui',
+    });
     frequenciesByService.set(service, values);
   }
-  const radioByOwner = new Map<string, RadioFrequency[]>();
+  // A service names its aerodrome, its airspace, or both (APP ORLY: LFPO
+  // and CTR PARIS; TWR AGEN: LFBA and CTR AGEN LA GARENNE): it belongs to
+  // each. Aerodromes and airspaces are numbered apart (Ad pk 36 and Espace
+  // pk 36 both exist), hence one map each.
+  const radioByAd = new Map<string, RadioFrequency[]>();
+  const radioByEspace = new Map<string, RadioFrequency[]>();
   for (const service of list('ServiceS')) {
-    const owner = ref(service, 'Ad') ?? ref(service, 'Espace');
-    if (!owner) continue;
+    const ad = ref(service, 'Ad');
+    const espace = ref(service, 'Espace');
+    if (!ad && !espace) continue;
     const code = childText(service, 'Service') ?? '';
     const indic = childText(service, 'IndicService');
     const place = childText(service, 'IndicLieu');
@@ -290,18 +307,23 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
     ).trim();
     const callsign =
       [place, indic].filter((v) => v && v !== '.').join(' ') || fromLk || null;
-    const frequencies = (
-      frequenciesByService.get(service.attributes.pk) ?? []
-    ).map((mhz) => ({
-      service: code,
-      callsign,
-      mhz,
-    }));
+    const frequencies = [
+      ...(frequenciesByService.get(service.attributes.pk) ?? []),
+    ]
+      .sort(
+        (a, b) =>
+          Number(!isAirbandVhf(a.mhz)) - Number(!isAirbandVhf(b.mhz)) ||
+          Number(a.auxiliary) - Number(b.auxiliary),
+      )
+      .map(({ mhz }) => ({ service: code, callsign, mhz }));
     if (frequencies.length === 0) continue;
-    radioByOwner.set(owner, [
-      ...(radioByOwner.get(owner) ?? []),
-      ...frequencies,
-    ]);
+    for (const [owners, owner] of [
+      [radioByAd, ad],
+      [radioByEspace, espace],
+    ] as const) {
+      if (owner)
+        owners.set(owner, [...(owners.get(owner) ?? []), ...frequencies]);
+    }
   }
 
   // Aerodromes.
@@ -348,7 +370,7 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
       sourceId: ad.attributes.pk ?? null,
       extra: {
         runways: runwaysByAd.get(ad.attributes.pk) ?? [],
-        frequencies: radioByOwner.get(ad.attributes.pk) ?? [],
+        frequencies: radioByAd.get(ad.attributes.pk) ?? [],
         status: childText(ad, 'AdStatut'),
       },
     });
@@ -501,15 +523,17 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
         ? `Plafond / ceiling: ${childText(volume, 'Plafond2')} ft ASFC`
         : null,
     ].filter(Boolean);
-    const remarks = [childText(volume, 'Remarque'), ...alternatives]
-      .filter(Boolean)
-      .join('\n')
-      .replace(/#/g, '\n');
+    const remarks = siaText(
+      [childText(volume, 'Remarque'), ...alternatives]
+        .filter(Boolean)
+        .join('\n'),
+    );
     const scheduleCode = childText(volume, 'HorCode');
-    const activity =
+    const activity = siaText(
       childText(volume, 'Activite') ??
-      childText(volume, 'HorTxt') ??
-      (scheduleCode === 'H24' ? 'H24' : null);
+        childText(volume, 'HorTxt') ??
+        (scheduleCode === 'H24' ? 'H24' : null),
+    );
     for (const type of types) {
       airspaces.push({
         sourceId: `${espace.attributes.pk}/${partie.attributes.pk}/${volume.attributes.pk}${types.length > 1 ? `/${type}` : ''}`,
@@ -520,7 +544,7 @@ export function parseSiaXml(xml: string, report: ImportReport): SiaParseResult {
         ceiling,
         activity,
         scheduleCode,
-        frequencies: radioByOwner.get(espace.attributes.pk) ?? [],
+        frequencies: radioByEspace.get(espace.attributes.pk) ?? [],
         remarks: remarks || null,
         geometry,
         referencePoint,
