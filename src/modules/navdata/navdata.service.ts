@@ -12,6 +12,7 @@ import {
   AirspaceType,
   hasOutline,
 } from '../navplan/engine/airspace-intersection';
+import { siaText } from './import/sia-text';
 import {
   EnginePoint,
   NavdataStatus,
@@ -74,10 +75,12 @@ export const toAirspaceRecord = (row: AirspaceEntity): AirspaceRecord => ({
     ref: row.ceiling_ref as AltitudeLimit['ref'],
     value: row.ceiling_value,
   },
-  activity: row.activity,
+  // Cleaned when read: cycles imported before the cleaning keep the "#" and
+  // "\\" of the SIA export.
+  activity: siaText(row.activity),
   scheduleCode: row.schedule_code,
   frequencies: row.frequencies ?? [],
-  remarks: row.remarks,
+  remarks: siaText(row.remarks),
   geometry: row.geometry,
   minLat: Number(row.min_lat),
   maxLat: Number(row.max_lat),

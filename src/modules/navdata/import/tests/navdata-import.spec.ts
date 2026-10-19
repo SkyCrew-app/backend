@@ -29,6 +29,8 @@ import {
 } from '../validate';
 import { siaSampleBuffer, SIA_SAMPLE_XML } from './fixtures/sia-sample';
 import { sia2310ExcerptsBuffer } from './fixtures/sia-2310-excerpts';
+import { sia2610ExcerptsBuffer } from './fixtures/sia-2610-excerpts';
+import { siaText } from '../sia-text';
 import { decodeXmlBuffer, walkXml } from '../xml';
 
 const day = (iso: string) => new Date(`${iso}T00:00:00Z`);
@@ -393,6 +395,48 @@ describe('SIA XML parser on the real export (AIRAC 2310 extracts)', () => {
       min_lon: -180,
       max_lon: 180,
     });
+  });
+});
+
+// Real records of AIRAC 2610, the first export imported in production: the
+// CTRs and TMAs had no frequency (a service naming its aerodrome and its
+// airspace went to the aerodrome only) and the activities kept the "#\\"
+// of the export.
+describe('SIA XML parser on the real export (AIRAC 2610 extracts)', () => {
+  const report = emptyReport();
+  const parsed = parseSiaXml(decodeXmlBuffer(sia2610ExcerptsBuffer()), report);
+  const airspace = (name: string) =>
+    parsed.airspaces.find((a) => a.name.startsWith(name))!;
+
+  it('gives a CTR the frequency of the service that names it with its aerodrome', () => {
+    const ctr = airspace('CTR AGEN LA GARENNE');
+    expect(ctr.icaoClass).toBe('D');
+    expect(ctr.frequencies).toEqual([
+      { service: 'TWR', callsign: 'AGEN Tour', mhz: '121.305' },
+    ]);
+  });
+
+  it('cleans a bilingual activity and the remarks: French line, then English line', () => {
+    const r97 = airspace('R 97');
+    expect(r97.name).toBe('R 97 MONCE');
+    expect(r97.activity).toBe('Activités vélivoles.\nGliding activities');
+    expect(r97.remarks).toBe(
+      'CAG IFR : contournement obligatoire.\nCAG VFR, CAM : Veille obligatoire de la fréquence STRASBOURG APP.\nActivité connue de STRASBOURG APP.',
+    );
+  });
+});
+
+describe('SIA free text', () => {
+  it('turns "#" and "#\\\\" into lines, drops CR LF and empty lines, idempotent', () => {
+    expect(siaText("Procédures d'aérodromes#\\\\Aerodrome procedures")).toBe(
+      "Procédures d'aérodromes\nAerodrome procedures",
+    );
+    expect(
+      siaText('SUM : MON-SUN : 0530-2030#\r\n#WIN : MON-SUN : 0630-1930'),
+    ).toBe('SUM : MON-SUN : 0530-2030\nWIN : MON-SUN : 0630-1930');
+    expect(siaText(siaText('A#\\\\B'))).toBe('A\nB');
+    expect(siaText('#')).toBeNull();
+    expect(siaText(null)).toBeNull();
   });
 });
 

@@ -88,6 +88,13 @@ export interface AirspaceCrossing {
   activityKnown: boolean;
 }
 
+// A frequency to call in VHF (118.000-136.975 MHz, the radios of light
+// aircraft), not the emergency one (121.500, listed by TMA EVREUX 1).
+export const isAirbandVhf = (mhz: string) => {
+  const value = Number(mhz);
+  return value >= 118 && value < 137 && Math.abs(value - 121.5) > 0.001;
+};
+
 export const altitudeLimitAmsl = (
   limit: AltitudeLimit,
   qnhHpa: number,
@@ -153,8 +160,12 @@ export function requirementOf(
   relation: AirspaceRelation,
 ): { status: CheckStatus; requirement: MessageRef; activityKnown: boolean } {
   const activityKnown = (airspace.scheduleCode ?? '').toUpperCase() === 'H24';
-  const activity = airspace.activity ?? '';
-  const frequency = airspace.frequencies[0];
+  // The published activity, on one line in the sentence.
+  const activity = (airspace.activity ?? '').split('\n').join(' · ');
+  // A VHF frequency of the air band first: the UHF ones are military.
+  const frequency =
+    airspace.frequencies.find((f) => isAirbandVhf(f.mhz)) ??
+    airspace.frequencies[0];
   const radio = frequency
     ? `${frequency.callsign ?? frequency.service} ${frequency.mhz}`
     : '';
