@@ -19,6 +19,7 @@ import {
   UNKNOWN_OUTLINE_COUNT,
 } from '../bundle-types';
 import { bboxOf } from '../navdata-import.service';
+import { isActivityType } from '../../../navplan/engine/airspace-intersection';
 import { parseCsv, parseOurAirports } from '../ourairports';
 import { parseSiaXml } from '../sia-xml.parser';
 import {
@@ -102,16 +103,20 @@ describe('SIA XML parser', () => {
       elevationFt: 512,
       source: 'SIA',
     });
-    expect(lfop.extra.runways).toEqual([
+    expect(lfop.extra.runways).toMatchObject([
       {
         designator: '04/22',
         trueHeadingDeg: 42,
         lengthM: 1700,
         widthM: 45,
         surface: 'Revêtue',
+        ends: [
+          { designator: '04', trueBearingDeg: 42 },
+          { designator: '22', trueBearingDeg: 222 },
+        ],
       },
     ]);
-    expect(lfop.extra.frequencies).toEqual([
+    expect(lfop.extra.frequencies).toMatchObject([
       { service: 'TWR', callsign: 'ROUEN Tour', mhz: '118.900' },
     ]);
   });
@@ -412,7 +417,15 @@ describe('SIA XML parser on the real export (AIRAC 2610 extracts)', () => {
     const ctr = airspace('CTR AGEN LA GARENNE');
     expect(ctr.icaoClass).toBe('D');
     expect(ctr.frequencies).toEqual([
-      { service: 'TWR', callsign: 'AGEN Tour', mhz: '121.305' },
+      {
+        service: 'TWR',
+        callsign: 'AGEN Tour',
+        mhz: '121.305',
+        hoursCode: 'HO',
+        hours: null,
+        remark: null,
+        auxiliary: false,
+      },
     ]);
   });
 
@@ -453,7 +466,10 @@ const realExport = process.env.SIA_REAL_EXPORT;
     });
     expect(report.errors).toEqual([]);
     expect(report.warnings.some((w) => /circle/.test(w))).toBe(false);
-    const unknown = bundle.airspaces.filter((a) => a.geometry.length === 0);
+    // Activities (parachuting, model aircraft...) are published at a point.
+    const unknown = bundle.airspaces.filter(
+      (a) => a.geometry.length === 0 && !isActivityType(a.type),
+    );
     expect(report.counts[UNKNOWN_OUTLINE_COUNT] ?? 0).toBe(unknown.length);
     for (const a of bundle.airspaces) {
       for (const polygon of a.geometry) {
@@ -463,6 +479,12 @@ const realExport = process.env.SIA_REAL_EXPORT;
     }
     const validation = emptyReport();
     expect(validateBundle(bundle, null, validation)).toBe(true);
+    // AIRAC 2610: the obstacles of metropolitan France, the declared
+    // distances of the AIXM file.
+    expect(bundle.obstacles?.length).toBeGreaterThan(13000);
+    expect(
+      report.counts['runway directions with AIXM distances'],
+    ).toBeGreaterThan(1400);
   });
 });
 

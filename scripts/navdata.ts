@@ -16,6 +16,8 @@
  * Import into a database (DATABASE_URL), on each installation:
  *   npm run navdata:import -- --sia <XML or zip> [same options as build]
  *   npm run navdata:import -- --file navdata-2611.json.gz [--sha256 <hex>]
+ *   build option: --check-vac (asks the SIA, one HEAD request per aerodrome,
+ *            whether its VAC of the cycle exists; stored in the bundle)
  *   options: --activate-now (do not wait for the effective date),
  *            --force (import a cycle that fails validation; never by default)
  * In the production image: node dist/scripts/navdata.js import --file ...
@@ -51,7 +53,9 @@ import {
   AirspaceEntity,
   NavdataCycle,
   NavPointEntity,
+  ObstacleEntity,
 } from '../src/modules/navdata/entity/navdata.entity';
+import { vacUrl } from '../src/modules/navdata/import/vac';
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -98,6 +102,40 @@ async function ourAirports(): Promise<{
   return null;
 }
 
+// Whether the VAC of each SIA aerodrome answers, a few requests at a time.
+async function checkVac(bundle: NavdataBundle): Promise<void> {
+  const effective = new Date(bundle.effectiveFrom);
+  const aerodromes = bundle.points.filter(
+    (p) =>
+      p.type === 'AERODROME' &&
+      p.source === 'SIA' &&
+      p.extra?.info &&
+      p.extra.info.status !== 'OFF',
+  );
+  let found = 0;
+  for (let i = 0; i < aerodromes.length; i += 8) {
+    await Promise.all(
+      aerodromes.slice(i, i + 8).map(async (point) => {
+        const info = point.extra!.info!;
+        try {
+          const response = await axios.head(vacUrl(point.ident, effective), {
+            timeout: 20_000,
+            validateStatus: () => true,
+          });
+          info.vac =
+            response.status === 200 &&
+            /pdf/i.test(String(response.headers['content-type'] ?? ''));
+        } catch {
+          // Unknown: the link is offered with the SIA home page.
+          delete info.vac;
+        }
+        if (info.vac) found++;
+      }),
+    );
+  }
+  console.log(`VAC: ${found} of ${aerodromes.length} aerodromes have one`);
+}
+
 async function bundleFromArguments(): Promise<{
   bundle: NavdataBundle;
   data: Buffer;
@@ -136,6 +174,7 @@ async function bundleFromArguments(): Promise<{
     ourAirportsPoints: shipped,
     airac: option('airac'),
   });
+  if (flag('check-vac')) await checkVac(bundle);
   // What the import will check (without the previous cycle to compare to).
   const validation = emptyReport();
   const accepted = validateBundle(bundle, null, validation);
@@ -179,7 +218,7 @@ async function main() {
   const dataSource = new DataSource({
     type: 'postgres',
     url,
-    entities: [NavdataCycle, NavPointEntity, AirspaceEntity],
+    entities: [NavdataCycle, NavPointEntity, AirspaceEntity, ObstacleEntity],
   });
   await dataSource.initialize();
   try {

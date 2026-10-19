@@ -13,6 +13,7 @@ import {
   OurAirportsFiles,
   parseOurAirports,
 } from './ourairports';
+import { mergeAixmRunwayEnds, parseAixmRunwayEnds } from './aixm.parser';
 import { parseSiaXml } from './sia-xml.parser';
 import { decodeXmlBuffer } from './xml';
 import { readZip } from './zip';
@@ -45,19 +46,24 @@ export function decodeBundle(
   return bundle;
 }
 
-// The SIA XML out of the downloaded zip, or the XML file itself.
+// The SIA XML out of the downloaded zip, or the XML file itself; with the
+// AIXM 4.5 file of the zip when it is there (declared distances, QFU).
 export function siaXmlOf(
   fileName: string,
   data: Buffer,
-): { name: string; xml: string } {
+): { name: string; xml: string; aixm: string | null } {
   if (data.readUInt32LE(0) === 0x04034b50) {
-    const entry = readZip(data).find((e) =>
-      /XML_SIA_[\d-]+\.xml$/i.test(e.name),
-    );
+    const entries = readZip(data);
+    const entry = entries.find((e) => /XML_SIA_[\d-]+\.xml$/i.test(e.name));
     if (!entry) throw new BundleError(`No XML_SIA_*.xml in ${fileName}`);
-    return { name: entry.name, xml: decodeXmlBuffer(entry.read()) };
+    const aixm = entries.find((e) => /AIXM[^/]*\.xml$/i.test(e.name));
+    return {
+      name: entry.name,
+      xml: decodeXmlBuffer(entry.read()),
+      aixm: aixm ? decodeXmlBuffer(aixm.read()) : null,
+    };
   }
-  return { name: fileName, xml: decodeXmlBuffer(data) };
+  return { name: fileName, xml: decodeXmlBuffer(data), aixm: null };
 }
 
 export interface BuildOptions {
@@ -82,15 +88,25 @@ export function buildBundle(options: BuildOptions): {
   const now = options.now ?? new Date();
   let points: BundlePoint[] = [];
   const airspaces: NavdataBundle['airspaces'] = [];
+  const obstacles: NonNullable<NavdataBundle['obstacles']> = [];
   const sources: NavdataBundle['sources'] = {};
   const attribution: string[] = [];
 
   let effective: Date | null = null;
   if (options.sia) {
-    const { name, xml } = siaXmlOf(options.sia.fileName, options.sia.data);
+    const { name, xml, aixm } = siaXmlOf(
+      options.sia.fileName,
+      options.sia.data,
+    );
     const parsed = parseSiaXml(xml, report);
     points = parsed.points;
     airspaces.push(...parsed.airspaces);
+    obstacles.push(...parsed.obstacles);
+    if (aixm) mergeAixmRunwayEnds(points, parseAixmRunwayEnds(aixm), report);
+    else
+      report.warnings.push(
+        'No AIXM 4.5 file next to the XML SIA: runways without TORA/TODA/ASDA and magnetic QFU',
+      );
     const fileDate = /(\d{4}-\d{2}-\d{2})/.exec(name)?.[1] ?? null;
     const effectiveDate = parsed.effectiveDate ?? fileDate;
     sources.sia = { file: name, effectiveDate, version: parsed.version };
@@ -141,6 +157,7 @@ export function buildBundle(options: BuildOptions): {
       sources,
       points,
       airspaces,
+      obstacles,
     },
     report,
   };

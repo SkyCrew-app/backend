@@ -187,4 +187,53 @@ export class AirspaceEntity {
 
   @Column({ type: 'text', nullable: true })
   remarks: string | null;
+
+  // Volume/HorTxt (migration 1800000000001).
+  @Column({ type: 'text', nullable: true })
+  hours: string | null;
+}
+
+// Obstacles of a cycle (SIA ObstacleS), migration 1800000000001.
+@Entity('obstacles')
+@Index('IDX_obstacles_cycle_lat_lon', ['cycle_id', 'lat', 'lon'])
+export class ObstacleEntity {
+  @PrimaryGeneratedColumn({ primaryKeyConstraintName: 'PK_obstacles' })
+  id: number;
+
+  @Column({ type: 'integer' })
+  cycle_id: number;
+
+  @ManyToOne(() => NavdataCycle, { onDelete: 'CASCADE' })
+  @JoinColumn({
+    name: 'cycle_id',
+    foreignKeyConstraintName: 'FK_obstacles_cycle',
+  })
+  cycle?: NavdataCycle;
+
+  @Column({ type: 'character varying', length: 32 })
+  ident: string;
+
+  @Column({ type: 'character varying', length: 48 })
+  type: string;
+
+  @Column({ type: 'double precision' })
+  lat: number;
+
+  @Column({ type: 'double precision' })
+  lon: number;
+
+  @Column({ type: 'integer' })
+  amsl_ft: number;
+
+  @Column({ type: 'integer', nullable: true })
+  agl_ft: number | null;
+
+  @Column({ type: 'integer', default: 1 })
+  count: number;
+
+  @Column({ type: 'character varying', length: 32, nullable: true })
+  lighting: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  remark: string | null;
 }

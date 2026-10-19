@@ -9,6 +9,7 @@ import {
   AirspaceEntity,
   NavdataCycle,
   NavPointEntity,
+  ObstacleEntity,
 } from '../entity/navdata.entity';
 import { NavdataService } from '../navdata.service';
 import { airacCycleAt, nextAiracCycle } from './airac';
@@ -274,6 +275,24 @@ export class NavdataImportService implements OnApplicationBootstrap {
             schedule_code: a.scheduleCode?.slice(0, 16) ?? null,
             frequencies: a.frequencies,
             remarks: a.remarks,
+            hours: a.hours ?? null,
+          })),
+        );
+      }
+      const obstacles = bundle.obstacles ?? [];
+      for (let i = 0; i < obstacles.length; i += CHUNK) {
+        await manager.getRepository(ObstacleEntity).insert(
+          obstacles.slice(i, i + CHUNK).map((o) => ({
+            cycle_id: cycle.id,
+            ident: o.ident.slice(0, 32),
+            type: o.type.slice(0, 48),
+            lat: o.lat,
+            lon: o.lon,
+            amsl_ft: Math.round(o.amslFt),
+            agl_ft: o.aglFt === null ? null : Math.round(o.aglFt),
+            count: Math.max(1, Math.round(o.count)),
+            lighting: o.lighting?.slice(0, 32) ?? null,
+            remark: o.remark,
           })),
         );
       }
