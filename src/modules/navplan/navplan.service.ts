@@ -29,7 +29,8 @@ import {
 import { DEFAULT_FUEL_SETTINGS, fuelSettingsProblems } from './engine/fuel';
 import { inverse, pointAlong } from './engine/geodesy';
 import { STANDARD_PRESSURE_HPA } from './engine/atmosphere';
-import { hasOutline } from './engine/airspace-intersection';
+import { hasOutline, isActivityType } from './engine/airspace-intersection';
+import { navLogFrequency } from './engine/aerodrome';
 import { FlightPlanEntity } from './entity/flight-plan.entity';
 import { FlightPlanningSettingsEntity } from './entity/flight-planning-settings.entity';
 import {
@@ -256,16 +257,55 @@ export class NavplanService {
     // the route from their point (UNVERIFIED_AIRSPACE_NEAR_NM).
     const airspaces = allAirspaces.filter(
       (a) =>
-        !hasOutline(a) ||
+        (!hasOutline(a) && !isActivityType(a.type)) ||
         (a.maxLat >= Math.min(...lats) - 0.2 &&
           a.minLat <= Math.max(...lats) + 0.2 &&
           a.maxLon >= Math.min(...lons) - 0.3 &&
           a.minLon <= Math.max(...lons) + 0.3),
     );
-    const [nearby, destinationDetails] = await Promise.all([
+    const [
+      nearby,
+      destinationDetails,
+      departureDetails,
+      alternateDetails,
+      obstacles,
+    ] = await Promise.all([
       this.nearbyMetars(route).catch(() => []),
       this.navdata.aerodrome(destination.ident),
+      this.navdata.aerodrome(departure.ident),
+      alternate ? this.navdata.aerodrome(alternate.ident) : null,
+      this.navdata
+        .obstaclesInBox(
+          {
+            south: Math.min(...lats) - 0.1,
+            north: Math.max(...lats) + 0.1,
+            west: Math.min(...lons) - 0.15,
+            east: Math.max(...lons) + 0.15,
+          },
+          null,
+        )
+        .catch(() => []),
     ]);
+    // The nav log frequency of the aerodromes of the route (see
+    // navLogFrequency for the rule).
+    const withFrequency = (
+      point: EnginePoint,
+      details: { sheet: Parameters<typeof navLogFrequency>[0] } | null,
+      role: Parameters<typeof navLogFrequency>[1],
+    ): EnginePoint =>
+      details
+        ? {
+            ...point,
+            frequency: navLogFrequency(details.sheet, role) ?? point.frequency,
+          }
+        : point;
+    const enRouteAerodromes = await Promise.all(
+      waypoints.map((w) =>
+        w.type === 'AERODROME'
+          ? this.navdata.aerodrome(w.ident).catch(() => null)
+          : null,
+      ),
+    );
     const weather = await this.metarTaf
       .reports(
         [
@@ -280,10 +320,18 @@ export class NavplanService {
 
     return {
       departureTime: new Date(input.departureTime),
-      departure,
-      destination,
-      alternate,
-      waypoints,
+      departure: withFrequency(departure, departureDetails, 'departure'),
+      destination: withFrequency(
+        destination,
+        destinationDetails,
+        'destination',
+      ),
+      alternate: alternate
+        ? withFrequency(alternate, alternateDetails, 'alternate')
+        : null,
+      waypoints: waypoints.map((w, i) =>
+        withFrequency(w, enRouteAerodromes[i], 'enroute'),
+      ),
       legs: input.legs.map((leg) => ({
         altitudeFt: leg.altitudeFt,
         cruiseSetting: leg.cruiseSetting ?? null,
@@ -322,6 +370,12 @@ export class NavplanService {
       windSource: wind.source,
       windCoverage: wind.coverage,
       weather,
+      aerodromes: {
+        departure: departureDetails?.sheet ?? null,
+        destination: destinationDetails?.sheet ?? null,
+        alternate: alternateDetails?.sheet ?? null,
+      },
+      obstacles,
     };
   }
 

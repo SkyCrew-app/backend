@@ -517,8 +517,69 @@ export const fr = {
     'Zone non vérifiée : {{name}}, tracé non disponible — la repérer sur la carte en vigueur.',
   'navplan.airspace.unverifiedUnlocated':
     'Zone non vérifiée : {{name}}, tracé non disponible et position non localisable — la repérer sur la carte en vigueur.',
+  'navplan.airspace.parachuting':
+    'Parachutage jusqu’à {{limit}} (horaires : {{activity}}) — s’écarter de la zone ou s’informer de l’activité auprès de l’organisme ; ne pas la survoler sans contact.',
+  'navplan.airspace.aerobatics':
+    'Zone de voltige jusqu’à {{limit}} (horaires : {{activity}}) — l’éviter quand elle est active.',
+  'navplan.airspace.winch':
+    'Treuillage (câble) jusqu’à {{limit}} (horaires : {{activity}}) — ne pas survoler en dessous de cette altitude.',
+  'navplan.airspace.balloon':
+    'Ballon captif (câble) jusqu’à {{limit}} (horaires : {{activity}}) — ne pas survoler en dessous de cette altitude.',
+  'navplan.airspace.lowOverflight':
+    'Survol à basse altitude interdit : rester au-dessus de {{limit}} (monomoteurs à pistons ; plus haut pour les autres aéronefs, voir les consignes).',
+  'navplan.airspace.modelAircraft':
+    'Aéromodélisme jusqu’à {{limit}} (horaires : {{activity}}) — veille visuelle.',
+  'navplan.airspace.drone':
+    'Activité de drones jusqu’à {{limit}} (horaires : {{activity}}) — veille visuelle.',
+  'navplan.notice.obstacleMargin':
+    '{{count}} obstacle(s) à moins de {{corridor}} NM de la route culminent à moins de {{margin}} ft sous l’altitude prévue (le plus haut par rapport à l’altitude : {{amsl}} ft, branche vers {{point}}) — voir les branches et relever l’altitude si besoin.',
+  'navplan.notice.aerodromeRestricted':
+    '{{icao}} ({{role}}) est à usage restreint : autorisation préalable de l’exploitant (voir la fiche terrain et la VAC).',
+  'navplan.notice.aerodromePrivate':
+    '{{icao}} ({{role}}) est un aérodrome privé : accord du propriétaire nécessaire.',
+  'navplan.notice.aerodromeMilitary':
+    '{{icao}} ({{role}}) est un aérodrome militaire : accès soumis à autorisation (PPR).',
+  'navplan.notice.aerodromeNoVfr':
+    '{{icao}} ({{role}}) n’est pas ouvert au trafic VFR selon le SIA : vérifier la VAC.',
   'navplan.airspace.checkHeight':
     'Limite exprimée en hauteur sol : vérifier sur la carte. Activité inconnue ≠ zone inactive.',
+  'navplan.aerodrome.status.CAP':
+    'Ouvert à la circulation aérienne publique (CAP)',
+  'navplan.aerodrome.status.RST':
+    'Usage restreint : autorisation préalable de l’exploitant',
+  'navplan.aerodrome.status.PRV': 'Aérodrome privé : accord du propriétaire',
+  'navplan.aerodrome.status.MIL':
+    'Aérodrome militaire : accès sur autorisation (PPR)',
+  'navplan.aerodrome.status.OFF':
+    'Pas un aérodrome (organisme, centre de contrôle)',
+  'navplan.pdf.aerodromes': 'Terrains',
+  'navplan.pdf.rwy.qfu': 'Piste / QFU',
+  'navplan.pdf.rwy.tora': 'TORA',
+  'navplan.pdf.rwy.lda': 'LDA',
+  'navplan.pdf.rwy.size': 'Dimensions, revêtement',
+  'navplan.pdf.rwy.wind': 'Vent METAR (* piste conseillée)',
+  'navplan.pdf.rwy.components': '{{head}}, travers {{cross}}',
+  'navplan.pdf.rwy.head': 'kt face',
+  'navplan.pdf.rwy.tail': 'kt arrière',
+  'navplan.pdf.rwy.right': 'kt de droite',
+  'navplan.pdf.rwy.left': 'kt de gauche',
+  'navplan.pdf.atsHours': 'Horaires ATS',
+  'navplan.pdf.fuelAvailable': 'Carburant',
+  'navplan.pdf.fuelNone': 'aucun publié',
+  'navplan.pdf.metarConditions':
+    'METAR : vent {{wind}}, {{temperature}} °C, QNH {{qnh}} — altitude densité {{da}} ft',
+  'navplan.pdf.hours': 'Horaires',
+  'navplan.pdf.obstacles':
+    'Obstacles à moins de 500 ft sous l’altitude prévue, {{leg}} :',
+  'navplan.pdf.freezing': 'Isotherme 0 °C (prévision ICON-EU)',
+  'navplan.pdf.freezing.route': 'mi-parcours',
+  'navplan.pdf.freezing.surface': 'au sol',
+  'navplan.pdf.relation.INSIDE': 'dans la zone',
+  'navplan.pdf.relation.NEAR_FLOOR': 'près du plancher',
+  'navplan.pdf.relation.NEAR_CEILING': 'près du plafond',
+  'navplan.pdf.relation.UNKNOWN_VERTICAL': 'hauteur à vérifier',
+  'navplan.pdf.relation.BELOW': 'en dessous',
+  'navplan.pdf.relation.ABOVE': 'au-dessus',
   'navplan.pdf.title': 'Dossier de vol',
   'navplan.pdf.navLog': 'Log de navigation',
   'navplan.pdf.aircraft': 'Avion',

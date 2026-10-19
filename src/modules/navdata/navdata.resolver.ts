@@ -3,15 +3,19 @@ import { Args, Int, Query, Resolver } from '@nestjs/graphql';
 import { JwtAuthGuard } from '../../common/guards/jwt.guard';
 import { LocalizedExceptionFilter } from '../../common/i18n/localized-exception.filter';
 import { NavPointType } from '../navplan/engine/engine';
+import { navLogFrequency } from '../navplan/engine/aerodrome';
 import {
   AerodromeDetails,
   Airspace,
   NavdataInfo,
   NavPoint,
+  Obstacle,
 } from '../navplan/graphql/contract.types';
+import { RequestLanguage } from '../../common/i18n/request-language';
+import { Language } from '../../common/i18n/languages';
 import { BBoxInput, LatLonInput } from '../navplan/graphql/contract.inputs';
 import { NavPointTypeEnum } from '../navplan/graphql/enums';
-import { airspaceView, NavdataService } from './navdata.service';
+import { airspaceView, NavdataService, renderSheet } from './navdata.service';
 
 // Navigation data for the map and the route builder: any member reads it.
 @Resolver()
@@ -62,9 +66,31 @@ export class NavdataResolver {
     return this.navdata.inBox(bbox, types as NavPointType[]);
   }
 
+  // The aerodrome sheet: AD 2 data with the SIA texts in the reader's
+  // language.
   @Query(() => AerodromeDetails, { nullable: true })
-  aerodrome(@Args('icao') icao: string) {
-    return this.navdata.aerodrome(icao.slice(0, 8));
+  async aerodrome(
+    @Args('icao') icao: string,
+    @RequestLanguage() language: Language,
+  ) {
+    const view = await this.navdata.aerodrome(icao.slice(0, 8));
+    if (!view) return null;
+    const sheet = {
+      ...renderSheet(view.sheet, language),
+      navLogFrequency: navLogFrequency(view.sheet, 'enroute'),
+    };
+    return {
+      ...view,
+      sheet,
+      runways: sheet.runways,
+      frequencies: sheet.frequencies,
+    };
+  }
+
+  // Obstacles for the map; refused over a box holding too many (zoom in).
+  @Query(() => [Obstacle])
+  obstaclesInBox(@Args('bbox', { type: () => BBoxInput }) bbox: BBoxInput) {
+    return this.navdata.obstaclesInBox(bbox);
   }
 
   @Query(() => [Airspace])
