@@ -79,7 +79,8 @@ describe('flight dossier: minimum safe altitude and distances', () => {
     const rows = distanceRows(distances, 'fr');
     expect(rows).toHaveLength(2);
     expect(rows[0][0]).toBe('* 09');
-    expect(rows[0][3]).toContain('Herbe sèche x1.2 (CAA)');
+    expect(rows[0][3]).toBe('herbe x1.2 (CAA), club x1.33');
+    expect(rows[0][7]).toBe('À VÉRIFIER');
     expect(rows[0][4]).toBe(
       `${Math.ceil(200 * 1.2 * 1.33)} / ${Math.ceil(400 * 1.2 * 1.33)} m`,
     );

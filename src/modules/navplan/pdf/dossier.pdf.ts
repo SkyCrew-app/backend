@@ -689,7 +689,7 @@ export function distanceRows(
     runway.factors
       .map(
         (f) =>
-          `${renderTranslation(language, `navplan.distance.factor.${f.code}` as TranslationKey)} x${f.factor}${f.source === 'CAA_SSL7' ? ' (CAA)' : ''}`,
+          `${t(language, `navplan.pdf.dist.factor.${f.code}`)} x${f.factor}${f.source === 'CAA_SSL7' ? ' (CAA)' : ''}`,
       )
       .join(', '),
     runway.requiredDistance15mM === null
@@ -699,7 +699,7 @@ export function distanceRows(
       ? `${runway.availableRunM ?? '?'} / ${runway.availableDistanceM ?? '?'} m`
       : `${runway.availableDistanceM ?? '?'} m`,
     runway.marginM === null ? '—' : `${runway.marginM} m`,
-    t(language, `navplan.pdf.status.${runway.status}`),
+    t(language, `navplan.pdf.dist.status.${runway.status}`),
   ]);
 }
 
@@ -899,7 +899,7 @@ export async function buildDossierPdf(
               t(language, 'navplan.pdf.dist.status'),
             ],
             distanceRows(distances, language),
-            [1.2, 3, 2, 5, 2, 2, 1.2, 1.6],
+            [0.9, 2.6, 1.8, 5.6, 2, 1.7, 1.1, 1.4],
             6,
           );
       }
