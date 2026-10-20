@@ -22,8 +22,8 @@
  * pixel between the "pixel is point" and "pixel is area" conventions can
  * only raise a cell.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fromArrayBuffer } from 'geotiff';
 import {
   TERRAIN_ATTRIBUTION,

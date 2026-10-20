@@ -587,8 +587,10 @@ export function aerodromeDistances(
   }
   // Without a wind, the longest direction is suggested.
   if (results.length > 0 && !results.some((r) => r.suggested)) {
-    results.reduce((a, b) =>
-      (b.availableDistanceM ?? 0) > (a.availableDistanceM ?? 0) ? b : a,
+    results.reduce(
+      (a, b) =>
+        (b.availableDistanceM ?? 0) > (a.availableDistanceM ?? 0) ? b : a,
+      results[0],
     ).suggested = true;
   }
   const suggested = results.find((r) => r.suggested) ?? null;

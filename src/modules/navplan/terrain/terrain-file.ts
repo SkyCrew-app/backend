@@ -1,7 +1,7 @@
-import { createHash } from 'crypto';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
-import { gunzipSync, gzipSync } from 'zlib';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { TerrainGrid } from '../engine/terrain';
 
 // The terrain grid file shipped with the code (built by scripts/terrain.ts):

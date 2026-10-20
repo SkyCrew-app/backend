@@ -383,10 +383,12 @@ export function terrainProfile(
       );
       if (offsetNm > PROFILE_BAND_NM) continue;
       const distance = start + alongNm;
-      const sample = samples.reduce((a, b) =>
-        Math.abs(b.distanceNm - distance) < Math.abs(a.distanceNm - distance)
-          ? b
-          : a,
+      const sample = samples.reduce(
+        (a, b) =>
+          Math.abs(b.distanceNm - distance) < Math.abs(a.distanceNm - distance)
+            ? b
+            : a,
+        samples[0],
       );
       sample.obstacleFt = Math.max(sample.obstacleFt ?? 0, obstacle.amslFt);
     }
