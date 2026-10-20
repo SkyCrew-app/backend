@@ -212,6 +212,8 @@ export const fr = {
     "Indiquez l'année de fabrication de l'avion, entre {{min}} et {{max}}",
   'error.aircraft.hourlyCostRequired':
     "Indiquez le coût d'une heure de vol, en euros (0 ou plus)",
+  'error.elearning.hasResults':
+    "Des membres ont déjà des résultats d'évaluation dans ce contenu : il ne peut pas être supprimé, pour garder leur historique de formation",
   'error.aircraft.heldByMaintenance':
     "Cet avion est en maintenance : sa disponibilité ne peut pas être modifiée tant que la maintenance n'est pas terminée",
   'error.maintenance.endBeforeStart':

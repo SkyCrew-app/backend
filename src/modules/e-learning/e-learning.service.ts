@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -18,6 +19,28 @@ import { UpdateModuleDTO } from './dto/update-module.input';
 import { CreateLessonDTO } from './dto/create-lesson.input';
 import { UpdateLessonDTO } from './dto/update-lesson.input';
 import { sanitizeLessonContent } from '../../common/html/sanitize-rich-text';
+import { localized } from '../../common/i18n/localized-exception';
+
+type ContentScope = 'course' | 'module' | 'lesson';
+
+// The lessons and evaluations under a course, a module or a lesson.
+const SCOPE_SQL: Record<
+  ContentScope,
+  { lessons: string; evaluations: string }
+> = {
+  course: {
+    lessons: `SELECT l.id FROM lessons l JOIN modules m ON m.id = l."moduleId" WHERE m.course_id = $1`,
+    evaluations: `SELECT e.id FROM evaluations e JOIN modules m ON m.id = e."moduleId" WHERE m.course_id = $1`,
+  },
+  module: {
+    lessons: `SELECT l.id FROM lessons l WHERE l."moduleId" = $1`,
+    evaluations: `SELECT e.id FROM evaluations e WHERE e."moduleId" = $1`,
+  },
+  lesson: {
+    lessons: `SELECT $1::integer AS id`,
+    evaluations: `SELECT NULL::integer AS id WHERE false`,
+  },
+};
 
 @Injectable()
 export class ELearningService {
@@ -112,7 +135,33 @@ export class ELearningService {
   }
 
   async deleteCourse(courseId: number): Promise<void> {
-    await this.courseRepository.delete(courseId);
+    await this.deleteContent('course', courseId);
+  }
+
+  // Evaluation results are part of a member's training record: content
+  // with results is never deleted. Lesson progress (started, read) goes
+  // with its lessons.
+  private async deleteContent(scope: ContentScope, id: number): Promise<void> {
+    const sql = SCOPE_SQL[scope];
+    await this.courseRepository.manager.transaction(async (manager) => {
+      const results: unknown[] = await manager.query(
+        `SELECT 1 FROM user_progress WHERE "evaluationId" IN (${sql.evaluations}) LIMIT 1`,
+        [id],
+      );
+      if (results.length > 0)
+        throw localized(ConflictException, 'error.elearning.hasResults');
+      await manager.query(
+        `DELETE FROM user_progress WHERE "lessonId" IN (${sql.lessons})`,
+        [id],
+      );
+      const repository =
+        scope === 'course'
+          ? manager.getRepository(Course)
+          : scope === 'module'
+            ? manager.getRepository(Module)
+            : manager.getRepository(Lesson);
+      await repository.delete(id);
+    });
   }
 
   // Gestion des modules
@@ -180,7 +229,7 @@ export class ELearningService {
   }
 
   async deleteModule(moduleId: number): Promise<void> {
-    await this.moduleRepository.delete(moduleId);
+    await this.deleteContent('module', moduleId);
   }
 
   // Gestion des leçons
@@ -238,7 +287,7 @@ export class ELearningService {
   }
 
   async deleteLesson(lessonId: number): Promise<void> {
-    await this.lessonRepository.delete(lessonId);
+    await this.deleteContent('lesson', lessonId);
   }
 
   async completeLesson(userId: number, lessonId: number): Promise<void> {
