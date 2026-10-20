@@ -21,7 +21,7 @@ export const seedDemoNotifications = async (
       notification_date: new Date(now.getTime() - 2 * 24 * 3600000),
       is_read: false,
       priority: 'high',
-      action_url: '/maintenance',
+      action_url: '/fleet/maintenance',
     },
     {
       user: users[0],
@@ -31,7 +31,7 @@ export const seedDemoNotifications = async (
       notification_date: new Date(now.getTime() - 5 * 24 * 3600000),
       is_read: false,
       priority: 'high',
-      action_url: '/incidents',
+      action_url: '/fleet/incidents',
     },
     {
       user: users[0],
@@ -40,7 +40,7 @@ export const seedDemoNotifications = async (
       notification_date: new Date(now.getTime() - 3 * 24 * 3600000),
       is_read: true,
       priority: 'medium',
-      action_url: '/invoices',
+      action_url: '/profile/money_account',
     },
     {
       user: users[0],
@@ -100,7 +100,7 @@ export const seedDemoNotifications = async (
       notification_date: new Date(now.getTime() - 2 * 24 * 3600000),
       is_read: false,
       priority: 'low',
-      action_url: '/e-learning',
+      action_url: '/instruction/e-learning',
     },
     {
       user: users[8],
@@ -110,7 +110,7 @@ export const seedDemoNotifications = async (
       notification_date: new Date(now.getTime() - 3 * 24 * 3600000),
       is_read: false,
       priority: 'medium',
-      action_url: '/invoices',
+      action_url: '/profile/money_account',
     },
     // Lucas (users[5])
     {
