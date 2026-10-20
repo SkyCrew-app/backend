@@ -3,6 +3,7 @@ import { aerodromeDistances } from '../../engine/runway-distances';
 import { TerrainGrid } from '../../engine/terrain';
 import { engineInput } from '../../engine/tests/fixture';
 import {
+  aerodromeLines,
   buildDossierPdf,
   distanceHeading,
   distanceRows,
@@ -84,6 +85,43 @@ describe('flight dossier: minimum safe altitude and distances', () => {
     );
     expect(rows[0][5]).toBe('700 / 700 m');
     expect(distanceHeading(distances, 'fr')[0]).toContain('masse 1000 kg');
+  });
+
+  it('leaves out an aerodrome type of OurAirports, not a SIA status', () => {
+    const lines = aerodromeLines(
+      {
+        role: 'departure',
+        icao: 'LFLS',
+        conditions: null,
+        sheet: {
+          icao: 'LFLS',
+          name: 'Grenoble',
+          elevationFt: 1302,
+          source: 'OURAIRPORTS',
+          status: 'medium_airport',
+          vfr: null,
+          ifr: null,
+          privateFlights: null,
+          magneticVariationDeg: null,
+          magneticVariationYear: null,
+          atsHoursCode: null,
+          atsHours: null,
+          fuelHours: null,
+          fuel: null,
+          fuelRemarks: null,
+          fuelTypes: [],
+          remarks: null,
+          phone: null,
+          operator: null,
+          runways: [],
+          frequencies: [],
+          vacUrl: null,
+          chartsUrl: 'https://www.sia.aviation-civile.gouv.fr',
+        },
+      },
+      'fr',
+    );
+    expect(lines.map((l) => l.text).join(' ')).not.toContain('medium_airport');
   });
 
   it('builds the dossier with both', async () => {

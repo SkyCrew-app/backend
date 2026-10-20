@@ -535,6 +535,8 @@ export function obstacleLines(legs: LegResult[], language: Language): string[] {
 const signed = (value: number, positive: string, negative: string) =>
   `${Math.abs(value)} ${value >= 0 ? positive : negative}`;
 
+const SIA_STATUSES = new Set(['CAP', 'RST', 'PRV', 'MIL', 'OFF']);
+
 // The heading line of an aerodrome, then status, frequencies, hours, fuel,
 // METAR wind and density altitude; warn: worth the pilot's attention.
 export function aerodromeLines(
@@ -553,7 +555,8 @@ export function aerodromeLines(
     },
   ];
   if (!sheet) return lines;
-  if (sheet.status)
+  // OurAirports gives its own types ("medium_airport"): not a SIA status.
+  if (sheet.status && SIA_STATUSES.has(sheet.status))
     lines.push({
       text: t(language, `navplan.aerodrome.status.${sheet.status}`),
       warn: sheet.status !== 'CAP',
