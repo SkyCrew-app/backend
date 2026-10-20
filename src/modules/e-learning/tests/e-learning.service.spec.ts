@@ -6,7 +6,11 @@ import { Course } from '../entity/course.entity';
 import { Module } from '../entity/module.entity';
 import { Lesson } from '../entity/lesson.entity';
 import { UsersService } from '../../users/users.service';
-import { NotFoundException, HttpException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  HttpException,
+} from '@nestjs/common';
 
 describe('ELearningService', () => {
   let service: ELearningService;
@@ -205,6 +209,51 @@ describe('ELearningService', () => {
       expect(lessonRepo.update).toHaveBeenLastCalledWith(6, {
         title: 'Nouveau titre',
       });
+    });
+  });
+  describe('deleting content', () => {
+    const setup = (hasResults: boolean) => {
+      const repository = { delete: jest.fn() };
+      const manager = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce(hasResults ? [{ '?column?': 1 }] : [])
+          .mockResolvedValue([]),
+        getRepository: jest.fn().mockReturnValue(repository),
+      };
+      (courseRepo as any).manager = {
+        transaction: jest.fn((work: (m: unknown) => unknown) => work(manager)),
+      };
+      return { manager, repository };
+    };
+
+    it('refuses a course whose evaluations have member results', async () => {
+      const { manager, repository } = setup(true);
+      await expect(service.deleteCourse(4)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(manager.query).toHaveBeenCalledTimes(1);
+      expect(repository.delete).not.toHaveBeenCalled();
+    });
+
+    it('removes the lesson progress, then the course', async () => {
+      const { manager, repository } = setup(false);
+      await service.deleteCourse(4);
+      expect(manager.query.mock.calls[1][0]).toContain(
+        'DELETE FROM user_progress',
+      );
+      expect(manager.query.mock.calls[1][1]).toEqual([4]);
+      expect(manager.getRepository).toHaveBeenCalledWith(Course);
+      expect(repository.delete).toHaveBeenCalledWith(4);
+    });
+
+    it('applies the same rule to modules and lessons', async () => {
+      const { manager } = setup(false);
+      await service.deleteModule(7);
+      expect(manager.getRepository).toHaveBeenLastCalledWith(Module);
+      setup(false);
+      await service.deleteLesson(9);
+      expect((courseRepo as any).manager.transaction).toHaveBeenCalled();
     });
   });
 });

@@ -201,6 +201,8 @@ export const en: Record<TranslationKey, string> = {
     'Enter the year of manufacture of the aircraft, between {{min}} and {{max}}',
   'error.aircraft.hourlyCostRequired':
     'Enter the cost of one flight hour, in euros (0 or more)',
+  'error.elearning.hasResults':
+    'Members already have evaluation results in this content: it cannot be deleted, to keep their training record',
   'error.aircraft.heldByMaintenance':
     'This aircraft is in maintenance: its availability cannot be changed until the maintenance is over',
   'error.maintenance.endBeforeStart':
