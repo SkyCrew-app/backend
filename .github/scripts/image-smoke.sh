@@ -34,6 +34,8 @@ echo "e-mail templates: $found"
 inside 'test -s dist/src/modules/flights/data/airports.json' || fail "the aerodrome data is missing"
 inside 'test -s dist/src/modules/navdata/data/navdata-baseline.json.gz' ||
   fail "the baseline navigation data of the flight preparation is missing (dist/src/modules/navdata/data)"
+inside 'test -s dist/src/modules/navdata/data/terrain-grid.bin.gz && test -s dist/src/modules/navdata/data/terrain-grid.bin.gz.sha256' ||
+  fail "the terrain grid of the flight preparation (minimum safe altitudes) is missing (dist/src/modules/navdata/data)"
 [ "$(inside 'find dist -name "*.spec.js" | wc -l' | tr -d ' ')" -eq 0 ] || fail "test files were built into the image"
 [ "$(inside 'id -u')" != 0 ] || fail "the image runs as root"
 

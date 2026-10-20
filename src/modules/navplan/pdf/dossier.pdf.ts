@@ -14,6 +14,7 @@ import { pointLabel } from '../engine/point-label';
 import { navLogFrequency } from '../engine/aerodrome';
 import { renderSheet } from '../../navdata/navdata.service';
 import { embedDossierFonts } from './truetype-font';
+import { AerodromeDistances } from '../engine/runway-distances';
 
 // The flight file: navigation log, fuel, mass and balance with the envelope,
 // airspaces crossed, raw weather, warnings and the mandatory notices. A4
@@ -271,8 +272,17 @@ class Writer {
 const blankRow = (label: string, altitude: number) => [
   label,
   String(Math.round(altitude)),
-  ...new Array<string>(16).fill(''),
+  ...new Array<string>(17).fill(''),
 ];
+
+// The minimum safe altitude of a leg: "?" when unknown, nothing on a plan
+// saved before them.
+export const msaCell = (leg: LegResult): string =>
+  !leg.terrain
+    ? ''
+    : leg.terrain.msaFt === null
+      ? '?'
+      : String(leg.terrain.msaFt);
 
 // One row per point flown, TOC and TOD rows where they fall along a leg.
 function legRows(legs: LegResult[], result: FlightPlanResult): string[][] {
@@ -285,9 +295,9 @@ function legRows(legs: LegResult[], result: FlightPlanResult): string[][] {
     pointLabel(first.from),
     first.from.elevationFt ?? 0,
   );
-  departure[13] = hhmm(takeoff);
-  departure[15] = one(result.fuel.loadedL - result.fuel.taxiL);
-  departure[17] = first.from.frequency ?? '';
+  departure[14] = hhmm(takeoff);
+  departure[16] = one(result.fuel.loadedL - result.fuel.taxiL);
+  departure[18] = first.from.frequency ?? '';
   rows.push(departure);
   let cumulative = 0;
   for (const leg of legs) {
@@ -311,6 +321,7 @@ function legRows(legs: LegResult[], result: FlightPlanResult): string[][] {
     rows.push([
       pointLabel(leg.to),
       String(leg.altitudeFt),
+      msaCell(leg),
       deg(leg.trueCourseDeg),
       deg(leg.magneticCourseDeg),
       leg.wind.source === 'NONE'
@@ -524,6 +535,8 @@ export function obstacleLines(legs: LegResult[], language: Language): string[] {
 const signed = (value: number, positive: string, negative: string) =>
   `${Math.abs(value)} ${value >= 0 ? positive : negative}`;
 
+const SIA_STATUSES = new Set(['CAP', 'RST', 'PRV', 'MIL', 'OFF']);
+
 // The heading line of an aerodrome, then status, frequencies, hours, fuel,
 // METAR wind and density altitude; warn: worth the pilot's attention.
 export function aerodromeLines(
@@ -542,7 +555,8 @@ export function aerodromeLines(
     },
   ];
   if (!sheet) return lines;
-  if (sheet.status)
+  // OurAirports gives its own types ("medium_airport"): not a SIA status.
+  if (sheet.status && SIA_STATUSES.has(sheet.status))
     lines.push({
       text: t(language, `navplan.aerodrome.status.${sheet.status}`),
       warn: sheet.status !== 'CAP',
@@ -619,6 +633,74 @@ export function aerodromeRunwayRows(
     }
   }
   return rows;
+}
+
+// The line above the distance table of an aerodrome (mass, pressure
+// altitude, temperature, safety factor), then what limits it.
+export function distanceHeading(
+  distances: AerodromeDistances,
+  language: Language,
+): string[] {
+  if (distances.dataMissing)
+    return [t(language, 'navplan.pdf.distances.missing')];
+  return [
+    t(
+      language,
+      distances.kind === 'TAKEOFF'
+        ? 'navplan.pdf.distances.takeoff'
+        : 'navplan.pdf.distances.landing',
+      {
+        mass: distances.massKg ?? '?',
+        pa: distances.pressureAltitudeFt,
+        temperature: distances.temperatureC,
+        conditions: distances.conditionsSource,
+        factor: distances.safetyFactor,
+      },
+    ),
+    ...distances.messages.map((m) => printable(renderMessage(language, m))),
+  ];
+}
+
+// One row per runway direction: conditions, the manual's figures, the
+// factors, what is needed and what is available.
+export function distanceRows(
+  distances: AerodromeDistances,
+  language: Language,
+): string[][] {
+  const takeoff = distances.kind === 'TAKEOFF';
+  return distances.runways.map((runway) => [
+    `${runway.suggested ? '* ' : ''}${runway.designator}`,
+    [
+      `${runway.surfaceText ?? runway.surface}${runway.wet ? ` ${t(language, 'navplan.pdf.dist.wet')}` : ''}`,
+      runway.slopePercent === null ? null : `${runway.slopePercent} %`,
+      runway.headwindKt === null
+        ? null
+        : signed(
+            runway.headwindKt,
+            t(language, 'navplan.pdf.rwy.head'),
+            t(language, 'navplan.pdf.rwy.tail'),
+          ),
+    ]
+      .filter(Boolean)
+      .join(', '),
+    runway.tableGroundRollM === null
+      ? '—'
+      : `${runway.tableGroundRollM} / ${runway.tableDistance15mM} m`,
+    runway.factors
+      .map(
+        (f) =>
+          `${t(language, `navplan.pdf.dist.factor.${f.code}`)} x${f.factor}${f.source === 'CAA_SSL7' ? ' (CAA)' : ''}`,
+      )
+      .join(', '),
+    runway.requiredDistance15mM === null
+      ? '—'
+      : `${runway.requiredGroundRollM} / ${runway.requiredDistance15mM} m`,
+    takeoff
+      ? `${runway.availableRunM ?? '?'} / ${runway.availableDistanceM ?? '?'} m`
+      : `${runway.availableDistanceM ?? '?'} m`,
+    runway.marginM === null ? '—' : `${runway.marginM} m`,
+    t(language, `navplan.pdf.dist.status.${runway.status}`),
+  ]);
 }
 
 // The 0 °C isotherm at the departure, along the route and at the
@@ -717,6 +799,7 @@ export async function buildDossierPdf(
   const columns = [
     'point',
     'alt',
+    'msa',
     'tc',
     'mc',
     'wind',
@@ -741,7 +824,10 @@ export async function buildDossierPdf(
   w.table(
     columns.map((c) => t(language, `navplan.pdf.col.${c}`)),
     legRows(legs, result),
-    [40, 24, 16, 16, 28, 16, 16, 16, 16, 20, 22, 16, 22, 20, 20, 22, 20, 90],
+    [
+      40, 24, 22, 16, 16, 28, 16, 16, 16, 16, 20, 22, 16, 22, 20, 20, 22, 20,
+      84,
+    ],
     options.format === 'A5' ? 6 : 6.5,
   );
   if (legs.some((leg) => leg.wind.source === 'NONE'))
@@ -749,6 +835,17 @@ export async function buildDossierPdf(
   obstacleLines(legs, language).forEach((line) =>
     w.text(line, { size: 7, color: ORANGE }),
   );
+  const terrain = legs.find((leg) => leg.terrain)?.terrain;
+  if (terrain)
+    w.text(
+      t(language, 'navplan.pdf.msaNotice', {
+        corridor: terrain.corridorNm,
+        margin: terrain.marginFt,
+      }),
+      { size: 6.5, color: GREY },
+    );
+  if (result.terrainSource)
+    w.text(result.terrainSource.attribution, { size: 6, color: GREY });
 
   // Aerodromes: what the VAC reader checks before leaving.
   if ((result.aerodromes ?? []).length > 0) {
@@ -775,6 +872,37 @@ export async function buildDossierPdf(
           [3, 1.4, 1.4, 3, 3],
           6.5,
         );
+      const distances = aerodrome.distances;
+      if (distances) {
+        distanceHeading(distances, language).forEach((line, i) =>
+          w.text(line, {
+            size: 7,
+            bold: i === 0,
+            color: i === 0 ? BLACK : ORANGE,
+          }),
+        );
+        if (!distances.dataMissing && distances.runways.length)
+          w.table(
+            [
+              t(language, 'navplan.pdf.dist.runway'),
+              t(language, 'navplan.pdf.dist.conditions'),
+              t(language, 'navplan.pdf.dist.table'),
+              t(language, 'navplan.pdf.dist.factors'),
+              t(language, 'navplan.pdf.dist.required'),
+              t(
+                language,
+                distances.kind === 'TAKEOFF'
+                  ? 'navplan.pdf.dist.availableTakeoff'
+                  : 'navplan.pdf.dist.availableLanding',
+              ),
+              t(language, 'navplan.pdf.dist.margin'),
+              t(language, 'navplan.pdf.dist.status'),
+            ],
+            distanceRows(distances, language),
+            [0.9, 2.6, 1.8, 5.6, 2, 1.7, 1.1, 1.4],
+            6,
+          );
+      }
     }
   }
 

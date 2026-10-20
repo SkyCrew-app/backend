@@ -21,6 +21,7 @@ import {
   PerformanceData,
 } from '../../navplan/engine/types';
 import { isSimplePolygon } from '../../navplan/engine/polygon';
+import type { RunwayDistanceTable } from '../../navplan/engine/runway-distances';
 import { AIRCRAFT_TEMPLATES, templateByCode } from './aircraft-templates';
 import { User } from '../../users/entity/users.entity';
 import type {
@@ -58,6 +59,30 @@ export const performanceUsable = (
   row.cruise.rows.length > 0 &&
   !!row.cruise.normalSetting;
 
+// A distance table as stored: null when it has no row.
+const distanceTable = (
+  input: AircraftPerformanceInput['takeoff'],
+): RunwayDistanceTable | null =>
+  input && input.rows.length > 0
+    ? {
+        rows: input.rows.map((row) => ({
+          pressureAltFt: row.pressureAltFt,
+          temperatureC: row.temperatureC,
+          massKg: row.massKg ?? null,
+          groundRollM: row.groundRollM,
+          distance15mM: row.distance15mM,
+        })),
+        referenceMassKg: input.referenceMassKg ?? null,
+        speedKt: input.speedKt ?? null,
+        headwindPercentPerKt: input.headwindPercentPerKt ?? null,
+        tailwindPercentPerKt: input.tailwindPercentPerKt ?? null,
+        grassPercent: input.grassPercent ?? null,
+        wetGrassPercent: input.wetGrassPercent ?? null,
+        slopePercentPerPercent: input.slopePercentPerPercent ?? null,
+        source: input.source ?? null,
+      }
+    : null;
+
 export const toPerformanceData = (
   row: AircraftPerformanceEntity,
 ): PerformanceData => ({
@@ -69,6 +94,8 @@ export const toPerformanceData = (
   arrivalFuelL: Number(row.arrival_fuel_l) || 0,
   serviceCeilingFt: row.service_ceiling_ft,
   calibration: row.calibration ?? [],
+  takeoff: row.takeoff ?? null,
+  landing: row.landing ?? null,
 });
 
 export const toMassBalanceData = (
@@ -309,6 +336,9 @@ export class AircraftDataService {
   // aircraft's own. The result has to be confirmed again.
   async applyTemplate(aircraftId: number, code: string) {
     await this.aircraftOrFail(aircraftId);
+    // The distance tables entered for the aircraft stay: no template has
+    // any (none was read in a manual).
+    const own = await this.performanceRow(aircraftId);
     const template = templateByCode(code);
     if (!template)
       throw localized(
@@ -327,6 +357,8 @@ export class AircraftDataService {
       arrival_fuel_l: template.performance.arrivalFuelL,
       calibration: template.performance.calibration,
       service_ceiling_ft: template.performance.serviceCeilingFt,
+      takeoff: template.performance.takeoff ?? own?.takeoff ?? null,
+      landing: template.performance.landing ?? own?.landing ?? null,
       source: template.source,
       validated_by_id: null,
       validated_at: null,
@@ -378,6 +410,15 @@ export class AircraftDataService {
       arrival_fuel_l: input.arrivalFuelL,
       calibration: input.calibration.map((row) => ({ ...row })),
       service_ceiling_ft: input.serviceCeilingFt ?? null,
+      // Absent from the input (an older screen): kept as they are.
+      takeoff:
+        input.takeoff === undefined
+          ? (current?.takeoff ?? null)
+          : distanceTable(input.takeoff),
+      landing:
+        input.landing === undefined
+          ? (current?.landing ?? null)
+          : distanceTable(input.landing),
       source: input.source ?? null,
       validated_by_id: null,
       validated_at: null,
@@ -411,6 +452,28 @@ export class AircraftDataService {
       (row) => `${row.setting}|${row.pressureAltFt}|${row.isaDeviationC}`,
     );
     if (new Set(keys).size !== keys.length) refuse('duplicate cruise row');
+    for (const [label, distances] of [
+      ['take-off', input.takeoff],
+      ['landing', input.landing],
+    ] as const) {
+      if (!distances) continue;
+      const keys = distances.rows.map(
+        (row) => `${row.pressureAltFt}|${row.temperatureC}|${row.massKg ?? ''}`,
+      );
+      if (new Set(keys).size !== keys.length)
+        refuse(`${label} table: two rows for the same conditions`);
+      const withMass = distances.rows.filter((row) => row.massKg != null);
+      if (
+        withMass.length > 0 &&
+        withMass.length < distances.rows.length &&
+        distances.referenceMassKg == null
+      )
+        refuse(`${label} table: a mass for every row, or a reference mass`);
+      if (distances.rows.some((row) => row.distance15mM < row.groundRollM))
+        refuse(
+          `${label} table: the distance at 15 m is shorter than the ground roll`,
+        );
+    }
     const table = input.climb.table ?? [];
     if (table.length > 0) {
       if (table.length < 2) refuse('climb table: at least two rows');

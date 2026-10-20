@@ -1,3 +1,5 @@
+import type { RunwayDistanceTable } from './runway-distances';
+
 // Data shapes shared by the engine, the aircraft data and the API. Units are
 // part of the field names: kt, NM, ft, L, kg, m, minutes, degrees.
 
@@ -85,6 +87,9 @@ export interface PerformanceData {
   arrivalFuelL: number;
   serviceCeilingFt: number | null;
   calibration: CalibrationRow[];
+  // Take-off and landing distance tables of the manual (null: not entered).
+  takeoff?: RunwayDistanceTable | null;
+  landing?: RunwayDistanceTable | null;
 }
 
 export type StationKind = 'SEAT' | 'BAGGAGE' | 'FUEL' | 'OTHER';

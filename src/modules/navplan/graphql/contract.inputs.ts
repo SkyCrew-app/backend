@@ -147,6 +147,76 @@ export class ReserveDataInput {
 }
 
 @InputType()
+export class DistanceRowInput {
+  @Field(() => Int) @IsInt() @Min(-2000) @Max(15000) pressureAltFt: number;
+  @Field(() => Float) @IsNumber() @Min(-50) @Max(60) temperatureC: number;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(50)
+  @Max(10000)
+  massKg?: number | null;
+  @Field(() => Float) @IsNumber() @Min(1) @Max(5000) groundRollM: number;
+  @Field(() => Float) @IsNumber() @Min(1) @Max(5000) distance15mM: number;
+}
+
+@InputType()
+export class RunwayDistanceTableInput {
+  @Field(() => [DistanceRowInput])
+  @ValidateNested({ each: true })
+  @Type(() => DistanceRowInput)
+  @ArrayMaxSize(200)
+  rows: DistanceRowInput[];
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(50)
+  @Max(10000)
+  referenceMassKg?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(20)
+  @Max(200)
+  speedKt?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(10)
+  headwindPercentPerKt?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(20)
+  tailwindPercentPerKt?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(200)
+  grassPercent?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(200)
+  wetGrassPercent?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(50)
+  slopePercentPerPercent?: number | null;
+  @Field(() => String, { nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  source?: string | null;
+}
+
+@InputType()
 export class AircraftPerformanceInput {
   @Field(() => FuelDataInput)
   @ValidateNested()
@@ -180,6 +250,17 @@ export class AircraftPerformanceInput {
   @Type(() => CalibrationRowInput)
   @ArrayMaxSize(60)
   calibration: CalibrationRowInput[];
+  // Absent: kept as stored; null: removed.
+  @Field(() => RunwayDistanceTableInput, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RunwayDistanceTableInput)
+  takeoff?: RunwayDistanceTableInput | null;
+  @Field(() => RunwayDistanceTableInput, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RunwayDistanceTableInput)
+  landing?: RunwayDistanceTableInput | null;
   @Field(() => String, { nullable: true })
   @IsOptional()
   @IsString()
@@ -280,6 +361,31 @@ export class FlightPlanningSettingsInput {
   @Min(300)
   @Max(3000)
   defaultCircuitHeightFt: number;
+  // Absent: kept as stored.
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  msaCorridorNm?: number | null;
+  @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
+  @Min(500)
+  @Max(3000)
+  msaMarginFt?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(2)
+  takeoffSafetyFactor?: number | null;
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(2)
+  landingSafetyFactor?: number | null;
 }
 
 @InputType()

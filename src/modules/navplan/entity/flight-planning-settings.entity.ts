@@ -2,7 +2,9 @@ import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 // The club's flight planning rules: a single row (id 1). Defaults are the
 // AMC1 NCO.OP.125(b) minima; the API refuses anything below them. Columns
-// match migration 1797000000003-AddFlightPlans exactly.
+// match migrations 1797000000003-AddFlightPlans and
+// 1801000000001-AddMinimumSafeAltitudeSettings and
+// 1801000000002-AddRunwayDistances exactly.
 @Entity('flight_planning_settings')
 export class FlightPlanningSettingsEntity {
   @PrimaryColumn({
@@ -40,6 +42,18 @@ export class FlightPlanningSettingsEntity {
 
   @Column({ type: 'integer', default: 500 })
   default_descent_fpm: number;
+
+  @Column({ type: 'double precision', default: 5 })
+  msa_corridor_nm: number;
+
+  @Column({ type: 'integer', default: 1000 })
+  msa_margin_ft: number;
+
+  @Column({ type: 'double precision', default: 1.33 })
+  takeoff_safety_factor: number;
+
+  @Column({ type: 'double precision', default: 1.43 })
+  landing_safety_factor: number;
 
   @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;

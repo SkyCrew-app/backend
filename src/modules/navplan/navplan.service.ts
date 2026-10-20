@@ -42,6 +42,16 @@ import { renderResult } from './render';
 import { MetarTafService } from './weather/metar-taf.service';
 import { WindsAloftService } from './weather/winds-aloft.service';
 import { buildDossierPdf } from './pdf/dossier.pdf';
+import {
+  DEFAULT_MSA_CORRIDOR_NM,
+  DEFAULT_MSA_MARGIN_FT,
+  TerrainGrid,
+} from './engine/terrain';
+import {
+  DEFAULT_LANDING_SAFETY_FACTOR,
+  DEFAULT_TAKEOFF_SAFETY_FACTOR,
+} from './engine/runway-distances';
+import { loadTerrainGrid } from './terrain/terrain-file';
 
 export const PLAN_ENGINE = 'navplan-1';
 // METARs of the aerodromes within this distance of the route are shown.
@@ -52,6 +62,10 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   verticalMarginFt: 300,
   defaultCircuitHeightFt: 1000,
   defaultDescentFpm: 500,
+  msaCorridorNm: DEFAULT_MSA_CORRIDOR_NM,
+  msaMarginFt: DEFAULT_MSA_MARGIN_FT,
+  takeoffSafetyFactor: DEFAULT_TAKEOFF_SAFETY_FACTOR,
+  landingSafetyFactor: DEFAULT_LANDING_SAFETY_FACTOR,
 };
 
 const settingsOf = (
@@ -69,11 +83,35 @@ const settingsOf = (
         verticalMarginFt: row.vertical_margin_ft,
         defaultCircuitHeightFt: row.default_circuit_height_ft,
         defaultDescentFpm: row.default_descent_fpm,
+        msaCorridorNm: Number(row.msa_corridor_nm ?? DEFAULT_MSA_CORRIDOR_NM),
+        msaMarginFt: row.msa_margin_ft ?? DEFAULT_MSA_MARGIN_FT,
+        takeoffSafetyFactor: Number(
+          row.takeoff_safety_factor ?? DEFAULT_TAKEOFF_SAFETY_FACTOR,
+        ),
+        landingSafetyFactor: Number(
+          row.landing_safety_factor ?? DEFAULT_LANDING_SAFETY_FACTOR,
+        ),
       }
     : DEFAULT_ENGINE_SETTINGS;
 
 const sameId = (a: unknown, b: unknown) =>
   a != null && b != null && Number(a) === Number(b);
+
+// The terrain grid shipped with the code, read once (about 5 MB in memory).
+let terrainGrid: TerrainGrid | null | undefined;
+const terrain = (logger: Logger): TerrainGrid | null => {
+  if (terrainGrid === undefined) {
+    try {
+      terrainGrid = loadTerrainGrid();
+      if (!terrainGrid)
+        logger.warn('No terrain grid: every minimum safe altitude is unknown');
+    } catch (error) {
+      logger.error(`Terrain grid unreadable: ${(error as Error).message}`);
+      terrainGrid = null;
+    }
+  }
+  return terrainGrid;
+};
 
 @Injectable()
 export class NavplanService {
@@ -123,6 +161,12 @@ export class NavplanService {
       vertical_margin_ft: input.verticalMarginFt,
       default_circuit_height_ft: input.defaultCircuitHeightFt,
       default_descent_fpm: current.defaultDescentFpm,
+      msa_corridor_nm: input.msaCorridorNm ?? current.msaCorridorNm,
+      msa_margin_ft: input.msaMarginFt ?? current.msaMarginFt,
+      takeoff_safety_factor:
+        input.takeoffSafetyFactor ?? current.takeoffSafetyFactor,
+      landing_safety_factor:
+        input.landingSafetyFactor ?? current.landingSafetyFactor,
     });
     return this.settings();
   }
@@ -252,6 +296,7 @@ export class NavplanService {
 
     const lats = route.map((p) => p.lat);
     const lons = route.map((p) => p.lon);
+    const obstacleMargin = Math.max(0.1, (settings.msaCorridorNm + 1) / 60);
     const allAirspaces = await this.navdata.allAirspaces();
     // Areas without an outline are all kept: the engine lists those near
     // the route from their point (UNVERIFIED_AIRSPACE_NEAR_NM).
@@ -274,13 +319,14 @@ export class NavplanService {
       this.navdata.aerodrome(destination.ident),
       this.navdata.aerodrome(departure.ident),
       alternate ? this.navdata.aerodrome(alternate.ident) : null,
+      // Wide enough for the minimum safe altitude corridor.
       this.navdata
         .obstaclesInBox(
           {
-            south: Math.min(...lats) - 0.1,
-            north: Math.max(...lats) + 0.1,
-            west: Math.min(...lons) - 0.15,
-            east: Math.max(...lons) + 0.15,
+            south: Math.min(...lats) - obstacleMargin,
+            north: Math.max(...lats) + obstacleMargin,
+            west: Math.min(...lons) - obstacleMargin * 1.5,
+            east: Math.max(...lons) + obstacleMargin * 1.5,
           },
           null,
         )
@@ -376,6 +422,7 @@ export class NavplanService {
         alternate: alternateDetails?.sheet ?? null,
       },
       obstacles,
+      terrain: terrain(this.logger),
     };
   }
 

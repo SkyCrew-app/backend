@@ -524,6 +524,82 @@ export const en: Record<TranslationKey, string> = {
     '{{icao}} ({{role}}) is a military aerodrome: access by permission only (PPR).',
   'navplan.notice.aerodromeNoVfr':
     '{{icao}} ({{role}}) is not open to VFR traffic according to the SIA: check the VAC.',
+  'navplan.notice.msaBelow':
+    '{{leg}}: planned altitude {{altitude}} ft, below the minimum safe altitude of {{msa}} ft (by {{below}} ft). Highest point {{highest}} ft within {{corridor}} NM of the track, club margin {{margin}} ft: raise the altitude of the leg.',
+  'navplan.notice.msaUnknown':
+    'Minimum safe altitude unknown ({{legs}}): the route leaves the terrain coverage (metropolitan France, Corsica and their surroundings). Work it out on the chart.',
+  'navplan.notice.distanceDataMissing':
+    'Take-off and landing distances not entered for this aircraft: enter them from the flight manual (aircraft flight data). The runway distances are not checked.',
+  'navplan.notice.distanceNoRunway':
+    '{{icao}} ({{role}}): runways unknown, distances not checked. See the VAC.',
+  'navplan.notice.takeoffDistanceExceeded':
+    'Take-off from {{icao}} runway {{runway}}: {{required}} m needed (to 15 m, factors included) for {{available}} m available.',
+  'navplan.notice.takeoffDistanceCheck':
+    'Take-off from {{icao}} runway {{runway}} to check: {{required}} m needed (factors included) for {{available}} m available (see the aerodrome sheet).',
+  'navplan.notice.landingDistanceExceeded':
+    'Landing at {{icao}} ({{role}}) runway {{runway}}: {{required}} m needed (from 15 m, factors included) for {{available}} m available.',
+  'navplan.notice.landingDistanceCheck':
+    'Landing at {{icao}} ({{role}}) runway {{runway}} to check: {{required}} m needed (factors included) for {{available}} m available (see the aerodrome sheet).',
+  'navplan.distance.noTable': 'Not entered: enter it from the flight manual.',
+  'navplan.distance.outOfTable':
+    'Outside the manual’s table: the value at the edge of the table is used, the real distance is longer.',
+  'navplan.distance.unpavedAsGrass': 'Unpaved runway: grass factors used.',
+  'navplan.distance.surfaceUnknown': 'Surface unknown: grass factors used.',
+  'navplan.distance.slopeUnknown':
+    'Slope unknown (threshold elevations not published): not taken into account.',
+  'navplan.distance.windUnknown':
+    'Wind unknown (no METAR): no wind taken into account.',
+  'navplan.distance.tailwindNotCorrected':
+    'Tail wind of {{tailwind}} kt not corrected: enter the speed of the table (or the manual’s correction) in the aircraft data.',
+  'navplan.distance.isaConditions':
+    'No METAR: standard atmosphere (ISA) temperature and pressure used. Redo it with the weather of the day.',
+  'navplan.distance.massMaximum':
+    'Mass and balance not computed: maximum mass used.',
+  'navplan.distance.massUnknown':
+    'Mass unknown: the heaviest mass of the table is used.',
+  'navplan.distance.availableUnknown':
+    'Available distances not published: check the VAC.',
+  'navplan.distance.lengthAsDeclared':
+    'Declared distance not published: runway length used.',
+  'navplan.distance.noRunway': 'No known runway.',
+  'navplan.distance.factor.grass': 'Dry grass',
+  'navplan.distance.factor.wetGrass': 'Wet grass',
+  'navplan.distance.factor.slope': 'Slope',
+  'navplan.distance.factor.headwind': 'Head wind (50 % credited)',
+  'navplan.distance.factor.tailwind': 'Tail wind',
+  'navplan.distance.factor.safety': 'Club safety factor',
+  'navplan.distance.source.MANUAL': 'flight manual',
+  'navplan.distance.source.CAA_SSL7':
+    'generic factor, UK CAA Safety Sense Leaflet 7',
+  'navplan.distance.source.CLUB': 'club',
+  'navplan.pdf.col.msa': 'MSA',
+  'navplan.pdf.msaNotice':
+    'MSA: highest point (terrain or obstacle) within {{corridor}} NM of the track + {{margin}} ft, rounded up to the next hundred; "?": outside the terrain coverage.',
+  'navplan.pdf.distances.takeoff':
+    'Take-off — mass {{mass}} kg, PA {{pa}} ft, {{temperature}} °C ({{conditions}}), factor {{factor}}',
+  'navplan.pdf.distances.landing':
+    'Landing — mass {{mass}} kg, PA {{pa}} ft, {{temperature}} °C ({{conditions}}), factor {{factor}}',
+  'navplan.pdf.distances.missing':
+    'Distances not entered: enter them from the flight manual.',
+  'navplan.pdf.dist.runway': 'Runway',
+  'navplan.pdf.dist.conditions': 'Surface, slope, wind',
+  'navplan.pdf.dist.table': 'Manual roll / 15 m',
+  'navplan.pdf.dist.factors': 'Factors',
+  'navplan.pdf.dist.required': 'Required roll / 15 m',
+  'navplan.pdf.dist.availableTakeoff': 'TORA / TODA',
+  'navplan.pdf.dist.availableLanding': 'LDA',
+  'navplan.pdf.dist.margin': 'Margin',
+  'navplan.pdf.dist.status': 'Status',
+  'navplan.pdf.dist.factor.grass': 'grass',
+  'navplan.pdf.dist.factor.wetGrass': 'wet grass',
+  'navplan.pdf.dist.factor.slope': 'slope',
+  'navplan.pdf.dist.factor.headwind': 'head wind',
+  'navplan.pdf.dist.factor.tailwind': 'tail wind',
+  'navplan.pdf.dist.factor.safety': 'club',
+  'navplan.pdf.dist.status.OK': 'OK',
+  'navplan.pdf.dist.status.WARNING': 'CHECK',
+  'navplan.pdf.dist.status.BLOCKING': 'BLOCKING',
+  'navplan.pdf.dist.wet': 'wet',
   'navplan.airspace.checkHeight':
     'Limit given as a height above ground: check on the chart. Unknown activity ≠ inactive area.',
   'navplan.aerodrome.status.CAP': 'Open to public air traffic (CAP)',
