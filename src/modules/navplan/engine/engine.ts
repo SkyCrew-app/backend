@@ -58,6 +58,20 @@ import {
   WindSample,
 } from './vertical-profile';
 import { solveWindTriangle, WindTriangleError } from './wind-triangle';
+import {
+  LegTerrain,
+  legTerrain,
+  TerrainGrid,
+  terrainProfile,
+  TerrainProfilePoint,
+  TerrainSourceInfo,
+  terrainSourceInfo,
+} from './terrain';
+import {
+  AerodromeDistances,
+  aerodromeDistances,
+  MassSource,
+} from './runway-distances';
 import { declinationAt, WmmExpiredError } from './wmm';
 
 export const ENGINE_VERSION = 'navplan-1.0.0';
@@ -116,6 +130,13 @@ export interface EngineSettings extends FuelSettings {
   verticalMarginFt: number;
   defaultCircuitHeightFt: number;
   defaultDescentFpm: number;
+  // Minimum safe altitude: corridor either side of the track and margin
+  // above the highest point in it.
+  msaCorridorNm: number;
+  msaMarginFt: number;
+  // Applied to the take-off and landing distances of the manual.
+  takeoffSafetyFactor: number;
+  landingSafetyFactor: number;
 }
 
 export interface NavdataStatus {
@@ -177,6 +198,8 @@ export interface EngineInput {
   aerodromes?: Partial<Record<PlanAerodromeRole, AerodromeSheet | null>>;
   // Obstacles around the route (the engine keeps those near each leg).
   obstacles?: ObstacleRecord[];
+  // Highest elevation per cell (null: no grid, every MSA unknown).
+  terrain?: TerrainGrid | null;
 }
 
 export type PlanAerodromeRole = 'departure' | 'destination' | 'alternate';
@@ -187,6 +210,9 @@ export interface PlanAerodrome {
   sheet: AerodromeSheet | null;
   // From the METAR of the aerodrome; null without one.
   conditions: AerodromeConditions | null;
+  // Take-off (departure) or landing (destination, alternate) distances;
+  // absent from plans saved before them.
+  distances?: AerodromeDistances | null;
 }
 
 export interface LegWind {
@@ -223,6 +249,8 @@ export interface LegResult {
   // Absent from plans saved before the obstacles were imported.
   obstacles?: LegObstacle[];
   highestObstacleFt?: number | null;
+  // Absent from plans saved before the minimum safe altitudes.
+  terrain?: LegTerrain;
 }
 
 // An area near the route whose outline is not published: to be checked on
@@ -271,6 +299,9 @@ export interface FlightPlanResult {
   // Absent from plans saved before them.
   aerodromes?: PlanAerodrome[];
   freezingLevels?: FreezingLevel[];
+  // The terrain along the route and where it comes from.
+  terrainProfile?: TerrainProfilePoint[];
+  terrainSource?: TerrainSourceInfo | null;
   // Not in the GraphQL result: kept with the saved plan for the PDF.
   departureTime: Date;
 }
@@ -545,8 +576,20 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
         { verticalUnknown: navdataTooOld },
       ),
       ...obstaclesOf(context, geometry.distanceNm),
+      terrain: terrainOf(context, geometry.distanceNm),
     };
   };
+  const terrainOf = (context: LegContext, distanceNm: number) =>
+    legTerrain(
+      input.terrain ?? null,
+      context.from,
+      context.to,
+      distanceNm,
+      context.input.altitudeFt,
+      input.obstacles ?? [],
+      input.settings.msaCorridorNm,
+      input.settings.msaMarginFt,
+    );
   const obstaclesOf = (context: LegContext, distanceNm: number) => {
     const near = legObstacles(
       context.from,
@@ -830,7 +873,10 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     });
   }
 
+  terrainNotices(flownLegs, notice);
+
   const aerodromes = planAerodromes(input);
+  addDistances(input, aerodromes, massBalance, fuel, notice);
   for (const aerodrome of aerodromes) {
     const status = aerodrome.sheet?.status;
     if (status === 'RST' || status === 'PRV' || status === 'MIL') {
@@ -887,8 +933,189 @@ export function computeFlightPlan(input: EngineInput): FlightPlanResult {
     ...qnhOrigin(input),
     aerodromes,
     freezingLevels: freezingLevels(input, legs, takeoffTime, landing),
+    ...terrainOfRoute(input, legs),
     departureTime: input.departureTime,
   };
+}
+
+const legName = (leg: LegResult) => `${leg.from.ident} → ${leg.to.ident}`;
+
+// A leg planned below its minimum safe altitude, or whose MSA is unknown.
+function terrainNotices(
+  legs: LegResult[],
+  notice: (
+    code: string,
+    status: CheckStatus,
+    key: string,
+    params?: Record<string, string | number>,
+  ) => void,
+) {
+  for (const leg of legs) {
+    const terrain = leg.terrain;
+    if (!terrain || terrain.state !== 'KNOWN' || terrain.msaFt === null)
+      continue;
+    if (leg.altitudeFt < terrain.msaFt)
+      notice('MSA_BELOW', 'WARNING', 'navplan.notice.msaBelow', {
+        leg: legName(leg),
+        altitude: leg.altitudeFt,
+        msa: terrain.msaFt,
+        below: terrain.msaFt - leg.altitudeFt,
+        highest: Math.max(
+          terrain.highestTerrainFt ?? 0,
+          terrain.highestObstacleFt ?? 0,
+        ),
+        corridor: terrain.corridorNm,
+        margin: terrain.marginFt,
+      });
+  }
+  const unknown = legs.filter(
+    (leg) => leg.terrain && leg.terrain.state === 'UNKNOWN',
+  );
+  if (unknown.length > 0)
+    notice('MSA_UNKNOWN', 'WARNING', 'navplan.notice.msaUnknown', {
+      legs: unknown.map(legName).join(', '),
+    });
+}
+
+function terrainOfRoute(
+  input: EngineInput,
+  legs: { from: EnginePoint; to: EnginePoint; distanceNm: number }[],
+) {
+  return {
+    terrainProfile: terrainProfile(
+      input.terrain ?? null,
+      legs,
+      input.obstacles ?? [],
+    ),
+    terrainSource: input.terrain ? terrainSourceInfo(input.terrain) : null,
+  };
+}
+
+// Take-off distances at the departure, landing distances at the
+// destination and the alternate, with the masses of the plan: the
+// take-off mass, less the trip fuel at the destination, less the
+// alternate fuel too at the alternate.
+function addDistances(
+  input: EngineInput,
+  aerodromes: PlanAerodrome[],
+  massBalance: MassBalanceResult,
+  fuel: FuelPlan,
+  notice: (
+    code: string,
+    status: CheckStatus,
+    key: string,
+    params?: Record<string, string | number>,
+  ) => void,
+) {
+  const computed =
+    !!input.massBalance &&
+    input.massBalanceValidated &&
+    massBalance.takeoff.massKg > 0;
+  const density = input.performance.fuel.densityKgPerL;
+  let missingNoticed = false;
+  for (const aerodrome of aerodromes) {
+    const takeoff = aerodrome.role === 'departure';
+    const table = takeoff
+      ? input.performance.takeoff
+      : input.performance.landing;
+    let massKg: number | null = null;
+    let massSource: MassSource = 'UNKNOWN';
+    if (computed) {
+      massSource = 'MASS_BALANCE';
+      massKg = takeoff
+        ? massBalance.takeoff.massKg
+        : aerodrome.role === 'destination'
+          ? massBalance.landing.massKg
+          : massBalance.landing.massKg - fuel.alternateL * density;
+    } else {
+      const maximum = takeoff
+        ? input.massBalance?.mtowKg
+        : (input.massBalance?.mlwKg ?? input.massBalance?.mtowKg);
+      if (maximum) {
+        massKg = maximum;
+        massSource = 'MAXIMUM';
+      } else if (table) massSource = 'TABLE';
+    }
+    const metar = aerodrome.conditions?.metar ?? null;
+    const temperature = metar?.temperatureC ?? null;
+    const qnh = metar?.qnhHpa ?? null;
+    const isa = temperature === null || qnh === null;
+    const elevationFt =
+      aerodrome.sheet?.elevationFt ??
+      [input.departure, input.destination, input.alternate].find(
+        (p) => p?.ident === aerodrome.icao,
+      )?.elevationFt ??
+      0;
+    const pressureAltitudeOf = (elevation: number) =>
+      isa
+        ? elevation
+        : pressureAltitudeFt(elevation, qnh ?? STANDARD_PRESSURE_HPA);
+    const distances = aerodromeDistances({
+      kind: takeoff ? 'TAKEOFF' : 'LANDING',
+      runways: aerodrome.sheet?.runways ?? [],
+      elevationFt,
+      pressureAltitudeOf,
+      temperatureC: isa
+        ? isaTemperatureC(pressureAltitudeOf(elevationFt))
+        : temperature,
+      conditionsSource: isa ? 'ISA' : 'METAR',
+      massKg,
+      massSource,
+      winds: aerodrome.conditions?.runways ?? [],
+      uniformHeadwindKt:
+        metar?.windSpeedKt == null || metar.windDirectionDeg !== null
+          ? null
+          : metar.variable
+            ? -metar.windSpeedKt
+            : 0,
+      wet: metar?.wet ?? false,
+      table,
+      safetyFactor: takeoff
+        ? input.settings.takeoffSafetyFactor
+        : input.settings.landingSafetyFactor,
+    });
+    aerodrome.distances = distances;
+    if (distances.dataMissing) {
+      if (!missingNoticed)
+        notice(
+          'DISTANCE_DATA_MISSING',
+          'WARNING',
+          'navplan.notice.distanceDataMissing',
+        );
+      missingNoticed = true;
+      continue;
+    }
+    const suggested = distances.runways.find((r) => r.suggested);
+    if (!suggested) {
+      notice(
+        'DISTANCE_NO_RUNWAY',
+        'WARNING',
+        'navplan.notice.distanceNoRunway',
+        {
+          icao: aerodrome.icao,
+          role: aerodrome.role,
+        },
+      );
+      continue;
+    }
+    if (distances.status !== 'OK') {
+      const required = suggested.requiredDistance15mM;
+      notice(
+        takeoff ? 'TAKEOFF_DISTANCE' : 'LANDING_DISTANCE',
+        distances.status,
+        suggested.status === 'BLOCKING'
+          ? `navplan.notice.${takeoff ? 'takeoff' : 'landing'}DistanceExceeded`
+          : `navplan.notice.${takeoff ? 'takeoff' : 'landing'}DistanceCheck`,
+        {
+          icao: aerodrome.icao,
+          role: aerodrome.role,
+          runway: suggested.designator,
+          required: required ?? '?',
+          available: suggested.availableDistanceM ?? '?',
+        },
+      );
+    }
+  }
 }
 
 // The departure, destination and alternate with their AD 2 data and the
@@ -1130,6 +1357,16 @@ function failedPlan(
       crossings: [],
       obstacles: [],
       highestObstacleFt: null,
+      terrain: legTerrain(
+        input.terrain ?? null,
+        points[i],
+        points[i + 1],
+        geometry.distanceNm,
+        leg.altitudeFt,
+        input.obstacles ?? [],
+        input.settings.msaCorridorNm,
+        input.settings.msaMarginFt,
+      ),
     };
   });
   const loadedL = input.fuel.reduce(
@@ -1192,6 +1429,7 @@ function failedPlan(
     daylight,
     qnhHpa: input.qnhHpa ?? STANDARD_PRESSURE_HPA,
     ...qnhOrigin(input),
+    ...terrainOfRoute(input, legs),
     departureTime: input.departureTime,
   };
 }

@@ -5,6 +5,7 @@ import { airspaceView, renderSheet } from '../navdata/navdata.service';
 import { navLogFrequency } from './engine/aerodrome';
 import { FlightPlanResult, LegResult, PlanAerodrome } from './engine/engine';
 import { MessageRef } from './engine/types';
+import { AerodromeDistances, DistanceFactor } from './engine/runway-distances';
 
 // The engine's result as the API returns it: messages written out in the
 // language of the request, dates as dates (a saved result comes back from
@@ -54,6 +55,41 @@ function renderLeg(leg: LegResult, language: Language) {
     })),
     obstacles: leg.obstacles ?? [],
     highestObstacleFt: leg.highestObstacleFt ?? null,
+    terrain: leg.terrain ?? null,
+  };
+}
+
+// A distance factor as the pilot reads it: what it is and where it comes
+// from (the manual, the UK CAA leaflet, the club).
+export function distanceFactorLabel(
+  language: Language,
+  factor: DistanceFactor,
+): string {
+  return `${renderTranslation(
+    language,
+    `navplan.distance.factor.${factor.code}` as TranslationKey,
+  )} (${renderTranslation(
+    language,
+    `navplan.distance.source.${factor.source}` as TranslationKey,
+  )})`;
+}
+
+function renderDistances(
+  distances: AerodromeDistances | null | undefined,
+  language: Language,
+) {
+  if (!distances) return null;
+  return {
+    ...distances,
+    runways: distances.runways.map((runway) => ({
+      ...runway,
+      factors: runway.factors.map((factor) => ({
+        ...factor,
+        label: distanceFactorLabel(language, factor),
+      })),
+      messages: runway.messages.map((m) => renderMessage(language, m)),
+    })),
+    messages: distances.messages.map((m) => renderMessage(language, m)),
   };
 }
 
@@ -84,6 +120,7 @@ function renderAerodrome(aerodrome: PlanAerodrome, language: Language) {
           runways: conditions.runways,
         }
       : null,
+    distances: renderDistances(aerodrome.distances, language),
   };
 }
 
@@ -153,6 +190,8 @@ export function renderResult(result: FlightPlanResult, language: Language) {
     aerodromes: (result.aerodromes ?? []).map((a) =>
       renderAerodrome(a, language),
     ),
+    terrainProfile: result.terrainProfile ?? [],
+    terrainSource: result.terrainSource ?? null,
     freezingLevels: (result.freezingLevels ?? []).map((f) => ({
       ...f,
       at: date(f.at),

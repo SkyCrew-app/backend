@@ -245,6 +245,33 @@ export class ReserveData {
   @Field(() => Float) maxContinuousFuelFlowLph: number;
 }
 
+// A take-off or landing distance table of the flight manual.
+@ObjectType()
+export class DistanceRow {
+  @Field(() => Int) pressureAltFt: number;
+  @Field(() => Float) temperatureC: number;
+  @Field(() => Float, { nullable: true }) massKg: number | null;
+  @Field(() => Float) groundRollM: number;
+  // Take-off: to 15 m (50 ft); landing: from 15 m.
+  @Field(() => Float) distance15mM: number;
+}
+
+@ObjectType()
+export class RunwayDistanceTable {
+  @Field(() => [DistanceRow]) rows: DistanceRow[];
+  @Field(() => Float, { nullable: true }) referenceMassKg: number | null;
+  // Lift-off speed (take-off) or speed at 15 m (landing), kt IAS.
+  @Field(() => Float, { nullable: true }) speedKt: number | null;
+  // The manual's corrections, % of the distance (null: not given).
+  @Field(() => Float, { nullable: true }) headwindPercentPerKt: number | null;
+  @Field(() => Float, { nullable: true }) tailwindPercentPerKt: number | null;
+  @Field(() => Float, { nullable: true }) grassPercent: number | null;
+  @Field(() => Float, { nullable: true }) wetGrassPercent: number | null;
+  @Field(() => Float, { nullable: true })
+  slopePercentPerPercent: number | null;
+  @Field(() => String, { nullable: true }) source: string | null;
+}
+
 @ObjectType()
 export class AircraftPerformance {
   @Field(() => Int) aircraftId: number;
@@ -257,6 +284,10 @@ export class AircraftPerformance {
   @Field(() => Float) arrivalFuelL: number;
   @Field(() => Int, { nullable: true }) serviceCeilingFt: number | null;
   @Field(() => [CalibrationRow]) calibration: CalibrationRow[];
+  @Field(() => RunwayDistanceTable, { nullable: true })
+  takeoff: RunwayDistanceTable | null;
+  @Field(() => RunwayDistanceTable, { nullable: true })
+  landing: RunwayDistanceTable | null;
   @Field(() => String, { nullable: true }) source: string | null;
   @Field(() => Date, { nullable: true }) validatedAt: Date | null;
   @Field(() => String, { nullable: true }) validatedBy: string | null;
@@ -327,6 +358,10 @@ export class FlightPlanningSettings {
   @Field(() => Int) clubMarginMin: number;
   @Field(() => Int) verticalMarginFt: number;
   @Field(() => Int) defaultCircuitHeightFt: number;
+  @Field(() => Float) msaCorridorNm: number;
+  @Field(() => Int) msaMarginFt: number;
+  @Field(() => Float) takeoffSafetyFactor: number;
+  @Field(() => Float) landingSafetyFactor: number;
 }
 
 // ---------- Flight plan ----------
@@ -392,6 +427,43 @@ export class LegObstacle {
   @Field(() => CheckStatusEnum) status: CheckStatusEnum;
 }
 
+// Minimum safe altitude of a leg: the highest terrain (Copernicus DEM) or
+// SIA obstacle within the club's corridor, plus its margin, rounded up to
+// the next 100 ft. KNOWN, or UNKNOWN where the corridor leaves the grid.
+@ObjectType()
+export class LegTerrain {
+  @Field() state: string;
+  @Field(() => Float) corridorNm: number;
+  @Field(() => Int) marginFt: number;
+  @Field(() => Int, { nullable: true }) highestTerrainFt: number | null;
+  @Field(() => Float, { nullable: true }) highestTerrainLat: number | null;
+  @Field(() => Float, { nullable: true }) highestTerrainLon: number | null;
+  @Field(() => Float, { nullable: true })
+  highestTerrainAlongNm: number | null;
+  @Field(() => Int, { nullable: true }) highestObstacleFt: number | null;
+  @Field(() => String, { nullable: true })
+  highestObstacleIdent: string | null;
+  @Field(() => Int, { nullable: true }) msaFt: number | null;
+  // Planned altitude minus the MSA (negative: below).
+  @Field(() => Int, { nullable: true }) marginToMsaFt: number | null;
+  @Field(() => CheckStatusEnum) status: CheckStatusEnum;
+}
+
+@ObjectType()
+export class TerrainProfilePoint {
+  @Field(() => Float) distanceNm: number;
+  @Field(() => Int, { nullable: true }) terrainFt: number | null;
+  @Field(() => Int, { nullable: true }) obstacleFt: number | null;
+}
+
+@ObjectType()
+export class TerrainSource {
+  @Field() name: string;
+  // To be shown wherever the terrain is used.
+  @Field() attribution: string;
+  @Field(() => Int) cellArcSec: number;
+}
+
 @ObjectType()
 export class Leg {
   @Field(() => Int) index: number;
@@ -419,6 +491,8 @@ export class Leg {
   @Field(() => [LegObstacle]) obstacles: LegObstacle[];
   // Top of the highest obstacle within 2 NM of the leg, ft AMSL.
   @Field(() => Int, { nullable: true }) highestObstacleFt: number | null;
+  // Null on a plan saved before the minimum safe altitudes.
+  @Field(() => LegTerrain, { nullable: true }) terrain: LegTerrain | null;
 }
 
 @ObjectType()
@@ -552,6 +626,59 @@ export class AerodromeConditions {
 }
 
 @ObjectType()
+export class DistanceFactor {
+  @Field() code: string;
+  @Field() label: string;
+  @Field(() => Float) factor: number;
+  // MANUAL, CAA_SSL7 (UK CAA Safety Sense Leaflet 7) or CLUB.
+  @Field() source: string;
+}
+
+// Take-off or landing distance on one runway direction.
+@ObjectType()
+export class RunwayDistance {
+  @Field() designator: string;
+  @Field() suggested: boolean;
+  // PAVED, GRASS, UNPAVED or UNKNOWN.
+  @Field() surface: string;
+  @Field(() => String, { nullable: true }) surfaceText: string | null;
+  @Field() wet: boolean;
+  @Field(() => Float, { nullable: true }) slopePercent: number | null;
+  @Field(() => Int, { nullable: true }) headwindKt: number | null;
+  @Field(() => Int, { nullable: true }) tableGroundRollM: number | null;
+  @Field(() => Int, { nullable: true }) tableDistance15mM: number | null;
+  @Field(() => [DistanceFactor]) factors: DistanceFactor[];
+  @Field(() => Int, { nullable: true }) requiredGroundRollM: number | null;
+  @Field(() => Int, { nullable: true }) requiredDistance15mM: number | null;
+  // Take-off: TORA and TODA; landing: LDA (availableRunM null).
+  @Field(() => Int, { nullable: true }) availableRunM: number | null;
+  @Field(() => Int, { nullable: true }) availableDistanceM: number | null;
+  @Field(() => Int, { nullable: true }) marginM: number | null;
+  @Field(() => CheckStatusEnum) status: CheckStatusEnum;
+  @Field(() => [String]) messages: string[];
+}
+
+@ObjectType()
+export class AerodromeDistances {
+  // TAKEOFF or LANDING.
+  @Field() kind: string;
+  @Field(() => Int, { nullable: true }) massKg: number | null;
+  // MASS_BALANCE, MAXIMUM, TABLE or UNKNOWN.
+  @Field() massSource: string;
+  @Field(() => Int) pressureAltitudeFt: number;
+  @Field(() => Float) temperatureC: number;
+  // METAR or ISA.
+  @Field() conditionsSource: string;
+  @Field(() => Float) safetyFactor: number;
+  // The aircraft has no table: to be entered from the flight manual.
+  @Field() dataMissing: boolean;
+  @Field(() => String, { nullable: true }) tableSource: string | null;
+  @Field(() => [RunwayDistance]) runways: RunwayDistance[];
+  @Field(() => CheckStatusEnum) status: CheckStatusEnum;
+  @Field(() => [String]) messages: string[];
+}
+
+@ObjectType()
 export class PlanAerodrome {
   // departure, destination or alternate.
   @Field() role: string;
@@ -560,6 +687,9 @@ export class PlanAerodrome {
   sheet: AerodromeSheet | null;
   @Field(() => AerodromeConditions, { nullable: true })
   conditions: AerodromeConditions | null;
+  // Null on a plan saved before them.
+  @Field(() => AerodromeDistances, { nullable: true })
+  distances: AerodromeDistances | null;
 }
 
 // The 0 °C isotherm from the winds aloft forecast.
@@ -605,6 +735,10 @@ export class FlightPlanResult {
   // Empty on a plan saved before them.
   @Field(() => [PlanAerodrome]) aerodromes: PlanAerodrome[];
   @Field(() => [FreezingLevel]) freezingLevels: FreezingLevel[];
+  // Empty on a plan saved before it.
+  @Field(() => [TerrainProfilePoint]) terrainProfile: TerrainProfilePoint[];
+  @Field(() => TerrainSource, { nullable: true })
+  terrainSource: TerrainSource | null;
 }
 
 @ObjectType()

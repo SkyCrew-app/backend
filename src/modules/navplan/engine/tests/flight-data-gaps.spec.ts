@@ -34,6 +34,7 @@ describe('METAR decoding', () => {
       temperatureC: 12,
       dewpointC: 8,
       qnhHpa: 1009,
+      wet: false,
     });
   });
 
