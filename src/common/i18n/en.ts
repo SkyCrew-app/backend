@@ -185,6 +185,8 @@ export const en: Record<TranslationKey, string> = {
     'This flight is not attached to any booking: only an administrator can close it',
   'error.flight.bookingNotStarted':
     'This flight cannot be closed before its booking has started',
+  'error.flight.unknownType':
+    'The flight type must be a booking category: {{types}}',
   'error.flight.hoursOutOfRange':
     'The flight time must be more than 0 and no more than {{max}} hours',
   'error.flight.closedNotDeletable':

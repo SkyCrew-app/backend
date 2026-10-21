@@ -21,6 +21,8 @@ import {
   MAX_FLIGHT_HOURS,
   RECENT_FLIGHTS_MAX,
   FLIGHTS_OF_MEMBER_LISTED,
+  FLIGHT_TYPES,
+  flightTypeOf,
 } from './flight-rules';
 import { CreateFlightInput } from './dto/create-flight.input';
 import { UpdateFlightInput } from './dto/update-flight.input';
@@ -174,6 +176,17 @@ export class FlightsService {
     }
   }
 
+  // The type of a flight is a booking category: anything else is refused.
+  private validFlightType(value: unknown): string {
+    const type = flightTypeOf(value);
+    if (!type) {
+      throw localized(BadRequestException, 'error.flight.unknownType', {
+        types: FLIGHT_TYPES.join(', '),
+      });
+    }
+    return type;
+  }
+
   // `language` is the stored language of the pilot, who is the one notified.
   async createFlightByUser(
     createFlightInput: CreateFlightInput,
@@ -189,6 +202,7 @@ export class FlightsService {
     );
     this.assertPlausibleHours(otherFields.flight_hours, false);
     this.assertPlausibleTimes(otherFields);
+    otherFields.flight_type = this.validFlightType(otherFields.flight_type);
 
     // The pilot is the holder of the booking, the caller otherwise.
     const pilotId = reservation?.user?.id ?? requester.id;
@@ -570,6 +584,11 @@ export class FlightsService {
       flight.user = pilot;
     }
 
+    if (changes.flight_type == null) {
+      delete changes.flight_type;
+    } else {
+      changes.flight_type = this.validFlightType(changes.flight_type);
+    }
     if (changes.waypoints) {
       (changes as any).waypoints = JSON.stringify(changes.waypoints);
     }

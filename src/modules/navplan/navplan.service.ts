@@ -18,6 +18,7 @@ import { NavdataService } from '../navdata/navdata.service';
 import { FlightsService } from '../flights/flights.service';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { Flight } from '../flights/entity/flights.entity';
+import { DEFAULT_FLIGHT_TYPE } from '../flights/flight-rules';
 import {
   computeFlightPlan,
   EngineInput,
@@ -68,7 +69,7 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   landingSafetyFactor: DEFAULT_LANDING_SAFETY_FACTOR,
 };
 
-const settingsOf = (
+export const settingsOf = (
   row: FlightPlanningSettingsEntity | null,
 ): EngineSettings =>
   row
@@ -112,6 +113,89 @@ const terrain = (logger: Logger): TerrainGrid | null => {
   }
   return terrainGrid;
 };
+
+// What the existing screens read from a flight: filled from the new plan
+// so that the plan list, the booking, the logbook and closing a flight
+// keep working. In `waypoints`, the leg ending at a point is stored on
+// that point (distance, GS, drift of the leg flown to reach it).
+export function legacyFlightColumns(
+  result: FlightPlanResult,
+  reservation: Pick<
+    Reservation,
+    'flight_category' | 'number_of_passengers'
+  > | null,
+) {
+  const minutes = result.totalTimeMin;
+  const departure = new Date(result.departureTime);
+  const legs = result.legs;
+  const waypoints = [
+    {
+      ident: legs[0].from.ident,
+      type: legs[0].from.type,
+      name: legs[0].from.name ?? legs[0].from.ident,
+      lat: legs[0].from.lat,
+      lon: legs[0].from.lon,
+      alt: legs[0].from.elevationFt ?? 0,
+      phase: 'DEP',
+      time_from_dep_min: 0,
+      fuel_remaining_liters:
+        Math.round((result.fuel.loadedL - result.fuel.taxiL) * 10) / 10,
+    },
+    ...legs.map((leg) => ({
+      ident: leg.to.ident,
+      type: leg.to.type,
+      name: leg.to.name ?? leg.to.ident,
+      lat: leg.to.lat,
+      lon: leg.to.lon,
+      alt: leg.altitudeFt,
+      phase: 'CRUISE',
+      speed_kts: Math.round(leg.tasKt),
+      ground_speed_kts: Math.round(leg.groundSpeedKt),
+      wind_correction_deg: Math.round(leg.windCorrectionDeg),
+      heading_deg: Math.round(leg.magneticHeadingDeg),
+      leg_distance_nm: Math.round(leg.distanceNm * 10) / 10,
+      time_from_dep_min: Math.round(leg.cumulativeTimeMin),
+      fuel_remaining_liters: Math.round(leg.fuelRemainingL * 10) / 10,
+    })),
+  ];
+  const lastLeg = legs[legs.length - 1];
+  return {
+    origin_icao: legs[0].from.ident,
+    destination_icao: lastLeg.to.ident,
+    flight_hours: Math.round((minutes / 60) * 100) / 100,
+    estimated_flight_time: Math.round((minutes / 60) * 100) / 100,
+    distance_km: Math.round(result.totalDistanceNm * 1.852 * 10) / 10,
+    encoded_polyline: result.encodedPolyline,
+    waypoints,
+    flight_type: reservation?.flight_category ?? DEFAULT_FLIGHT_TYPE,
+    number_of_passengers: reservation?.number_of_passengers ?? 0,
+    departure_time: departure,
+    arrival_time: new Date(
+      departure.getTime() + (TAXI_OUT_MINUTES + minutes) * 60000,
+    ),
+    weather_conditions: result.weather
+      .filter((w) => w.metar)
+      .map((w) => w.metar)
+      .join(' | ')
+      .slice(0, 2000),
+    fuel_policy: JSON.stringify({
+      taxi_liters: Math.round(result.fuel.taxiL * 10) / 10,
+      trip_liters: Math.round(result.fuel.tripL * 10) / 10,
+      contingency_liters: Math.round(result.fuel.contingencyL * 10) / 10,
+      alternate_liters: Math.round(result.fuel.alternateL * 10) / 10,
+      final_reserve_liters: Math.round(result.fuel.finalReserveL * 10) / 10,
+      total_liters: Math.round(result.fuel.minimumBlockL * 10) / 10,
+    }),
+    wind_summary: JSON.stringify({
+      wind_dir_deg: legs[0].wind.directionDeg,
+      wind_speed_kts: legs[0].wind.speedKt,
+      wca_deg: Math.round(legs[0].windCorrectionDeg),
+      ground_speed_kts: Math.round(legs[0].groundSpeedKt),
+    }),
+    estimated_fuel_liters: Math.round(result.fuel.minimumBlockL * 10) / 10,
+    plan_engine: PLAN_ENGINE,
+  };
+}
 
 @Injectable()
 export class NavplanService {
@@ -485,84 +569,11 @@ export class NavplanService {
     return this.planView(plan, language);
   }
 
-  // What the existing screens read from a flight: filled from the new plan
-  // so that the plan list, the booking, the logbook and closing a flight
-  // keep working. In `waypoints`, the leg ending at a point is stored on
-  // that point (distance, GS, drift of the leg flown to reach it).
   private legacyColumns(
     result: FlightPlanResult,
     reservation: Reservation | null,
   ) {
-    const minutes = result.totalTimeMin;
-    const departure = new Date(result.departureTime);
-    const legs = result.legs;
-    const waypoints = [
-      {
-        ident: legs[0].from.ident,
-        type: legs[0].from.type,
-        name: legs[0].from.name ?? legs[0].from.ident,
-        lat: legs[0].from.lat,
-        lon: legs[0].from.lon,
-        alt: legs[0].from.elevationFt ?? 0,
-        phase: 'DEP',
-        time_from_dep_min: 0,
-        fuel_remaining_liters:
-          Math.round((result.fuel.loadedL - result.fuel.taxiL) * 10) / 10,
-      },
-      ...legs.map((leg) => ({
-        ident: leg.to.ident,
-        type: leg.to.type,
-        name: leg.to.name ?? leg.to.ident,
-        lat: leg.to.lat,
-        lon: leg.to.lon,
-        alt: leg.altitudeFt,
-        phase: 'CRUISE',
-        speed_kts: Math.round(leg.tasKt),
-        ground_speed_kts: Math.round(leg.groundSpeedKt),
-        wind_correction_deg: Math.round(leg.windCorrectionDeg),
-        heading_deg: Math.round(leg.magneticHeadingDeg),
-        leg_distance_nm: Math.round(leg.distanceNm * 10) / 10,
-        time_from_dep_min: Math.round(leg.cumulativeTimeMin),
-        fuel_remaining_liters: Math.round(leg.fuelRemainingL * 10) / 10,
-      })),
-    ];
-    const lastLeg = legs[legs.length - 1];
-    return {
-      origin_icao: legs[0].from.ident,
-      destination_icao: lastLeg.to.ident,
-      flight_hours: Math.round((minutes / 60) * 100) / 100,
-      estimated_flight_time: Math.round((minutes / 60) * 100) / 100,
-      distance_km: Math.round(result.totalDistanceNm * 1.852 * 10) / 10,
-      encoded_polyline: result.encodedPolyline,
-      waypoints,
-      flight_type: reservation?.flight_category ?? 'VFR',
-      number_of_passengers: reservation?.number_of_passengers ?? 0,
-      departure_time: departure,
-      arrival_time: new Date(
-        departure.getTime() + (TAXI_OUT_MINUTES + minutes) * 60000,
-      ),
-      weather_conditions: result.weather
-        .filter((w) => w.metar)
-        .map((w) => w.metar)
-        .join(' | ')
-        .slice(0, 2000),
-      fuel_policy: JSON.stringify({
-        taxi_liters: Math.round(result.fuel.taxiL * 10) / 10,
-        trip_liters: Math.round(result.fuel.tripL * 10) / 10,
-        contingency_liters: Math.round(result.fuel.contingencyL * 10) / 10,
-        alternate_liters: Math.round(result.fuel.alternateL * 10) / 10,
-        final_reserve_liters: Math.round(result.fuel.finalReserveL * 10) / 10,
-        total_liters: Math.round(result.fuel.minimumBlockL * 10) / 10,
-      }),
-      wind_summary: JSON.stringify({
-        wind_dir_deg: legs[0].wind.directionDeg,
-        wind_speed_kts: legs[0].wind.speedKt,
-        wca_deg: Math.round(legs[0].windCorrectionDeg),
-        ground_speed_kts: Math.round(legs[0].groundSpeedKt),
-      }),
-      estimated_fuel_liters: Math.round(result.fuel.minimumBlockL * 10) / 10,
-      plan_engine: PLAN_ENGINE,
-    };
+    return legacyFlightColumns(result, reservation);
   }
 
   private async checkReservation(

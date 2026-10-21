@@ -11,6 +11,7 @@ import {
 } from './dto/logbook-stats.type';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { LogbookRole, logbookRoleOf } from './logbook-role';
+import { flightTypeLabel, flightTypeOf } from './flight-rules';
 
 // The role as printed in the (French) PDF logbook.
 const PDF_ROLE: Record<LogbookRole, string> = {
@@ -66,8 +67,9 @@ export class LogbookService {
     }
 
     if (filter?.flightType) {
+      // The types are booking categories, whatever their case on the way in.
       qb.andWhere('flight.flight_type = :flightType', {
-        flightType: filter.flightType,
+        flightType: flightTypeOf(filter.flightType) ?? filter.flightType,
       });
     }
 
@@ -326,7 +328,7 @@ export class LogbookService {
           flight.origin_icao || '-',
           flight.destination_icao || '-',
           flightHoursStr,
-          flight.flight_type || '-',
+          flightTypeLabel(flight.flight_type) || '-',
           flight.logbook_role ? PDF_ROLE[flight.logbook_role] : '-',
           remarks.length > 22 ? remarks.substring(0, 19) + '...' : remarks,
         ];

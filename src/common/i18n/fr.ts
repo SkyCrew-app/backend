@@ -196,6 +196,8 @@ export const fr = {
     "Ce vol n'est rattaché à aucune réservation : seul un administrateur peut le clôturer",
   'error.flight.bookingNotStarted':
     'Ce vol ne peut pas être clôturé avant le début de sa réservation',
+  'error.flight.unknownType':
+    'Le type de vol doit être une catégorie de réservation : {{types}}',
   'error.flight.hoursOutOfRange':
     'La durée du vol doit être supérieure à 0 et ne pas dépasser {{max}} heures',
   'error.flight.closedNotDeletable':

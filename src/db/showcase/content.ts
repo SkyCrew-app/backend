@@ -1,0 +1,453 @@
+// Texts of the showcase club. Every person is invented: first and last names
+// are drawn separately from lists of common French names.
+
+export const SHOWCASE_EMAIL_DOMAIN = 'exemple-aeroclub.invalid';
+
+export const FIRST_NAMES_F = [
+  'Camille',
+  'Léa',
+  'Manon',
+  'Chloé',
+  'Sarah',
+  'Julie',
+  'Pauline',
+  'Marion',
+  'Claire',
+  'Élodie',
+  'Laura',
+  'Céline',
+  'Aurélie',
+  'Émilie',
+  'Anaïs',
+  'Mathilde',
+  'Lucie',
+  'Hélène',
+  'Nathalie',
+  'Sophie',
+  'Isabelle',
+  'Agnès',
+  'Margaux',
+  'Inès',
+  'Juliette',
+  'Clémence',
+  'Charlotte',
+  'Valérie',
+];
+
+export const FIRST_NAMES_M = [
+  'Thomas',
+  'Nicolas',
+  'Julien',
+  'Maxime',
+  'Antoine',
+  'Alexandre',
+  'Romain',
+  'Guillaume',
+  'Pierre',
+  'Vincent',
+  'Sébastien',
+  'Mathieu',
+  'Benoît',
+  'Olivier',
+  'Laurent',
+  'Philippe',
+  'François',
+  'Hugo',
+  'Lucas',
+  'Arthur',
+  'Théo',
+  'Clément',
+  'Jérôme',
+  'Christophe',
+  'Damien',
+  'Fabrice',
+  'Gilles',
+  'Yann',
+  'Bertrand',
+  'Hervé',
+  'Patrice',
+  'Raphaël',
+  'Adrien',
+  'Baptiste',
+  'Quentin',
+  'Florian',
+  'Cédric',
+  'Éric',
+  'Denis',
+  'Marc',
+];
+
+export const LAST_NAMES = [
+  'Martin',
+  'Bernard',
+  'Thomas',
+  'Petit',
+  'Robert',
+  'Richard',
+  'Durand',
+  'Dubois',
+  'Moreau',
+  'Laurent',
+  'Simon',
+  'Michel',
+  'Lefebvre',
+  'Leroy',
+  'Roux',
+  'David',
+  'Bertrand',
+  'Morel',
+  'Fournier',
+  'Girard',
+  'Bonnet',
+  'Dupont',
+  'Lambert',
+  'Fontaine',
+  'Rousseau',
+  'Vincent',
+  'Muller',
+  'Lefèvre',
+  'Faure',
+  'André',
+  'Mercier',
+  'Blanc',
+  'Guérin',
+  'Boyer',
+  'Garnier',
+  'Chevalier',
+  'François',
+  'Legrand',
+  'Gauthier',
+  'Garcia',
+  'Perrin',
+  'Robin',
+  'Clément',
+  'Morin',
+  'Nicolas',
+  'Henry',
+  'Roussel',
+  'Mathieu',
+  'Gautier',
+  'Masson',
+  'Marchand',
+  'Duval',
+  'Denis',
+  'Dumont',
+  'Marie',
+  'Lemaire',
+  'Noël',
+  'Meyer',
+  'Dufour',
+  'Meunier',
+  'Brun',
+  'Blanchard',
+  'Giraud',
+  'Joly',
+  'Rivière',
+  'Lucas',
+  'Brunet',
+  'Gaillard',
+  'Barbier',
+  'Arnaud',
+  'Martinez',
+  'Gérard',
+  'Roche',
+  'Renard',
+  'Schmitt',
+  'Roy',
+  'Leroux',
+  'Colin',
+  'Vidal',
+  'Caron',
+  'Picard',
+  'Roger',
+  'Fabre',
+  'Aubert',
+  'Lemoine',
+  'Renaud',
+  'Dumas',
+  'Lacroix',
+  'Olivier',
+  'Philippe',
+  'Bourgeois',
+  'Pierre',
+  'Benoît',
+  'Rey',
+  'Leclerc',
+  'Payet',
+  'Rolland',
+  'Leclercq',
+  'Guillaume',
+  'Lecomte',
+  'Lopez',
+  'Jean',
+  'Dupuy',
+  'Guillot',
+  'Hubert',
+  'Berger',
+  'Carpentier',
+  'Sanchez',
+  'Dupuis',
+  'Moulin',
+  'Louis',
+  'Deschamps',
+  'Huet',
+  'Vasseur',
+  'Perez',
+  'Boucher',
+  'Fleury',
+  'Royer',
+  'Klein',
+  'Jacquet',
+  'Adam',
+  'Paris',
+  'Poirier',
+  'Marty',
+  'Aubry',
+  'Guyot',
+  'Carré',
+  'Charles',
+  'Renault',
+  'Charpentier',
+  'Ménard',
+  'Maillard',
+];
+
+// Towns around the base, with their postcode.
+export const TOWNS: [string, string][] = [
+  ['Étampes', '91150'],
+  ['Dourdan', '91410'],
+  ['Arpajon', '91290'],
+  ['Étréchy', '91580'],
+  ['Morigny-Champigny', '91150'],
+  ['Saint-Chéron', '91530'],
+  ['Brétigny-sur-Orge', '91220'],
+  ['Milly-la-Forêt', '91490'],
+  ['Méréville', '91660'],
+  ['Angerville', '91670'],
+  ['Pithiviers', '45300'],
+  ['Rambouillet', '78120'],
+  ['Évry-Courcouronnes', '91000'],
+  ['Corbeil-Essonnes', '91100'],
+  ['Limours', '91470'],
+];
+
+export const STREETS = [
+  'rue de la République',
+  'rue Saint-Jacques',
+  'avenue de Paris',
+  'rue des Lilas',
+  'chemin des Prés',
+  'rue du Moulin',
+  'allée des Tilleuls',
+  'rue Pasteur',
+  'rue Victor-Hugo',
+  'place du Marché',
+  'rue de la Gare',
+  'impasse des Vergers',
+  'rue Jean-Jaurès',
+  'route de Chartres',
+  'rue des Écoles',
+  'boulevard Henri-IV',
+];
+
+// The club's base and the aerodromes its members fly to (all in the
+// navigation data shipped with the application).
+export const BASE = {
+  icao: 'LFOX',
+  name: 'Étampes-Mondésir',
+  lat: 48.3817,
+  lon: 2.0753,
+};
+
+// Destinations of cross-country flights, with a typical block time from
+// the base (hours, round trip with a stop).
+export const DESTINATIONS: { icao: string; name: string; hours: number }[] = [
+  { icao: 'LFOC', name: 'Châteaudun', hours: 1.0 },
+  { icao: 'LFOT', name: 'Tours', hours: 1.8 },
+  { icao: 'LFLD', name: 'Bourges', hours: 1.7 },
+  { icao: 'LFAT', name: 'Le Touquet', hours: 2.6 },
+  { icao: 'LFRG', name: 'Deauville', hours: 2.3 },
+  { icao: 'LFOP', name: 'Rouen', hours: 1.9 },
+  { icao: 'LFOB', name: 'Beauvais', hours: 1.6 },
+  { icao: 'LFRK', name: 'Caen', hours: 2.6 },
+  { icao: 'LFAQ', name: 'Albert-Bray', hours: 2.2 },
+  { icao: 'LFOH', name: 'Le Havre', hours: 2.4 },
+];
+
+export const LOCAL_PURPOSES = [
+  'Vol local — tours de piste',
+  'Maintien des compétences',
+  'Vol local et travail de la maniabilité',
+  'Balade autour de la vallée de la Juine',
+  'Survol de la forêt de Fontainebleau',
+  'Vol découverte avec un ami',
+  'Entraînement atterrissages courts',
+  'Survol des châteaux (Chamarande, Courances)',
+  'Vol local — prise en main de l’avion',
+];
+
+export const WEEKEND_PURPOSES = [
+  'Balade en famille',
+  'Vol découverte offert',
+  'Survol de Chartres et de la Beauce',
+  'Vol photo au-dessus de la Loire',
+];
+
+// A PPL progression: each lesson with the competencies the instructor
+// validates. Lessons are taken in order by every student.
+export const LESSONS: { title: string; competencies: [string, string][] }[] = [
+  {
+    title: 'Découverte de l’avion et effets primaires des gouvernes',
+    competencies: [
+      ['Visite pré-vol', 'Tour avion complet selon la check-list'],
+      ['Effets primaires', 'Action des gouvernes en tangage, roulis, lacet'],
+    ],
+  },
+  {
+    title: 'Roulage et ligne droite',
+    competencies: [
+      ['Roulage au sol', 'Contrôle de la trajectoire et des freins'],
+      ['Vol rectiligne', 'Tenue d’assiette, de cap et d’altitude'],
+    ],
+  },
+  {
+    title: 'Virages en palier',
+    competencies: [
+      ['Virages à 30°', 'Mise en virage, tenue de l’inclinaison et sortie'],
+      ['Symétrie', 'Coordination pieds-mains'],
+    ],
+  },
+  {
+    title: 'Montée et descente',
+    competencies: [
+      ['Mise en montée', 'Puissance, assiette, vitesse Vy'],
+      ['Mise en descente', 'Réduction et tenue de la vitesse'],
+    ],
+  },
+  {
+    title: 'Vol lent et décrochages',
+    competencies: [
+      [
+        'Vol à basse vitesse',
+        'Tenue de l’altitude près de la vitesse minimale',
+      ],
+      ['Décrochage', 'Reconnaissance des signes et récupération'],
+    ],
+  },
+  {
+    title: 'Décollage et montée initiale',
+    competencies: [
+      ['Décollage normal', 'Alignement, accélération, rotation'],
+      ['Panne au décollage', 'Réaction et choix de la trajectoire'],
+    ],
+  },
+  {
+    title: 'Tour de piste',
+    competencies: [
+      ['Circuit d’aérodrome', 'Respect du circuit et de la hauteur'],
+      ['Communications radio', 'Annonces en auto-information'],
+    ],
+  },
+  {
+    title: 'Approche et atterrissage',
+    competencies: [
+      ['Approche stabilisée', 'Plan, vitesse et configuration'],
+      ['Arrondi et toucher', 'Atterrissage dans l’axe'],
+    ],
+  },
+  {
+    title: 'Atterrissages par vent de travers',
+    competencies: [
+      ['Vent traversier', 'Correction de dérive en finale'],
+      ['Remise de gaz', 'Décision et exécution'],
+    ],
+  },
+  {
+    title: 'Pannes et procédures d’urgence',
+    competencies: [
+      ['Panne moteur en campagne', 'Choix du champ et approche'],
+      ['Incendie moteur', 'Actions de mémoire'],
+    ],
+  },
+  {
+    title: 'Virages à grande inclinaison',
+    competencies: [
+      ['Virage à 45°', 'Tenue de l’altitude en virage serré'],
+      ['Sortie de virage engagé', 'Reconnaissance et récupération'],
+    ],
+  },
+  {
+    title: 'Préparation d’une navigation',
+    competencies: [
+      ['Préparation', 'Tracé, log de navigation, carburant et devis de masse'],
+      ['Météo', 'Lecture des METAR, TAF et TEMSI'],
+    ],
+  },
+  {
+    title: 'Première navigation en double commande',
+    competencies: [
+      ['Navigation à l’estime', 'Tenue du cap et vérification des repères'],
+      ['Gestion du carburant', 'Contrôles en route'],
+    ],
+  },
+  {
+    title: 'Navigation et déroutement',
+    competencies: [
+      ['Déroutement', 'Décision et nouvelle route'],
+      ['Espaces aériens', 'Contournement et contact avec les services'],
+    ],
+  },
+  {
+    title: 'Navigation sur aérodrome contrôlé',
+    competencies: [
+      ['Phraséologie', 'Communications avec une tour de contrôle'],
+      ['Intégration', 'Points de report et circuit'],
+    ],
+  },
+  {
+    title: 'Révision générale avant le test',
+    competencies: [
+      ['Maniabilité', 'Enchaînement des exercices de base'],
+      ['Synthèse', 'Préparation au test pratique'],
+    ],
+  },
+];
+
+export const COURSE_FEEDBACK = [
+  'Bonne séance, les objectifs de la leçon sont atteints.',
+  'Progrès nets depuis la dernière fois. À consolider avant de passer à la suite.',
+  'Séance un peu chahutée par la turbulence, mais l’élève a bien tenu ses paramètres.',
+  'Très bonne préparation au sol, cela se ressent en vol.',
+  'Quelques hésitations à la radio ; à retravailler à la prochaine séance.',
+  'Exercices maîtrisés, on peut passer à la leçon suivante.',
+];
+
+export const STUDENT_COMMENTS = [
+  'Merci pour la séance, j’ai enfin compris l’arrondi !',
+  'Je reverrai la check-list avant la prochaine leçon.',
+  'Super vol, un peu de vent mais très formateur.',
+  'Je préfère décaler la suite à samedi prochain si possible.',
+];
+
+export const FLIGHT_REMARKS = [
+  'RAS',
+  'RAS, vol agréable',
+  'Légère turbulence sous les cumulus',
+  'Plein complet à l’arrivée',
+  'Vent de travers soutenu à l’atterrissage',
+  'Visibilité moyenne, brume sèche',
+  'Huile complétée avant le vol (0,5 L)',
+];
+
+export const CANCELLATION_REASONS = [
+  'Météo défavorable (plafond bas)',
+  'Vent trop fort pour la sortie prévue',
+  'Empêchement personnel',
+  'Brouillard persistant le matin',
+];
+
+export const TOP_UP_REASONS = {
+  cheque: (number: number) => `Chèque n° ${number} remis au bureau`,
+  transfer: (date: string) => `Virement reçu le ${date}`,
+  cash: () => 'Espèces remises au bureau',
+};

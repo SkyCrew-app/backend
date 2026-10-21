@@ -38,6 +38,7 @@ describe('notifications in the language of their recipient', () => {
         origin_icao: 'LFPG',
         destination_icao: 'EGLL',
         flight_hours: 1,
+        flight_type: 'local',
       }) as any;
     // A flight without a booking is recorded by an administrator.
     const caller = { id: 2, email: 'a@example.com', role: 'Administrateur' };

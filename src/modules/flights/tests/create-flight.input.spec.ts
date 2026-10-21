@@ -8,7 +8,7 @@ const input = (overrides: Record<string, unknown> = {}) =>
   plainToInstance(CreateFlightInput, {
     user_id: 3,
     flight_hours: 1.5,
-    flight_type: 'VFR',
+    flight_type: 'local',
     origin_icao: 'LFPG',
     destination_icao: 'LFPO',
     ...overrides,
@@ -18,8 +18,9 @@ const failingProperties = async (value: CreateFlightInput) =>
   (await validate(value)).map((error) => error.property);
 
 describe('CreateFlightInput', () => {
-  // The flight-plan form sends flight rules, a reservation sends its category.
-  it.each(['VFR', 'IFR', 'SVFR', 'LOCAL', 'TRAINING'])(
+  // A booking category, in either case: the service refuses anything else
+  // (flights.service.spec.ts), in the member's language.
+  it.each(['local', 'LOCAL', 'training', 'cross_country'])(
     'accepts %s as flight type',
     async (flightType) => {
       expect(
