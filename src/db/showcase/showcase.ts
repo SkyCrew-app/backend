@@ -276,6 +276,10 @@ export const removeCommand = async (
       .map(([table, n]) => `${table}: ${n}`)
       .join('\n  ')}`,
   );
+  if (report.recomputedReports > 0)
+    log(
+      `${report.dryRun ? 'Would compute again' : 'Computed again'} without the showcase: ${report.recomputedReports} monthly financial report(s) of the club`,
+    );
   return report;
 };
 

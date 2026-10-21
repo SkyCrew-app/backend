@@ -1,4 +1,5 @@
 import { EntityManager } from 'typeorm';
+import { clubMonthStart } from '../../modules/reservations/booking-rules';
 
 // Removing the showcase: the rows listed in "showcase_items" are deleted,
 // and nothing else unless the operator says so. The foreign keys of the
@@ -164,7 +165,70 @@ export interface RemovalReport {
   deleted: Record<string, number>;
   dependents: Dependent[];
   dryRun: boolean;
+  // Monthly financial reports of the club computed again without the
+  // showcase (dry run: those that would be).
+  recomputedReports: number;
 }
+
+// The first instant the showcase's bookings and expenses cover.
+const showcaseStart = async (manager: EntityManager): Promise<Date | null> => {
+  const [row]: { start: Date | null }[] = await manager.query(`
+    SELECT LEAST(
+      (SELECT MIN(r."start_time") FROM "reservations" r
+        WHERE r."id"::text IN (SELECT "row_id" FROM "showcase_items" WHERE "entity" = 'reservations')),
+      (SELECT MIN(e."expense_date") FROM "expenses" e
+        WHERE e."id"::text IN (SELECT "row_id" FROM "showcase_items" WHERE "entity" = 'expenses'))
+    ) AS "start"`);
+  return row?.start ? new Date(row.start) : null;
+};
+
+// The club's monthly job (CronService.generateMonthlyFinancialReport) kept
+// writing reports while the showcase existed, counting its bookings and
+// expenses. Once they are gone, the totals of the club's own reports from
+// that period are computed again the way the job does: confirmed bookings
+// at what they were charged, recorded expenses.
+const recomputeReports = async (
+  manager: EntityManager,
+  since: Date | null,
+  dryRun: boolean,
+): Promise<number> => {
+  if (!since) return 0;
+  const reports: { id: number; report_date: Date }[] = await manager.query(
+    `SELECT "id", "report_date" FROM "financial_reports"
+      WHERE "report_date" >= $1
+        AND "id"::text NOT IN (SELECT "row_id" FROM "showcase_items" WHERE "entity" = 'financial_reports')`,
+    [clubMonthStart(since)],
+  );
+  if (dryRun) return reports.length;
+  for (const report of reports) {
+    const start = clubMonthStart(new Date(report.report_date));
+    const end = new Date(clubMonthStart(start, 1).getTime() - 1);
+    const [totals]: { revenue: string; expense: string }[] =
+      await manager.query(
+        `SELECT
+          (SELECT COALESCE(SUM(ROUND(COALESCE("charged_amount", 0) * 100)), 0) / 100
+             FROM "reservations"
+            WHERE "status" = 'confirmed' AND "start_time" BETWEEN $1 AND $2) AS "revenue",
+          (SELECT COALESCE(SUM("amount"), 0)
+             FROM "expenses" WHERE "expense_date" BETWEEN $1 AND $2) AS "expense"`,
+        [start, end],
+      );
+    const revenue = Number(totals.revenue);
+    const expense = Number(totals.expense);
+    await manager.query(
+      `UPDATE "financial_reports"
+          SET "total_revenue" = $2, "total_expense" = $3, "net_profit" = $4
+        WHERE "id" = $1`,
+      [
+        report.id,
+        revenue,
+        expense,
+        Math.round((revenue - expense) * 100) / 100,
+      ],
+    );
+  }
+  return reports.length;
+};
 
 // The trace of administrators' actions refuses DELETE through a trigger;
 // it is set aside for the showcase's own lines only, inside the
@@ -181,6 +245,7 @@ export const removeShowcase = async (
   const items: { entity: string; row_id: string }[] = await manager.query(
     `SELECT "entity", "row_id" FROM "showcase_items"`,
   );
+  const since = await showcaseStart(manager);
   const rows = new Map<string, Set<string>>();
   for (const item of items) {
     const set = rows.get(item.entity) ?? new Set<string>();
@@ -221,7 +286,12 @@ export const removeShowcase = async (
   const deleted: Record<string, number> = {};
   if (options.dryRun) {
     for (const table of tables) deleted[table] = rows.get(table)!.size;
-    return { deleted, dependents: allDependents, dryRun: true };
+    return {
+      deleted,
+      dependents: allDependents,
+      dryRun: true,
+      recomputedReports: await recomputeReports(manager, since, true),
+    };
   }
 
   // Link rows (no key of their own) that join a row being removed.
@@ -257,7 +327,16 @@ export const removeShowcase = async (
     if (pk.length !== 1) {
       throw new Error(`Showcase removal: ${table} has no single primary key`);
     }
-    const appendOnly = table === APPEND_ONLY.table;
+    // A database built without the migrations (local synchronize) has no
+    // such trigger.
+    const appendOnly =
+      table === APPEND_ONLY.table &&
+      (
+        await manager.query(
+          `SELECT 1 FROM pg_trigger WHERE tgname = $1 AND tgrelid = $2::regclass`,
+          [APPEND_ONLY.trigger, `"${APPEND_ONLY.table}"`],
+        )
+      ).length > 0;
     if (appendOnly) {
       await manager.query(
         `ALTER TABLE "${APPEND_ONLY.table}" DISABLE TRIGGER "${APPEND_ONLY.trigger}"`,
@@ -276,7 +355,13 @@ export const removeShowcase = async (
       );
     }
   }
+  const recomputedReports = await recomputeReports(manager, since, false);
   await manager.query(`DELETE FROM "showcase_items"`);
   await manager.query(`DELETE FROM "showcase_state"`);
-  return { deleted, dependents: allDependents, dryRun: false };
+  return {
+    deleted,
+    dependents: allDependents,
+    dryRun: false,
+    recomputedReports,
+  };
 };
