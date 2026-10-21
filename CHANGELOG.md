@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.23.0](https://github.com/SkyCrew-app/backend/compare/2.22.0...2.23.0) (2026-10-21)
+
+
+### Features
+
+* **navplan:** :sparkles: add minimum safe altitudes and runway distances ([#231](https://github.com/SkyCrew-app/backend/issues/231)) ([84b241d](https://github.com/SkyCrew-app/backend/commit/84b241da6591cb42512c447ff5f8870bb42fa248))
+
+
+### Bug Fixes
+
+* **e-learning:** :bug: refuse to delete content with evaluation results ([#232](https://github.com/SkyCrew-app/backend/issues/232)) ([bb8caea](https://github.com/SkyCrew-app/backend/commit/bb8caea405e621d86a5c0ce703e28d69abe3a719))
+
 ## [2.22.0](https://github.com/SkyCrew-app/backend/compare/2.21.1...2.22.0) (2026-10-19)
 
 
