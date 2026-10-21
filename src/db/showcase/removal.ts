@@ -95,7 +95,7 @@ export const deletionOrder = (
             (other) => other !== table && before.get(other)!.has(table),
           ),
       )
-      .sort();
+      .sort((a, b) => a.localeCompare(b));
     if (ready.length === 0) {
       throw new Error(
         `Showcase removal: circular mandatory foreign keys between ${[...remaining].join(', ')}`,

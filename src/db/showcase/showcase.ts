@@ -272,7 +272,7 @@ export const removeCommand = async (
     `${report.dryRun ? 'Dry run — would remove' : 'Showcase removed —'} ${total} rows:\n  ${Object.entries(
       report.deleted,
     )
-      .sort()
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([table, n]) => `${table}: ${n}`)
       .join('\n  ')}`,
   );
