@@ -61,3 +61,20 @@ export class Random {
     return out;
   }
 }
+
+// A generator of its own for one decision of the showcase: the seed of the
+// showcase and what the decision is about (a day, a member, a booking...).
+// The same parts give the same draws, whatever was drawn before, so that a
+// refresh run twice takes the same decisions.
+export const randomFor = (
+  seed: number,
+  ...parts: (string | number)[]
+): Random => {
+  // FNV-1a over the parts, mixed with the seed.
+  let hash = 0x811c9dc5 ^ (seed >>> 0);
+  for (const char of parts.join('|')) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return new Random(hash >>> 0);
+};

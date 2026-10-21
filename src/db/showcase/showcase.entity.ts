@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, PrimaryColumn } from 'typeorm';
 
-// Columns match migration 1797100000001-AddShowcaseTracking exactly.
+// Columns match migrations 1797100000001-AddShowcaseTracking and
+// 1802000000002-AddShowcaseRefreshDate exactly.
 
 // One row per row the showcase generator wrote: its table and its primary
 // key, as text.
@@ -44,4 +45,10 @@ export class ShowcaseState {
 
   @Column({ type: 'jsonb', nullable: true })
   summary: Record<string, unknown> | null;
+
+  // When the showcase was last brought up to date (created or refreshed);
+  // null for a showcase created before refreshes existed (its creation
+  // date stands for it).
+  @Column({ type: 'timestamptz', nullable: true })
+  refreshed_at: Date | null;
 }

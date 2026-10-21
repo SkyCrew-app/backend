@@ -84,15 +84,17 @@ export interface ShowcasePlan {
   settings: ShowcaseSettings;
 }
 
-// The day the yearly fee is called (3 September, 10:00 at the club), when
-// it falls within the history.
+// The day the yearly fee is called: 3 September, 10:00 at the club.
+export const feeDay = (year: number): Date =>
+  new Date(
+    clubDayStart(new Date(Date.UTC(year, 8, 3, 12))).getTime() + 10 * HOUR,
+  );
+
+// The day the yearly fee was called, when it falls within the history.
 const feeDateWithin = (now: Date, historyStart: Date): Date | null => {
   const year = Number(now.toISOString().slice(0, 4));
   for (const candidate of [year, year - 1]) {
-    const date = new Date(
-      clubDayStart(new Date(Date.UTC(candidate, 8, 3, 12))).getTime() +
-        10 * HOUR,
-    );
+    const date = feeDay(candidate);
     if (
       date.getTime() <= now.getTime() - DAY &&
       date.getTime() >= historyStart.getTime()

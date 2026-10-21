@@ -15,11 +15,19 @@ import { SHOWCASE_INVOICE_PREFIX } from './ledger';
 import { SHOWCASE_EMAIL_DOMAIN } from './content';
 import { SHOWCASE_REGISTRATIONS } from './fleet';
 import { ShowcaseState } from './showcase.entity';
+import { loadWorld } from './world';
+import {
+  planRefresh,
+  refreshProblems,
+  refreshSummary,
+  writeRefresh,
+} from './refresh';
 
 // The showcase club: a fictitious, busy club written into a real
 // installation for a demonstration, and removed afterwards.
 //
 //   node dist/src/db/showcase/showcase.js create [--seed <n>]
+//   node dist/src/db/showcase/showcase.js refresh [--dry-run]
 //   node dist/src/db/showcase/showcase.js remove [--dry-run] [--with-dependents]
 //
 // It talks to the database only (DATABASE_URL): no e-mail, no scheduler, no
@@ -33,6 +41,14 @@ Usage:
       and three weeks of bookings, relative to now. Refused when a showcase
       already exists. Prints the presentation accounts and their passwords
       once: they are stored nowhere else.
+  showcase refresh [--dry-run]
+      Brings the club up to date, before a presentation: the bookings
+      whose time has passed since the creation (or the last refresh) are
+      flown and closed (some cancelled), with their charges, invoices,
+      hours and courses; three weeks of bookings ahead of now again, with
+      flight plans and lessons; the club's expenses and notifications in
+      between. Running it again adds nothing. --dry-run says what it would
+      write and writes nothing.
   showcase remove [--dry-run] [--with-dependents]
       Deletes every row the showcase wrote, and nothing else. Refused when
       rows written since point at the showcase (a booking made during the
@@ -45,40 +61,68 @@ application has started at least once (it applies the migrations and imports
 the aerodromes).`;
 
 export interface Arguments {
-  command: 'create' | 'remove' | 'help';
+  command: 'create' | 'refresh' | 'remove' | 'help';
   seed: number | null;
   dryRun: boolean;
   withDependents: boolean;
+  // For tests only (not in the usage): the moment taken as now.
+  now: Date | null;
 }
+
+const COMMANDS = ['create', 'refresh', 'remove', 'help'] as const;
+
+// The value given after an option, or null when the option is absent.
+const valueOf = (args: string[], flag: string): string | null => {
+  const at = args.indexOf(flag);
+  if (at < 0) return null;
+  const value = args[at + 1];
+  if (value === undefined || value.startsWith('--')) {
+    throw new Error(`${flag} takes a value`);
+  }
+  return value;
+};
 
 export const parseArguments = (argv: string[]): Arguments => {
   const args = [...argv];
   const has = (flag: string) => args.includes(flag);
-  const command =
-    has('--help') || has('-h') ? 'help' : args.find((a) => !a.startsWith('-'));
-  if (command !== 'create' && command !== 'remove' && command !== 'help') {
+  const valued = ['--seed', '--now'];
+  const values = new Set(
+    valued.map((flag) => args.indexOf(flag)).filter((at) => at >= 0),
+  );
+  const command = (
+    has('--help') || has('-h')
+      ? 'help'
+      : args.find((a, i) => !a.startsWith('-') && !values.has(i - 1))
+  ) as Arguments['command'] | undefined;
+  if (!command || !COMMANDS.includes(command)) {
     throw new Error(`Unknown or missing command.\n\n${USAGE}`);
   }
   let seed: number | null = null;
-  const seedAt = args.indexOf('--seed');
-  if (seedAt >= 0) {
-    seed = Number(args[seedAt + 1]);
+  const seedText = valueOf(args, '--seed');
+  if (seedText !== null) {
+    seed = Number(seedText);
     if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) {
       throw new Error('--seed takes a whole number between 0 and 4294967295');
     }
   }
+  let now: Date | null = null;
+  const nowText = valueOf(args, '--now');
+  if (nowText !== null) {
+    now = new Date(nowText);
+    if (Number.isNaN(now.getTime())) {
+      throw new Error('--now takes a date and time (ISO 8601)');
+    }
+  }
   const known = [
-    'create',
-    'remove',
-    'help',
+    ...COMMANDS,
     '--help',
     '-h',
-    '--seed',
+    ...valued,
     '--dry-run',
     '--with-dependents',
   ];
   const unknown = args.filter(
-    (a, i) => !known.includes(a) && !(seedAt >= 0 && i === seedAt + 1),
+    (a, i) => !(known as string[]).includes(a) && !values.has(i - 1),
   );
   if (unknown.length > 0) {
     throw new Error(`Unknown option ${unknown.join(' ')}.\n\n${USAGE}`);
@@ -88,6 +132,7 @@ export const parseArguments = (argv: string[]): Arguments => {
     seed,
     dryRun: has('--dry-run'),
     withDependents: has('--with-dependents'),
+    now,
   };
 };
 
@@ -103,7 +148,10 @@ const dataSource = () =>
 
 const assertTrackingTables = async (manager: EntityManager) => {
   const [row] = await manager.query(
-    `SELECT to_regclass('showcase_items') IS NOT NULL AND to_regclass('showcase_state') IS NOT NULL AS ready`,
+    `SELECT to_regclass('showcase_items') IS NOT NULL AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = 'showcase_state' AND column_name = 'refreshed_at'
+     ) AS ready`,
   );
   if (!row?.ready) {
     throw new Error(
@@ -226,6 +274,7 @@ export const createCommand = async (
       invoice_prefix: SHOWCASE_INVOICE_PREFIX,
       invoice_last_number: plan.invoiceLastNumber,
       summary: { ...summaryOf(plan), rows: written.counts },
+      refreshed_at: now,
     });
     return written;
   });
@@ -249,6 +298,82 @@ export const createCommand = async (
     );
   }
   return { seed, plan, outcome };
+};
+
+// A dry run writes everything in a transaction, then rolls it back.
+class DryRun extends Error {}
+
+interface RefreshResult {
+  summary: ReturnType<typeof refreshSummary>;
+  counts: Record<string, number>;
+  warnings: string[];
+}
+
+export const refreshCommand = async (
+  source: DataSource,
+  options: { dryRun: boolean },
+  now: Date = new Date(),
+  log: (line: string) => void = console.log,
+) => {
+  await assertTrackingTables(source.manager);
+  const { config } = parsePlanConfig(process.env);
+  const instruction = PLAN_FEATURES[config.plan].includes(
+    PlanFeature.INSTRUCTION,
+  );
+  let result: RefreshResult | null = null;
+  try {
+    await source.transaction(async (tx) => {
+      // One refresh at a time; the API's own showcase invoices wait.
+      const [state] = await tx.query(
+        `SELECT "seed", "created_at", "refreshed_at", "invoice_last_number" FROM "showcase_state" WHERE "id" = 1 FOR UPDATE`,
+      );
+      if (!state) return;
+      const since = new Date(state.refreshed_at ?? state.created_at);
+      if (now.getTime() <= since.getTime()) {
+        throw new Error(
+          `The showcase is already up to date (${since.toISOString()}).`,
+        );
+      }
+      const world = await loadWorld(tx, {
+        seed: Number(state.seed),
+        since,
+        instruction,
+        invoiceLastNumber: Number(state.invoice_last_number),
+      });
+      const plan = planRefresh(world, now);
+      const problems = refreshProblems(world, plan);
+      if (problems.length > 0) {
+        throw new Error(
+          `The planned refresh breaks a rule, nothing was written:\n  ${problems.join('\n  ')}`,
+        );
+      }
+      const written = await writeRefresh(tx, world, plan);
+      result = { summary: refreshSummary(plan), ...written };
+      if (options.dryRun) throw new DryRun();
+    });
+  } catch (error) {
+    if (!(error instanceof DryRun)) throw error;
+  }
+  if (!result) {
+    log('No showcase to refresh.');
+    return null;
+  }
+  const { summary, counts, warnings } = result as RefreshResult;
+  const verb = options.dryRun ? 'Dry run — would bring' : 'Brought';
+  log(
+    `${verb} the showcase club up to date, from ${summary.from.slice(0, 16)} to ${summary.to.slice(0, 16)}.`,
+  );
+  log(
+    `  ${summary.bookings} new bookings (${summary.upcomingBookings} upcoming), ${summary.cancelledBookings} cancelled, ${summary.flightsFlown} flown and ${summary.flightsClosed} closed (${summary.hoursClosed} h), ${summary.newCourses} new courses, ${summary.coursesSettled} courses settled, ${summary.payments} account lines, ${summary.invoices} invoices, ${summary.expenses} expenses, ${summary.notifications} notifications, ${summary.maintenancesCompleted} maintenance(s) completed, ${summary.flightPlans} flight plan(s).`,
+  );
+  const rows = Object.values(counts).reduce((a, b) => a + b, 0);
+  log(
+    options.dryRun
+      ? `  ${rows} rows would be written (nothing was).`
+      : `  ${rows} rows written and recorded for removal.`,
+  );
+  for (const warning of warnings) log(`  Warning: ${warning}`);
+  return result;
 };
 
 export const removeCommand = async (
@@ -301,8 +426,11 @@ const main = async () => {
   }
   const source = await dataSource().initialize();
   try {
+    const now = args.now ?? new Date();
     if (args.command === 'create') {
-      await createCommand(source, args.seed);
+      await createCommand(source, args.seed, now);
+    } else if (args.command === 'refresh') {
+      await refreshCommand(source, args, now);
     } else {
       await removeCommand(source, args);
     }

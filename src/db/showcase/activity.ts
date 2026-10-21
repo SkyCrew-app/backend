@@ -446,11 +446,25 @@ export const planIncidents = (
 
 // ---------- Notifications about bookings, courses and licences ----------
 
-export const activityNotifications = (
+export interface NoticeParts {
+  // The booking was made, cancelled by its member, its course completed.
+  booked: boolean;
+  cancelled: boolean;
+  course: boolean;
+}
+
+const ALL_NOTICES: NoticeParts = {
+  booked: true,
+  cancelled: true,
+  course: true,
+};
+
+// What the API told the members about a booking, when recent enough.
+export const bookingNotifications = (
   rng: Random,
   now: Date,
-  bookings: DraftBooking[],
-  members: DraftMember[],
+  booking: DraftBooking,
+  parts: NoticeParts = ALL_NOTICES,
 ): DraftNotification[] => {
   const out: DraftNotification[] = [];
   const recent = (at: Date) =>
@@ -458,76 +472,89 @@ export const activityNotifications = (
     now.getTime() - at.getTime() < NOTIFIED_DAYS * DAY;
   const read = (at: Date) =>
     now.getTime() - at.getTime() > 3 * DAY ? rng.chance(0.85) : rng.chance(0.3);
-  for (const booking of bookings) {
-    const registration = booking.aircraft.registration;
-    if (recent(booking.bookedAt)) {
+  const registration = booking.aircraft.registration;
+  if (parts.booked && recent(booking.bookedAt)) {
+    out.push({
+      member: booking.pilot,
+      type: 'RESERVATION_CONFIRMED',
+      message: () =>
+        translate('fr', 'notification.reservationConfirmed', {
+          registration,
+        }),
+      date: booking.bookedAt,
+      read: read(booking.bookedAt),
+      priority: null,
+      expiration: null,
+    });
+    if (booking.instructor) {
+      const instructor = booking.instructor;
       out.push({
-        member: booking.pilot,
-        type: 'RESERVATION_CONFIRMED',
+        member: instructor,
+        type: 'INSTRUCTION_BOOKED',
         message: () =>
-          translate('fr', 'notification.reservationConfirmed', {
+          translate('fr', 'notification.instructionBookedForInstructor', {
+            student: fullName(booking.pilot),
             registration,
+            date: mailDate(booking.start, 'fr'),
           }),
         date: booking.bookedAt,
         read: read(booking.bookedAt),
         priority: null,
         expiration: null,
       });
-      if (booking.instructor) {
+    }
+  }
+  if (
+    parts.cancelled &&
+    booking.cancelledAt &&
+    !booking.cancelledBy &&
+    recent(booking.cancelledAt)
+  ) {
+    out.push({
+      member: booking.pilot,
+      type: 'RESERVATION_CANCELLED',
+      message: () =>
+        translate('fr', 'notification.reservationCancelled', {
+          registration,
+        }),
+      date: booking.cancelledAt,
+      read: true,
+      priority: null,
+      expiration: null,
+    });
+  }
+  const course = booking.course;
+  if (parts.course && course?.status === 'COMPLETED') {
+    const at = clubDayStart(course.end, 1);
+    if (recent(at)) {
+      for (const member of [course.student, course.instructor]) {
         out.push({
-          member: booking.instructor,
-          type: 'INSTRUCTION_BOOKED',
+          member,
+          type: 'COURSE_COMPLETED',
           message: () =>
-            translate('fr', 'notification.instructionBookedForInstructor', {
-              student: fullName(booking.pilot),
-              registration,
-              date: mailDate(booking.start, 'fr'),
+            translate('fr', 'notification.courseCompleted', {
+              courseId: course.id!,
             }),
-          date: booking.bookedAt,
-          read: read(booking.bookedAt),
+          date: at,
+          read: read(at),
           priority: null,
           expiration: null,
         });
       }
     }
-    if (
-      booking.cancelledAt &&
-      !booking.cancelledBy &&
-      recent(booking.cancelledAt)
-    ) {
-      out.push({
-        member: booking.pilot,
-        type: 'RESERVATION_CANCELLED',
-        message: () =>
-          translate('fr', 'notification.reservationCancelled', {
-            registration,
-          }),
-        date: booking.cancelledAt,
-        read: true,
-        priority: null,
-        expiration: null,
-      });
-    }
-    const course = booking.course;
-    if (course?.status === 'COMPLETED') {
-      const at = clubDayStart(course.end, 1);
-      if (recent(at)) {
-        for (const member of [course.student, course.instructor]) {
-          out.push({
-            member,
-            type: 'COURSE_COMPLETED',
-            message: () =>
-              translate('fr', 'notification.courseCompleted', {
-                courseId: course.id!,
-              }),
-            date: at,
-            read: read(at),
-            priority: null,
-            expiration: null,
-          });
-        }
-      }
-    }
+  }
+  return out;
+};
+
+export const activityNotifications = (
+  rng: Random,
+  now: Date,
+  bookings: DraftBooking[],
+  members: DraftMember[],
+): DraftNotification[] => {
+  const out: DraftNotification[] = [];
+  for (const booking of bookings) {
+    out.push(...bookingNotifications(rng, now, booking));
   }
   // Licence reminders the API would have sent (60, 30 and 7 days before).
   for (const member of members) {
@@ -617,11 +644,19 @@ export const planExpenses = (
   bookings: DraftBooking[],
   maintenances: DraftMaintenance[],
   fuelPrice: number,
+  // A refresh: only what is dated after the previous one, each month drawn
+  // from its own generator (the same days from one refresh to the next).
+  refresh: { after: Date; rngOf: (month: Date) => Random } | null = null,
 ): DraftExpense[] => {
   const expenses: DraftExpense[] = [];
+  const after = refresh?.after ?? null;
+  const due = (date: Date) =>
+    date.getTime() <= now.getTime() &&
+    (!after || date.getTime() > after.getTime());
   for (let month = 0; ; month++) {
     const start = clubMonthStart(historyStart, month);
     if (start.getTime() > now.getTime()) break;
+    const draw = refresh ? refresh.rngOf(start) : rng;
     const next = clubMonthStart(historyStart, month + 1);
     const at = (day: number) =>
       new Date(start.getTime() + (day - 1) * DAY + 10 * HOUR);
@@ -643,7 +678,7 @@ export const planExpenses = (
       description: string,
       aircraft: FleetAircraft | null = null,
     ) => {
-      if (at(day).getTime() <= now.getTime()) {
+      if (due(at(day))) {
         expenses.push({
           date: at(day),
           amount: Math.round(amount * 100) / 100,
@@ -656,7 +691,7 @@ export const planExpenses = (
     };
     if (litres > 0) {
       add(
-        rng.int(3, 8),
+        draw.int(3, 8),
         litres * (fuelPrice || 2.45),
         'Carburant',
         '100LL',
@@ -678,14 +713,14 @@ export const planExpenses = (
       `Assurance flotte et responsabilité civile — échéance ${label}`,
     );
     add(
-      rng.int(10, 15),
-      140 + rng.int(0, 60),
+      draw.int(10, 15),
+      140 + draw.int(0, 60),
       'Infrastructure',
       'Électricité',
       `Électricité hangar et club-house — ${label}`,
     );
     add(
-      rng.int(15, 20),
+      draw.int(15, 20),
       85,
       'Administratif',
       'Abonnements',
@@ -693,8 +728,8 @@ export const planExpenses = (
     );
     if (month % 3 === 1) {
       add(
-        rng.int(18, 25),
-        380 + rng.int(0, 120),
+        draw.int(18, 25),
+        380 + draw.int(0, 120),
         'Administratif',
         'Redevances',
         'Redevances d’usage de la plateforme (trimestre)',
@@ -702,8 +737,10 @@ export const planExpenses = (
     }
   }
   for (const m of maintenances.filter((x) => x.status === 'COMPLETED')) {
+    const date = new Date(m.endDate.getTime() + 14 * HOUR);
+    if (after && !due(date)) continue;
     expenses.push({
-      date: new Date(m.endDate.getTime() + 14 * HOUR),
+      date,
       amount: m.cost,
       category: 'Maintenance',
       sub:

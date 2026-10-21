@@ -56,6 +56,9 @@ export interface DraftMember {
   // Filled while planning.
   balanceCents: number;
   closedHours: number;
+  // A refresh books for the member from then on only: its money lines come
+  // after the last one of the account.
+  bookableFrom?: Date;
   id?: number;
 }
 
@@ -65,7 +68,7 @@ export interface DraftCourse {
   lesson: number;
   start: Date;
   end: Date;
-  status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED';
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED';
   feedback: string | null;
   rating: number | null;
   competencies: {
@@ -89,6 +92,9 @@ export interface DraftFlight {
   closedAt: Date | null;
   remarks: string;
   passengers: number;
+  // A flight plan made ahead of the flight (a row of the new engine): it is
+  // what the pilot closes once flown.
+  planned?: boolean;
   id?: number;
 }
 

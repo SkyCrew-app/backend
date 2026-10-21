@@ -27,6 +27,8 @@ export class UpdateFlightInput {
   @IsNumber()
   flight_hours?: number;
 
+  // A booking category (FlightCategory), checked by the service, which
+  // answers in the member's language.
   @Field({ nullable: true })
   flight_type?: string;
 

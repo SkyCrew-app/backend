@@ -25,9 +25,8 @@ export class CreateFlightInput {
   @Min(0)
   flight_hours: number;
 
-  // Free text, like on the flight itself and on its update: the flight
-  // rules (VFR, IFR…) when planned by hand, the reservation category when
-  // created from a reservation.
+  // A booking category (local, cross_country…: FlightCategory). The service
+  // refuses anything else, in the member's language.
   @Field()
   @IsString()
   @IsNotEmpty()
