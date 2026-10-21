@@ -130,6 +130,9 @@ export interface MetarData {
   temperatureC: number | null;
   dewpointC: number | null;
   qnhHpa: number | null;
+  // Precipitation observed or recent (RA, DZ, SN, SHRA, RERA...): the
+  // runway is taken as wet.
+  wet: boolean;
 }
 
 const MPS_TO_KT = 3600 / 1852;
@@ -146,6 +149,7 @@ export function decodeMetar(raw: string | null | undefined): MetarData {
     temperatureC: null,
     dewpointC: null,
     qnhHpa: null,
+    wet: false,
   };
   if (!raw) return data;
   // The trend and the remarks may repeat groups: only the body is read.
@@ -166,6 +170,13 @@ export function decodeMetar(raw: string | null | undefined): MetarData {
     data.temperatureC = value(temperature[1]);
     data.dewpointC = temperature[2] ? value(temperature[2]) : null;
   }
+  data.wet = body
+    .split(/\s+/)
+    .some((group) =>
+      /^(?:[+-]|VC)?(?:RE)?(?:SH|TS|FZ)?(?:DZ|RA|SN|SG|PL|GR|GS|UP)+$/.test(
+        group,
+      ),
+    );
   const qnh = /\bQ(\d{4})\b/.exec(body);
   const altimeter = /\bA(\d{4})\b/.exec(body);
   if (qnh) data.qnhHpa = Number(qnh[1]);

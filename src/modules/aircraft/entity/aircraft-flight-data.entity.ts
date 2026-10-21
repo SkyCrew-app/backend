@@ -19,11 +19,13 @@ import type {
   ReserveData,
   Station,
 } from '../../navplan/engine/types';
+import type { RunwayDistanceTable } from '../../navplan/engine/runway-distances';
 
 // Performance and mass & balance of one aircraft, from its flight manual
 // and weighing report. Not used for a plan until an administrator has
-// confirmed them (validated_at). Columns match migration
-// 1797000000002-AddAircraftFlightData exactly.
+// confirmed them (validated_at). Columns match migrations
+// 1797000000002-AddAircraftFlightData and 1801000000002-AddRunwayDistances
+// exactly.
 
 @Entity('aircraft_performance')
 export class AircraftPerformanceEntity {
@@ -66,6 +68,13 @@ export class AircraftPerformanceEntity {
 
   @Column({ type: 'integer', nullable: true })
   service_ceiling_ft: number | null;
+
+  // Take-off and landing distance tables of the manual (null: not entered).
+  @Column({ type: 'jsonb', nullable: true })
+  takeoff: RunwayDistanceTable | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  landing: RunwayDistanceTable | null;
 
   @Column({ type: 'text', nullable: true })
   source: string | null;

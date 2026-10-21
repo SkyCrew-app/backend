@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "build": "nest build",
-    "postbuild": "cp -r src/modules/templates dist/src/modules/templates/ 2>/dev/null || true && cp -r src/modules/flights/data dist/src/modules/flights/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navdata/data && cp src/modules/navdata/data/*.json.gz dist/src/modules/navdata/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navplan/pdf/fonts && cp src/modules/navplan/pdf/fonts/* dist/src/modules/navplan/pdf/fonts/",
+    "postbuild": "cp -r src/modules/templates dist/src/modules/templates/ 2>/dev/null || true && cp -r src/modules/flights/data dist/src/modules/flights/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navdata/data && cp src/modules/navdata/data/*.json.gz src/modules/navdata/data/*.bin.gz src/modules/navdata/data/*.sha256 dist/src/modules/navdata/data/ 2>/dev/null || true && mkdir -p dist/src/modules/navplan/pdf/fonts && cp src/modules/navplan/pdf/fonts/* dist/src/modules/navplan/pdf/fonts/",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/src/main",
     "heroku-postbuild": "npm run build",
@@ -33,6 +33,7 @@
     "airports:build-db": "ts-node --transpile-only scripts/build-airport-db.ts",
     "navdata:build": "ts-node --transpile-only scripts/navdata.ts build",
     "navdata:import": "ts-node --transpile-only scripts/navdata.ts import",
+    "terrain:build": "ts-node --transpile-only scripts/terrain.ts",
     "winds:fetch": "ts-node --transpile-only src/modules/navplan/weather/icon-eu/fetch-job.ts",
     "prepare": "husky || true"
   },
@@ -113,6 +114,7 @@
     "eslint": "^8.42.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
+    "geotiff": "^3.0.5",
     "husky": "^9.1.7",
     "jest": "^30.5.2",
     "prettier": "^3.0.0",

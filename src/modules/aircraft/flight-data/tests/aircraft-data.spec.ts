@@ -364,6 +364,79 @@ describe('aircraft data rules', () => {
     expect(() => s.checkPerformance(input({}))).not.toThrow();
   });
 
+  it('stores the distance tables, keeps them when absent, refuses inconsistent ones', async () => {
+    const { service: s, performance } = service();
+    const base = AIRCRAFT_TEMPLATES.find(
+      (t) => t.code === 'DR400-180',
+    ).performance;
+    const input = (changes: any) =>
+      ({
+        ...base,
+        climb: { ...base.climb, fuelFlowLph: 50 },
+        source: null,
+        ...changes,
+      }) as any;
+    const takeoff = {
+      rows: [
+        {
+          pressureAltFt: 0,
+          temperatureC: 15,
+          groundRollM: 250,
+          distance15mM: 500,
+        },
+      ],
+      referenceMassKg: 1100,
+      source: 'manuel p. X',
+    };
+    await s.savePerformance(1, input({ takeoff, landing: null }));
+    expect(performance.rows[0].takeoff).toMatchObject({
+      referenceMassKg: 1100,
+      grassPercent: null,
+      rows: [{ groundRollM: 250, massKg: null }],
+    });
+    expect(performance.rows[0].landing).toBeNull();
+    // An older screen without the tables does not erase them.
+    await s.savePerformance(1, input({}));
+    expect(performance.rows[0].takeoff).toMatchObject({
+      referenceMassKg: 1100,
+    });
+    // Nor does a template.
+    await s.applyTemplate(1, 'DR400-180');
+    expect(performance.rows[0].takeoff).toMatchObject({
+      referenceMassKg: 1100,
+    });
+    expect(() =>
+      s.checkPerformance(
+        input({
+          takeoff: {
+            ...takeoff,
+            rows: [{ ...takeoff.rows[0], distance15mM: 200 }],
+          },
+        }),
+      ),
+    ).toThrow(/shorter than the ground roll/);
+    expect(() =>
+      s.checkPerformance(
+        input({
+          landing: { ...takeoff, rows: [takeoff.rows[0], takeoff.rows[0]] },
+        }),
+      ),
+    ).toThrow(/same conditions/);
+    expect(() =>
+      s.checkPerformance(
+        input({
+          takeoff: {
+            rows: [
+              { ...takeoff.rows[0], massKg: 900 },
+              { ...takeoff.rows[0], temperatureC: 25 },
+            ],
+            referenceMassKg: null,
+          },
+        }),
+      ),
+    ).toThrow(/reference mass/);
+  });
+
   it('refuses inconsistent mass and balance data', () => {
     const { service: s } = service();
     const base = {
