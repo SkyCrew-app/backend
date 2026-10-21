@@ -3,7 +3,17 @@ import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
 import { ShowcaseTracker } from './tracker';
 import { ShowcasePlan } from './build';
-import { DraftBooking, DraftMember, ROLE_OF } from './model';
+import {
+  DraftAdminAction,
+  DraftBooking,
+  DraftCourse,
+  DraftInvoice,
+  DraftMember,
+  DraftNotification,
+  DraftPayment,
+  ROLE_OF,
+} from './model';
+import { DraftExpense } from './activity';
 import { performanceSource, DEMO_DATA_WARNING, FleetAircraft } from './fleet';
 import { BASE } from './content';
 import {
@@ -171,8 +181,7 @@ export const writeShowcase = async (
   }
   const memberIds = await tracker.insert(User, memberRows);
   plan.members.forEach((m, i) => (m.id = memberIds[i]));
-  const ref = (member: DraftMember | null | undefined) =>
-    member ? ({ id: member.id } as User) : null;
+  const ref = memberRef;
 
   const licences = plan.members.flatMap((m) => m.licences);
   const licenceIds = await tracker.insert(
@@ -272,124 +281,13 @@ export const writeShowcase = async (
     })),
   );
 
-  // ---- Bookings, in the order they were made. A cancelled booking is
-  // deleted by the API: it only takes an id, which its money lines keep.
-  const bookings = [...plan.bookings].sort(
-    (a, b) => a.bookedAt.getTime() - b.bookedAt.getTime(),
-  );
-  const sequence: { seq: string }[] = await manager.query(
-    `SELECT pg_get_serial_sequence('"reservations"', 'id') AS seq`,
-  );
-  const bookingRow = (b: DraftBooking) => ({
-    aircraft: { id: aircraftId(b.aircraft) } as Aircraft,
-    user: ref(b.pilot),
-    instructor: ref(b.instructor),
-    reservation_date: b.bookedAt,
-    start_time: b.start,
-    end_time: b.end,
-    estimated_flight_hours: round2(
-      (b.end.getTime() - b.start.getTime()) / HOUR,
-    ),
-    purpose: b.purpose,
-    status: ReservationStatus.CONFIRMED,
-    flight_category: b.category,
-    notes: b.notes,
-    number_of_passengers: b.passengers,
-    charged_amount: b.priceCents / 100,
-  });
-  // Rows in a row are written together; a cancelled one takes its id from
-  // the sequence between them.
-  let pending: DraftBooking[] = [];
-  const flush = async () => {
-    const ids = await tracker.insert(
-      Reservation,
-      pending.map(bookingRow) as never,
-    );
-    pending.forEach((b, i) => (b.id = ids[i]));
-    pending = [];
-  };
-  for (const booking of bookings) {
-    if (!booking.cancelledAt) {
-      pending.push(booking);
-      continue;
-    }
-    await flush();
-    const [row] = await manager.query(`SELECT nextval($1::regclass) AS id`, [
-      sequence[0].seq,
-    ]);
-    booking.id = Number(row.id);
-  }
-  await flush();
-  const active = bookings.filter((b) => !b.cancelledAt);
-
-  // ---- Flights of the bookings flown ----
+  // ---- Bookings, their flights and the courses ----
+  const ctx: WriteContext = { manager, tracker, rng, aircraftId };
+  await writeBookings(ctx, plan.bookings);
+  const active = plan.bookings.filter((b) => !b.cancelledAt);
   const flown = active.filter((b) => b.flight);
-  const flightIds = await tracker.insert(
-    Flight,
-    flown.map((b) => {
-      const f = b.flight!;
-      return {
-        reservation: { id: b.id } as Reservation,
-        user: ref(b.pilot),
-        instructor: ref(b.instructor),
-        flight_hours: f.hours,
-        flight_type: b.category,
-        origin_icao: f.origin,
-        destination_icao: f.destination,
-        weather_conditions: null,
-        number_of_passengers: f.passengers,
-        departure_time: f.departure,
-        arrival_time: f.arrival,
-        remarks: f.remarks,
-        closed_at: f.closedAt,
-        plan_engine: null,
-      } as Partial<Flight>;
-    }),
-  );
-  flown.forEach((b, i) => (b.flight!.id = flightIds[i]));
-
-  // ---- Instruction courses ----
-  const courseIds = await tracker.insert(
-    InstructionCourse,
-    plan.courses.map((c) => ({
-      instructor: ref(c.instructor),
-      student: ref(c.student),
-      startTime: c.start,
-      endTime: c.end,
-      reservation:
-        c.booking && !c.booking.cancelledAt
-          ? ({ id: c.booking.id } as Reservation)
-          : null,
-      status: CourseStatus[c.status === 'CANCELED' ? 'CANCELED' : c.status],
-      feedback: c.feedback,
-      rating: c.rating,
-    })),
-  );
-  plan.courses.forEach((c, i) => (c.id = courseIds[i]));
-  await tracker.insert(
-    CourseCompetency,
-    plan.courses.flatMap((c) =>
-      c.competencies.map((k) => ({
-        name: k.name,
-        description: k.description,
-        validated: k.validated,
-        validatedBy: k.validated ? ref(c.instructor) : null,
-        validatedAt: k.validatedAt,
-        course: { id: c.id } as InstructionCourse,
-      })),
-    ),
-  );
-  await tracker.insert(
-    CourseComment,
-    plan.courses.flatMap((c) =>
-      c.comments.map((k) => ({
-        content: k.content,
-        creationDate: k.at,
-        author: ref(k.author),
-        course: { id: c.id } as InstructionCourse,
-      })),
-    ),
-  );
+  await writeFlights(ctx, flown);
+  await writeCourses(ctx, plan.courses);
 
   // ---- Incidents ----
   const incidentIds = await tracker.insert(
@@ -416,38 +314,7 @@ export const writeShowcase = async (
   plan.incidents.forEach((x, i) => (x.id = incidentIds[i]));
 
   // ---- Money: invoices, then the lines of the accounts ----
-  const invoiceIds = await tracker.insert(
-    Invoice,
-    plan.invoices.map((inv) => ({
-      invoice_number: inv.number,
-      user: ref(inv.member),
-      amount: inv.amountCents / 100,
-      invoice_date: inv.date,
-      payment_status: 'completed',
-      payment_method: inv.method,
-      invoice_items: JSON.stringify(inv.lines()),
-      amount_paid: inv.amountCents / 100,
-      balance_due: 0,
-    })),
-  );
-  plan.invoices.forEach((inv, i) => (inv.id = invoiceIds[i]));
-  const paymentIds = await tracker.insert(
-    Payment,
-    plan.payments.map((p) => ({
-      user: ref(p.member),
-      invoice: p.invoice ? ({ id: p.invoice.id } as Invoice) : null,
-      amount: p.amountCents / 100,
-      payment_date: p.date,
-      payment_method: p.method,
-      payment_status: p.status,
-      external_payment_id: p.externalId,
-      kind: p.kind,
-      reason: p.reason,
-      reservation_id: p.booking?.id ?? null,
-      created_by_id: p.createdBy?.id ?? null,
-    })) as never,
-  );
-  plan.payments.forEach((p, i) => (p.id = paymentIds[i]));
+  await writeMoney(ctx, plan.invoices, plan.payments);
 
   // ---- Checklists ----
   const models = [...new Set(plan.fleet.map((a) => a.model))];
@@ -478,31 +345,13 @@ export const writeShowcase = async (
     );
     itemIdsByModel.set(model, ids);
   }
-  const checked = flown.filter(
-    (b) => now.getTime() - b.start.getTime() < 30 * DAY && rng.chance(0.75),
+  const checklists = new Map(
+    models.map((model, index) => [
+      model,
+      { templateId: templateIds[index], itemIds: itemIdsByModel.get(model)! },
+    ]),
   );
-  await tracker.insert(
-    ChecklistSubmission,
-    checked.map((b) => {
-      const model = b.aircraft.model;
-      const items = itemIdsByModel.get(model)!;
-      return {
-        template: {
-          id: templateIds[models.indexOf(model)],
-        } as ChecklistTemplate,
-        pilot: ref(b.pilot),
-        reservation: { id: b.id } as Reservation,
-        status: ChecklistSubmissionStatus.COMPLETED,
-        responses: items.map((itemId, index) => ({
-          itemId,
-          checked: CHECKLIST_ITEMS[index][3] || rng.chance(0.3),
-        })),
-        started_at: b.start,
-        completed_at: new Date(b.start.getTime() + rng.int(8, 15) * MINUTE),
-        created_at: b.start,
-      };
-    }) as never,
-  );
+  await writeChecklists(ctx, flown, checklists, now);
 
   // ---- Safety audits ----
   const [auditTemplateId] = await tracker.insert(AuditTemplate, [
@@ -694,19 +543,7 @@ export const writeShowcase = async (
   );
 
   // ---- Expenses and monthly reports ----
-  await tracker.insert(
-    Expense,
-    plan.expenses.map((e) => ({
-      expense_date: e.date,
-      amount: e.amount,
-      category: e.category,
-      sub_category: e.sub,
-      description: e.description,
-      aircraft: e.aircraft
-        ? ({ id: aircraftId(e.aircraft) } as Aircraft)
-        : null,
-    })),
-  );
+  await writeExpenses(ctx, plan.expenses);
   await tracker.insert(
     FinancialReport,
     plan.reports.map((r) => ({
@@ -746,7 +583,270 @@ export const writeShowcase = async (
   );
 
   // ---- Flight plans of the new engine, on the next trips ----
-  const tripBookings = active
+  warnings.push(
+    ...(await writeFlightPlans(ctx, tripBookings(active, now, 6), now)),
+  );
+
+  // ---- The trace of the office's actions and the notifications ----
+  await writeAdminActions(ctx, plan.adminActions);
+  await writeNotifications(ctx, plan.notifications);
+
+  return {
+    credentials,
+    counts: Object.fromEntries(tracker.counts),
+    warnings,
+  };
+};
+
+export const memberRef = (member: DraftMember | null | undefined) =>
+  member ? ({ id: member.id } as User) : null;
+
+// What the writing steps share.
+export interface WriteContext {
+  manager: EntityManager;
+  tracker: ShowcaseTracker;
+  rng: Random;
+  aircraftId: (aircraft: FleetAircraft) => number;
+}
+
+const bookingRow = (ctx: WriteContext, b: DraftBooking) => ({
+  aircraft: { id: ctx.aircraftId(b.aircraft) } as Aircraft,
+  user: memberRef(b.pilot),
+  instructor: memberRef(b.instructor),
+  reservation_date: b.bookedAt,
+  start_time: b.start,
+  end_time: b.end,
+  estimated_flight_hours: round2((b.end.getTime() - b.start.getTime()) / HOUR),
+  purpose: b.purpose,
+  status: ReservationStatus.CONFIRMED,
+  flight_category: b.category,
+  notes: b.notes,
+  number_of_passengers: b.passengers,
+  charged_amount: b.priceCents / 100,
+});
+
+// Bookings, in the order they were made. A cancelled booking is deleted by
+// the API: it only takes an id, which its money lines keep.
+export const writeBookings = async (
+  ctx: WriteContext,
+  list: DraftBooking[],
+): Promise<void> => {
+  const { manager, tracker } = ctx;
+  const bookings = [...list].sort(
+    (a, b) => a.bookedAt.getTime() - b.bookedAt.getTime(),
+  );
+  const sequence: { seq: string }[] = await manager.query(
+    `SELECT pg_get_serial_sequence('"reservations"', 'id') AS seq`,
+  );
+  // Rows in a row are written together; a cancelled one takes its id from
+  // the sequence between them.
+  let pending: DraftBooking[] = [];
+  const flush = async () => {
+    const ids = await tracker.insert(
+      Reservation,
+      pending.map((b) => bookingRow(ctx, b)) as never,
+    );
+    pending.forEach((b, i) => (b.id = ids[i]));
+    pending = [];
+  };
+  for (const booking of bookings) {
+    if (!booking.cancelledAt) {
+      pending.push(booking);
+      continue;
+    }
+    await flush();
+    const [row] = await manager.query(`SELECT nextval($1::regclass) AS id`, [
+      sequence[0].seq,
+    ]);
+    booking.id = Number(row.id);
+  }
+  await flush();
+};
+
+export const flightRow = (b: DraftBooking): Partial<Flight> => {
+  const f = b.flight!;
+  return {
+    reservation: { id: b.id } as Reservation,
+    user: memberRef(b.pilot),
+    instructor: memberRef(b.instructor),
+    flight_hours: f.hours,
+    flight_type: b.category,
+    origin_icao: f.origin,
+    destination_icao: f.destination,
+    weather_conditions: null,
+    number_of_passengers: f.passengers,
+    departure_time: f.departure,
+    arrival_time: f.arrival,
+    remarks: f.remarks,
+    closed_at: f.closedAt,
+    plan_engine: null,
+  } as Partial<Flight>;
+};
+
+// The flights of the bookings flown.
+export const writeFlights = async (
+  ctx: WriteContext,
+  flown: DraftBooking[],
+): Promise<void> => {
+  const ids = await ctx.tracker.insert(Flight, flown.map(flightRow));
+  flown.forEach((b, i) => (b.flight!.id = ids[i]));
+};
+
+export const courseCompetencyRows = (c: DraftCourse) =>
+  c.competencies.map((k) => ({
+    name: k.name,
+    description: k.description,
+    validated: k.validated,
+    validatedBy: k.validated ? memberRef(c.instructor) : null,
+    validatedAt: k.validatedAt,
+    course: { id: c.id } as InstructionCourse,
+  }));
+
+export const courseCommentRows = (c: DraftCourse) =>
+  c.comments.map((k) => ({
+    content: k.content,
+    creationDate: k.at,
+    author: memberRef(k.author),
+    course: { id: c.id } as InstructionCourse,
+  }));
+
+// Instruction courses, their competencies and comments.
+export const writeCourses = async (
+  ctx: WriteContext,
+  courses: DraftCourse[],
+): Promise<void> => {
+  const { tracker } = ctx;
+  const courseIds = await tracker.insert(
+    InstructionCourse,
+    courses.map((c) => ({
+      instructor: memberRef(c.instructor),
+      student: memberRef(c.student),
+      startTime: c.start,
+      endTime: c.end,
+      reservation:
+        c.booking && !c.booking.cancelledAt
+          ? ({ id: c.booking.id } as Reservation)
+          : null,
+      status: CourseStatus[c.status === 'CANCELED' ? 'CANCELED' : c.status],
+      feedback: c.feedback,
+      rating: c.rating,
+    })),
+  );
+  courses.forEach((c, i) => (c.id = courseIds[i]));
+  await tracker.insert(CourseCompetency, courses.flatMap(courseCompetencyRows));
+  await tracker.insert(CourseComment, courses.flatMap(courseCommentRows));
+};
+
+// Invoices, then the lines of the accounts.
+export const writeMoney = async (
+  ctx: WriteContext,
+  invoices: DraftInvoice[],
+  payments: DraftPayment[],
+): Promise<void> => {
+  const { tracker } = ctx;
+  const invoiceIds = await tracker.insert(
+    Invoice,
+    invoices.map((inv) => ({
+      invoice_number: inv.number,
+      user: memberRef(inv.member),
+      amount: inv.amountCents / 100,
+      invoice_date: inv.date,
+      payment_status: 'completed',
+      payment_method: inv.method,
+      invoice_items: JSON.stringify(inv.lines()),
+      amount_paid: inv.amountCents / 100,
+      balance_due: 0,
+    })),
+  );
+  invoices.forEach((inv, i) => (inv.id = invoiceIds[i]));
+  const paymentIds = await tracker.insert(
+    Payment,
+    payments.map((p) => ({
+      user: memberRef(p.member),
+      invoice: p.invoice ? ({ id: p.invoice.id } as Invoice) : null,
+      amount: p.amountCents / 100,
+      payment_date: p.date,
+      payment_method: p.method,
+      payment_status: p.status,
+      external_payment_id: p.externalId,
+      kind: p.kind,
+      reason: p.reason,
+      reservation_id: p.booking?.id ?? null,
+      created_by_id: p.createdBy?.id ?? null,
+    })) as never,
+  );
+  payments.forEach((p, i) => (p.id = paymentIds[i]));
+};
+
+// The pre-flight checklist of each aircraft model: its template and items.
+export type ChecklistsByModel = Map<
+  string,
+  { templateId: number; itemIds: number[] }
+>;
+
+// Pilots fill the checklist before most flights (those of the last 30
+// days are kept).
+export const writeChecklists = async (
+  ctx: WriteContext,
+  flown: DraftBooking[],
+  checklists: ChecklistsByModel,
+  now: Date,
+): Promise<void> => {
+  const { rng } = ctx;
+  const checked = flown.filter(
+    (b) =>
+      now.getTime() - b.start.getTime() < 30 * DAY &&
+      rng.chance(0.75) &&
+      checklists.has(b.aircraft.model),
+  );
+  await ctx.tracker.insert(
+    ChecklistSubmission,
+    checked.map((b) => {
+      const { templateId, itemIds } = checklists.get(b.aircraft.model)!;
+      return {
+        template: { id: templateId } as ChecklistTemplate,
+        pilot: memberRef(b.pilot),
+        reservation: { id: b.id } as Reservation,
+        status: ChecklistSubmissionStatus.COMPLETED,
+        responses: itemIds.map((itemId, index) => ({
+          itemId,
+          checked: CHECKLIST_ITEMS[index][3] || rng.chance(0.3),
+        })),
+        started_at: b.start,
+        completed_at: new Date(b.start.getTime() + rng.int(8, 15) * MINUTE),
+        created_at: b.start,
+      };
+    }) as never,
+  );
+};
+
+export const writeExpenses = async (
+  ctx: WriteContext,
+  expenses: DraftExpense[],
+): Promise<void> => {
+  await ctx.tracker.insert(
+    Expense,
+    expenses.map((e) => ({
+      expense_date: e.date,
+      amount: e.amount,
+      category: e.category,
+      sub_category: e.sub,
+      description: e.description,
+      aircraft: e.aircraft
+        ? ({ id: ctx.aircraftId(e.aircraft) } as Aircraft)
+        : null,
+    })),
+  );
+};
+
+// The next trips that get a flight plan: the presentation pilot's first,
+// then the other cross-country flights, soonest first.
+export const tripBookings = (
+  active: DraftBooking[],
+  now: Date,
+  count: number,
+): DraftBooking[] =>
+  active
     .filter(
       (b: DraftBooking) =>
         b.start.getTime() > now.getTime() + 2 * HOUR &&
@@ -759,17 +859,25 @@ export const writeShowcase = async (
         Number(b.pilot.login === 'pilot') - Number(a.pilot.login === 'pilot') ||
         a.start.getTime() - b.start.getTime(),
     )
-    .slice(0, 6);
+    .slice(0, Math.max(0, count));
+
+// Flight plans of the new engine on the trips, as the flight preparation
+// saves them. Returns the warnings (no navigation data...).
+export const writeFlightPlans = async (
+  ctx: WriteContext,
+  trips: DraftBooking[],
+  now: Date,
+): Promise<string[]> => {
+  const { manager, tracker } = ctx;
   const computed = await computeShowcasePlans(
     manager,
-    tripBookings,
+    trips,
     (aircraft) => ({
       performance: aircraft.performance,
       massBalance: aircraft.massBalance,
     }),
     now,
   );
-  warnings.push(...computed.warnings);
   for (const planned of computed.plans) {
     const { legacy, booking } = planned;
     const [flightId] = await tracker.insert(Flight, [
@@ -777,8 +885,8 @@ export const writeShowcase = async (
         ...legacy,
         waypoints: JSON.stringify(legacy.waypoints),
         reservation: { id: booking.id } as Reservation,
-        user: ref(booking.pilot),
-        instructor: ref(booking.instructor),
+        user: memberRef(booking.pilot),
+        instructor: memberRef(booking.instructor),
         plan_engine: PLAN_ENGINE,
         closed_at: null,
       } as never,
@@ -788,7 +896,7 @@ export const writeShowcase = async (
         flight_id: flightId,
         reservation_id: booking.id,
         user_id: booking.pilot.id,
-        aircraft_id: booking.aircraft.id ?? aircraftId(booking.aircraft),
+        aircraft_id: ctx.aircraftId(booking.aircraft),
         input: planned.input,
         result: JSON.parse(JSON.stringify(planned.result)),
         engine_version: planned.result.engineVersion,
@@ -800,12 +908,18 @@ export const writeShowcase = async (
       },
     ]);
   }
+  return computed.warnings;
+};
 
-  // ---- The trace of the office's actions and the notifications ----
-  // The trace refuses any UPDATE: its lines are written with their date.
-  const actionIds: number[] = [];
-  for (const a of plan.adminActions) {
-    const [row] = await manager.query(
+// The trace of the office's actions. It refuses any UPDATE: its lines are
+// written with their date.
+export const writeAdminActions = async (
+  ctx: WriteContext,
+  actions: DraftAdminAction[],
+): Promise<void> => {
+  const ids: number[] = [];
+  for (const a of actions) {
+    const [row] = await ctx.manager.query(
       `INSERT INTO "admin_actions" ("created_at", "actor_id", "actor_label", "action", "target_type", "target_id", "target_label", "summary") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING "id"`,
       [
         a.at,
@@ -818,13 +932,19 @@ export const writeShowcase = async (
         JSON.stringify(sanitizeSummary(a.summary())),
       ],
     );
-    actionIds.push(Number(row.id));
+    ids.push(Number(row.id));
   }
-  await tracker.track('admin_actions', actionIds);
-  await tracker.insert(
+  await ctx.tracker.track('admin_actions', ids);
+};
+
+export const writeNotifications = async (
+  ctx: WriteContext,
+  notifications: DraftNotification[],
+): Promise<void> => {
+  await ctx.tracker.insert(
     Notification,
-    plan.notifications.map((n) => ({
-      user: ref(n.member),
+    notifications.map((n) => ({
+      user: memberRef(n.member),
       notification_type: n.type,
       message: n.message(),
       notification_date: n.date,
@@ -833,10 +953,4 @@ export const writeShowcase = async (
       priority: n.priority,
     })),
   );
-
-  return {
-    credentials,
-    counts: Object.fromEntries(tracker.counts),
-    warnings,
-  };
 };

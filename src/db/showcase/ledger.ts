@@ -29,7 +29,7 @@ export const SHOWCASE_INVOICE_PREFIX = 'DEMO';
 // Notifications are written for what happened recently only.
 export const NOTIFIED_DAYS = 14;
 
-interface LedgerEvent {
+export interface LedgerEvent {
   at: Date;
   member: DraftMember;
   // Negative: taken from the balance.
@@ -66,27 +66,79 @@ const fullName = (member: DraftMember) =>
 
 const TOP_UP_STEPS = [200, 300, 400, 500, 600, 800, 1000, 1200, 1500];
 
-// Every movement of every member, in order: the balance never goes below
-// zero when the API would refuse it (a booking is charged only when the
-// balance covers it, a manual debit likewise), and a member who lacks money
-// tops up first. The member's balance is the sum of their lines.
-export const buildLedger = (input: LedgerInput): Ledger => {
-  const { rng, now, members, bookings, treasurer } = input;
-  const payments: DraftPayment[] = [];
-  const invoices: DraftInvoice[] = [];
-  const adminActions: DraftAdminAction[] = [];
-  const notifications: DraftNotification[] = [];
-  const recent = (at: Date) =>
-    now.getTime() - at.getTime() < NOTIFIED_DAYS * DAY;
-  const notify = (
+// What a booking moves on its member's account: the charge when booked,
+// the refund when cancelled.
+export const bookingEvents = (booking: DraftBooking): LedgerEvent[] => {
+  if (booking.priceCents <= 0) return [];
+  const events: LedgerEvent[] = [
+    {
+      at: booking.bookedAt,
+      member: booking.pilot,
+      cents: -booking.priceCents,
+      kind: 'booking',
+      booking,
+      reason: null,
+      method: 'account_balance',
+    },
+  ];
+  if (booking.cancelledAt) events.push(refundEvent(booking));
+  return events;
+};
+
+export const refundEvent = (booking: DraftBooking): LedgerEvent => ({
+  at: booking.cancelledAt!,
+  member: booking.pilot,
+  cents: booking.priceCents,
+  kind: 'booking_refund',
+  booking,
+  reason: null,
+  method: 'account_balance',
+});
+
+// The yearly fee of the season starting in `feeDate`'s year, called from a
+// member at `at`.
+export const feeEvent = (
+  member: DraftMember,
+  at: Date,
+  feeCents: number,
+  feeDate: Date,
+): LedgerEvent => {
+  const season = feeDate.getFullYear();
+  return {
+    at,
+    member,
+    cents: -feeCents,
+    kind: 'manual_debit',
+    booking: null,
+    reason: `Cotisation annuelle ${season}-${season + 1}`,
+    method: 'correction',
+  };
+};
+
+// The members' accounts as the API keeps them: lines, invoices, the trace
+// of entries made by hand and the notifications of recent movements.
+export class Accounts {
+  readonly payments: DraftPayment[] = [];
+  readonly invoices: DraftInvoice[] = [];
+  readonly adminActions: DraftAdminAction[] = [];
+  readonly notifications: DraftNotification[] = [];
+
+  constructor(
+    private readonly rng: Random,
+    private readonly now: Date,
+    private readonly treasurer: DraftMember,
+  ) {}
+
+  private notify(
     member: DraftMember,
     at: Date,
     type: string,
     message: () => string,
     priority: string | null = null,
-  ) => {
-    if (!recent(at)) return;
-    notifications.push({
+  ): void {
+    const { now, rng } = this;
+    if (now.getTime() - at.getTime() >= NOTIFIED_DAYS * DAY) return;
+    this.notifications.push({
       member,
       type,
       message,
@@ -98,67 +150,17 @@ export const buildLedger = (input: LedgerInput): Ledger => {
       priority,
       expiration: null,
     });
-  };
-  const money = (cents: number) => formatMoney('fr', fromCents(cents));
-
-  const events = new Map<DraftMember, LedgerEvent[]>();
-  const push = (event: LedgerEvent) => {
-    const list = events.get(event.member) ?? [];
-    list.push(event);
-    events.set(event.member, list);
-  };
-
-  for (const booking of bookings) {
-    if (booking.priceCents <= 0) continue;
-    push({
-      at: booking.bookedAt,
-      member: booking.pilot,
-      cents: -booking.priceCents,
-      kind: 'booking',
-      booking,
-      reason: null,
-      method: 'account_balance',
-    });
-    if (booking.cancelledAt) {
-      push({
-        at: booking.cancelledAt,
-        member: booking.pilot,
-        cents: booking.priceCents,
-        kind: 'booking_refund',
-        booking,
-        reason: null,
-        method: 'account_balance',
-      });
-    }
-  }
-  const feeCents = Math.round(Number(input.membershipFee || 0) * 100);
-  if (input.feeDate && feeCents > 0) {
-    const season = input.feeDate.getFullYear();
-    for (const member of members) {
-      const at = new Date(
-        Math.max(input.feeDate.getTime(), member.joined.getTime() + 2 * HOUR),
-      );
-      if (at.getTime() >= now.getTime()) continue;
-      push({
-        at,
-        member,
-        cents: -feeCents,
-        kind: 'manual_debit',
-        booking: null,
-        reason: `Cotisation annuelle ${season}-${season + 1}`,
-        method: 'correction',
-      });
-    }
   }
 
-  const manualEntry = (
+  manualEntry(
     member: DraftMember,
     at: Date,
     cents: number,
     method: string,
     reason: string,
     credit: boolean,
-  ) => {
+  ): DraftPayment {
+    const treasurer = this.treasurer;
     const payment: DraftPayment = {
       member,
       kind: credit ? 'manual_credit' : 'manual_debit',
@@ -172,8 +174,8 @@ export const buildLedger = (input: LedgerInput): Ledger => {
       createdBy: treasurer,
       externalId: null,
     };
-    payments.push(payment);
-    adminActions.push({
+    this.payments.push(payment);
+    this.adminActions.push({
       actor: treasurer,
       at: new Date(at.getTime() + 1000),
       action: ADMIN_ACTION.BALANCE_ADJUSTED,
@@ -188,7 +190,7 @@ export const buildLedger = (input: LedgerInput): Ledger => {
         reason,
       }),
     });
-    notify(member, at, credit ? 'PAYMENT_RECEIVED' : 'WITHDRAWAL', () =>
+    this.notify(member, at, credit ? 'PAYMENT_RECEIVED' : 'WITHDRAWAL', () =>
       translate(
         'fr',
         credit ? 'notification.paymentReceived' : 'notification.withdrawal',
@@ -198,9 +200,10 @@ export const buildLedger = (input: LedgerInput): Ledger => {
       ),
     );
     return payment;
-  };
+  }
 
-  const topUp = (member: DraftMember, at: Date, cents: number) => {
+  topUp(member: DraftMember, at: Date, cents: number): void {
+    const rng = this.rng;
     const method =
       member.kind === 'student'
         ? rng.weighted([
@@ -224,8 +227,8 @@ export const buildLedger = (input: LedgerInput): Ledger => {
         method,
         lines: () => [{ kind: 'top_up', amount: fromCents(cents), method }],
       };
-      invoices.push(invoice);
-      payments.push({
+      this.invoices.push(invoice);
+      this.payments.push({
         member,
         kind: 'top_up',
         amountCents: cents,
@@ -241,58 +244,40 @@ export const buildLedger = (input: LedgerInput): Ledger => {
             ? `pi_demo_${rng.hex(20)}`
             : `DEMO-PAYPAL-${rng.hex(12).toUpperCase()}`,
       });
-      notify(member, at, 'INVOICE_CREATED', () =>
+      this.notify(member, at, 'INVOICE_CREATED', () =>
         translate('fr', 'notification.invoiceCreated', {
           amount: money(cents),
         }),
       );
-      notify(member, at, 'PAYMENT_RECEIVED', () =>
+      this.notify(member, at, 'PAYMENT_RECEIVED', () =>
         translate('fr', 'notification.paymentReceived', {
           amount: money(cents),
         }),
       );
       return;
     }
-    const reason =
-      method === 'cheque'
-        ? TOP_UP_REASONS.cheque(rng.int(1000000, 9999999))
-        : method === 'transfer'
-          ? TOP_UP_REASONS.transfer(formatDate('fr', at))
-          : TOP_UP_REASONS.cash();
-    manualEntry(member, at, cents, method, reason, true);
-  };
-
-  for (const member of members) {
-    const list = (events.get(member) ?? []).sort(
-      (a, b) => a.at.getTime() - b.at.getTime(),
-    );
-    let balance = 0;
-    let previous = Math.max(
-      member.joined.getTime(),
-      input.historyStart.getTime() - DAY,
-    );
-
-    // The balance carried over from the club's previous tool.
-    if (member.joined.getTime() < input.historyStart.getTime()) {
-      const opening =
-        member.kind === 'technician'
-          ? rng.int(0, 1) * 100
-          : rng.int(0, 16) * 50;
-      if (opening > 0) {
-        const at = new Date(input.historyStart.getTime() + 7 * HOUR);
-        manualEntry(
-          member,
-          at,
-          opening * 100,
-          'correction',
-          `Reprise du solde au ${formatDate('fr', at)} (ancien logiciel)`,
-          true,
-        );
-        balance += opening * 100;
-        previous = at.getTime();
-      }
+    let reason: string;
+    if (method === 'cheque') {
+      reason = TOP_UP_REASONS.cheque(rng.int(1000000, 9999999));
+    } else if (method === 'transfer') {
+      reason = TOP_UP_REASONS.transfer(formatDate('fr', at));
+    } else {
+      reason = TOP_UP_REASONS.cash();
     }
+    this.manualEntry(member, at, cents, method, reason, true);
+  }
 
+  // Writes a member's events in order, from `balance` after a last line at
+  // `previous`: a debit the balance does not cover is preceded by a top-up,
+  // as the API refuses it otherwise. Returns the balance after them.
+  post(
+    member: DraftMember,
+    events: LedgerEvent[],
+    balance: number,
+    previous: number,
+  ): { balance: number; previous: number } {
+    const rng = this.rng;
+    const list = [...events].sort((a, b) => a.at.getTime() - b.at.getTime());
     for (const event of list) {
       if (event.cents < 0 && balance + event.cents < 0) {
         const need = -event.cents - balance;
@@ -313,73 +298,157 @@ export const buildLedger = (input: LedgerInput): Ledger => {
             event.at.getTime() - 1000,
           ),
         );
-        topUp(member, at, amount);
+        this.topUp(member, at, amount);
         balance += amount;
       }
-      const payment: DraftPayment = {
-        member,
-        kind: event.kind,
-        amountCents: Math.abs(event.cents),
-        date: event.at,
-        method: event.method,
-        status: 'completed',
-        reason: event.reason,
-        booking: event.booking,
-        invoice: null,
-        createdBy: null,
-        externalId: null,
-      };
-      if (event.kind === 'manual_debit') {
-        manualEntry(
-          member,
-          event.at,
-          -event.cents,
-          event.method,
-          event.reason!,
-          false,
-        );
-      } else {
-        if (event.kind === 'booking') {
-          const booking = event.booking!;
-          const invoice: DraftInvoice = {
-            member,
-            number: '',
-            date: event.at,
-            amountCents: -event.cents,
-            method: 'account_balance',
-            lines: (): InvoiceLine[] => [
-              {
-                kind: 'booking',
-                amount: fromCents(-event.cents),
-                reservationId: booking.id ?? null,
-                registration: booking.aircraft.registration,
-                start: booking.start.toISOString(),
-                end: booking.end.toISOString(),
-                instructor: booking.instructor
-                  ? fullName(booking.instructor)
-                  : null,
-              },
-            ],
-          };
-          invoices.push(invoice);
-          payment.invoice = invoice;
-          notify(member, event.at, 'WITHDRAWAL', () =>
-            translate('fr', 'notification.withdrawal', {
-              amount: money(-event.cents),
-            }),
-          );
-        } else {
-          notify(member, event.at, 'PAYMENT_REFUNDED', () =>
-            translate('fr', 'notification.paymentRefunded', {
-              amount: money(event.cents),
-            }),
-          );
-        }
-        payments.push(payment);
-      }
+      this.line(member, event);
       balance += event.cents;
       previous = event.at.getTime();
     }
+    return { balance, previous };
+  }
+
+  private line(member: DraftMember, event: LedgerEvent): void {
+    if (event.kind === 'manual_debit') {
+      this.manualEntry(
+        member,
+        event.at,
+        -event.cents,
+        event.method,
+        event.reason!,
+        false,
+      );
+      return;
+    }
+    const payment: DraftPayment = {
+      member,
+      kind: event.kind,
+      amountCents: Math.abs(event.cents),
+      date: event.at,
+      method: event.method,
+      status: 'completed',
+      reason: event.reason,
+      booking: event.booking,
+      invoice: null,
+      createdBy: null,
+      externalId: null,
+    };
+    if (event.kind === 'booking') {
+      const booking = event.booking!;
+      const invoice: DraftInvoice = {
+        member,
+        number: '',
+        date: event.at,
+        amountCents: -event.cents,
+        method: 'account_balance',
+        lines: (): InvoiceLine[] => [
+          {
+            kind: 'booking',
+            amount: fromCents(-event.cents),
+            reservationId: booking.id ?? null,
+            registration: booking.aircraft.registration,
+            start: booking.start.toISOString(),
+            end: booking.end.toISOString(),
+            instructor: booking.instructor
+              ? fullName(booking.instructor)
+              : null,
+          },
+        ],
+      };
+      this.invoices.push(invoice);
+      payment.invoice = invoice;
+      this.notify(member, event.at, 'WITHDRAWAL', () =>
+        translate('fr', 'notification.withdrawal', {
+          amount: money(-event.cents),
+        }),
+      );
+    } else {
+      this.notify(member, event.at, 'PAYMENT_REFUNDED', () =>
+        translate('fr', 'notification.paymentRefunded', {
+          amount: money(event.cents),
+        }),
+      );
+    }
+    this.payments.push(payment);
+  }
+
+  // Numbers the invoices in the order they were issued, after `last`, and
+  // the lines in date order. Returns the last number taken.
+  close(last = 0): number {
+    this.invoices.sort((a, b) => a.date.getTime() - b.date.getTime());
+    this.invoices.forEach((invoice, index) => {
+      invoice.number = showcaseInvoiceNumber(invoice.date, last + index + 1);
+    });
+    this.payments.sort((a, b) => a.date.getTime() - b.date.getTime());
+    return last + this.invoices.length;
+  }
+}
+
+export const showcaseInvoiceNumber = (date: Date, sequence: number): string =>
+  `${SHOWCASE_INVOICE_PREFIX}-${formatInvoiceNumber(invoiceYear(date), sequence)}`;
+
+const money = (cents: number) => formatMoney('fr', fromCents(cents));
+
+// Every movement of every member, in order: the balance never goes below
+// zero when the API would refuse it (a booking is charged only when the
+// balance covers it, a manual debit likewise), and a member who lacks money
+// tops up first. The member's balance is the sum of their lines.
+export const buildLedger = (input: LedgerInput): Ledger => {
+  const { rng, now, members, bookings, treasurer } = input;
+  const accounts = new Accounts(rng, now, treasurer);
+
+  const events = new Map<DraftMember, LedgerEvent[]>();
+  const push = (event: LedgerEvent) => {
+    const list = events.get(event.member) ?? [];
+    list.push(event);
+    events.set(event.member, list);
+  };
+  for (const booking of bookings) bookingEvents(booking).forEach(push);
+  const feeCents = Math.round(Number(input.membershipFee || 0) * 100);
+  if (input.feeDate && feeCents > 0) {
+    for (const member of members) {
+      const at = new Date(
+        Math.max(input.feeDate.getTime(), member.joined.getTime() + 2 * HOUR),
+      );
+      if (at.getTime() >= now.getTime()) continue;
+      push(feeEvent(member, at, feeCents, input.feeDate));
+    }
+  }
+
+  for (const member of members) {
+    let balance = 0;
+    let previous = Math.max(
+      member.joined.getTime(),
+      input.historyStart.getTime() - DAY,
+    );
+
+    // The balance carried over from the club's previous tool.
+    if (member.joined.getTime() < input.historyStart.getTime()) {
+      const opening =
+        member.kind === 'technician'
+          ? rng.int(0, 1) * 100
+          : rng.int(0, 16) * 50;
+      if (opening > 0) {
+        const at = new Date(input.historyStart.getTime() + 7 * HOUR);
+        accounts.manualEntry(
+          member,
+          at,
+          opening * 100,
+          'correction',
+          `Reprise du solde au ${formatDate('fr', at)} (ancien logiciel)`,
+          true,
+        );
+        balance += opening * 100;
+        previous = at.getTime();
+      }
+    }
+
+    ({ balance, previous } = accounts.post(
+      member,
+      events.get(member) ?? [],
+      balance,
+      previous,
+    ));
 
     // Now and then a member tops up ahead of need.
     if (member.kind !== 'technician' && rng.chance(0.35)) {
@@ -388,7 +457,7 @@ export const buildLedger = (input: LedgerInput): Ledger => {
       );
       if (at.getTime() > previous) {
         const amount = rng.pick([200, 300, 500]) * 100;
-        topUp(member, at, amount);
+        accounts.topUp(member, at, amount);
         balance += amount;
       }
     }
@@ -398,7 +467,7 @@ export const buildLedger = (input: LedgerInput): Ledger => {
   // One online top-up still waiting for the provider: it moves nothing.
   const waiting = members.find((m) => m.kind === 'pilot' && !m.login);
   if (waiting) {
-    payments.push({
+    accounts.payments.push({
       member: waiting,
       kind: 'top_up',
       amountCents: 30000,
@@ -413,18 +482,13 @@ export const buildLedger = (input: LedgerInput): Ledger => {
     });
   }
 
-  // Numbers in the order the invoices were issued.
-  invoices.sort((a, b) => a.date.getTime() - b.date.getTime());
-  invoices.forEach((invoice, index) => {
-    invoice.number = `${SHOWCASE_INVOICE_PREFIX}-${formatInvoiceNumber(invoiceYear(invoice.date), index + 1)}`;
-  });
-  payments.sort((a, b) => a.date.getTime() - b.date.getTime());
+  const invoiceLastNumber = accounts.close();
   return {
-    payments,
-    invoices,
-    adminActions,
-    notifications,
-    invoiceLastNumber: invoices.length,
+    payments: accounts.payments,
+    invoices: accounts.invoices,
+    adminActions: accounts.adminActions,
+    notifications: accounts.notifications,
+    invoiceLastNumber,
   };
 };
 
