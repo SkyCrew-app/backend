@@ -81,4 +81,26 @@ describe('LogbookService', () => {
       instructionGivenHours: 2,
     });
   });
+
+  it('groups the hours by booking category, and filters on one whatever its case', async () => {
+    const { service, query } = serviceOver([
+      { ...flights[0], flight_type: 'local' },
+      { ...flights[1], flight_type: 'instruction' },
+      { ...flights[2], flight_type: 'local' },
+    ]);
+
+    const stats = await service.getLogbookStats(ME);
+    expect(stats.hoursByCategory).toEqual(
+      expect.arrayContaining([
+        { label: 'local', hours: 3 },
+        { label: 'instruction', hours: 1.5 },
+      ]),
+    );
+
+    await service.getLogbookEntries(ME, { flightType: 'CROSS_COUNTRY' });
+    const filtered = query.andWhere.mock.calls.find(([condition]) =>
+      String(condition).includes('flight_type'),
+    );
+    expect(filtered?.[1]).toEqual({ flightType: 'cross_country' });
+  });
 });

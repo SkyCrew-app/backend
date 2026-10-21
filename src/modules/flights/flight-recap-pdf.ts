@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { Flight } from './entity/flights.entity';
+import { flightTypeLabel } from './flight-rules';
 
 // The standard PDF fonts only know the Latin-1 characters.
 const printable = (text: string): string =>
@@ -49,7 +50,7 @@ export function flightRecapLines(flight: Flight): Array<[string, string]> {
       aircraft ? `${aircraft.registration_number} (${aircraft.model})` : null,
     ],
     ['Trajet', `${flight.origin_icao} -> ${flight.destination_icao}`],
-    ['Type de vol', flight.flight_type],
+    ['Type de vol', flightTypeLabel(flight.flight_type) || null],
     ['Départ', formatDate(flight.departure_time)],
     ['Arrivée', formatDate(flight.arrival_time)],
     ['Heures de vol', formatHours(flight.flight_hours)],

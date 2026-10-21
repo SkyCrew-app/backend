@@ -18,6 +18,7 @@ import { NavdataService } from '../navdata/navdata.service';
 import { FlightsService } from '../flights/flights.service';
 import { Reservation } from '../reservations/entity/reservations.entity';
 import { Flight } from '../flights/entity/flights.entity';
+import { DEFAULT_FLIGHT_TYPE } from '../flights/flight-rules';
 import {
   computeFlightPlan,
   EngineInput,
@@ -166,7 +167,7 @@ export function legacyFlightColumns(
     distance_km: Math.round(result.totalDistanceNm * 1.852 * 10) / 10,
     encoded_polyline: result.encodedPolyline,
     waypoints,
-    flight_type: reservation?.flight_category ?? 'VFR',
+    flight_type: reservation?.flight_category ?? DEFAULT_FLIGHT_TYPE,
     number_of_passengers: reservation?.number_of_passengers ?? 0,
     departure_time: departure,
     arrival_time: new Date(

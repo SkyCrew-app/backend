@@ -85,7 +85,7 @@ describe('FlightsService', () => {
       origin_icao: 'AAA',
       destination_icao: 'BBB',
       flight_hours: 1,
-      flight_type: 'X',
+      flight_type: 'local',
       number_of_passengers: 1,
       waypoints: [],
     };
@@ -126,6 +126,21 @@ describe('FlightsService', () => {
           relations: expect.arrayContaining(['instructor']),
         }),
       );
+    });
+
+    it('records a booking category as the type, and refuses a flight rule', async () => {
+      resRepo.findOne.mockResolvedValue({ id: 1, user: { id: 2 } } as any);
+      const res = await service.createFlightByUser(
+        { ...input, flight_type: ' Cross_Country ' } as any,
+        pilot,
+      );
+      expect(res.flight_type).toBe('cross_country');
+      await expect(
+        service.createFlightByUser(
+          { ...input, flight_type: 'VFR' } as any,
+          pilot,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('throws if reservation not found', async () => {
@@ -725,6 +740,30 @@ describe('FlightsService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(manager.save).not.toHaveBeenCalled();
       expect(manager.increment).not.toHaveBeenCalled();
+    });
+
+    it('takes a booking category as the type and refuses anything else', async () => {
+      repo.findOne.mockResolvedValue(stored({ flight_type: 'local' }));
+      await expect(
+        service.updateFlight(7, { id: 7, flight_type: 'IFR' } as any, owner),
+      ).rejects.toThrow('catégorie de réservation');
+
+      repo.findOne.mockResolvedValue(stored({ flight_type: 'local' }));
+      const res = await service.updateFlight(
+        7,
+        { id: 7, flight_type: 'TOURISM', flight_hours: 1 } as any,
+        owner,
+      );
+      expect(res.flight_type).toBe('tourism');
+
+      // Left out (or null): the type stays as it is.
+      repo.findOne.mockResolvedValue(stored({ flight_type: 'training' }));
+      const kept = await service.updateFlight(
+        7,
+        { id: 7, flight_type: null, flight_hours: 1 } as any,
+        owner,
+      );
+      expect(kept.flight_type).toBe('training');
     });
 
     it('refuses an arrival before the departure', async () => {

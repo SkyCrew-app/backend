@@ -39,6 +39,7 @@ describe('flight recap', () => {
       Pilote: 'Jean Dupont',
       Aéronef: 'F-GSKY (Cessna 172)',
       Trajet: 'LFPO -> LFPN',
+      'Type de vol': 'Local',
       'Heures de vol': '1 h 30',
       Distance: '18.7 km',
       Passagers: '1',
@@ -47,6 +48,15 @@ describe('flight recap', () => {
     expect(lines).not.toHaveProperty('Météo');
     expect(lines).not.toHaveProperty('Départ');
     expect(lines['Clôturé le']).toContain('2026');
+  });
+
+  it('names the booking category of the flight', () => {
+    const type = (flight_type: string) =>
+      Object.fromEntries(flightRecapLines(flight({ flight_type })))[
+        'Type de vol'
+      ];
+    expect(type('cross_country')).toBe('Navigation');
+    expect(type('training')).toBe('Entraînement');
   });
 
   it('copes with a flight without reservation', () => {
