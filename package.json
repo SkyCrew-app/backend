@@ -31,6 +31,7 @@
     "seed:dist": "node dist/src/db/run-seeders.js",
     "seed:demo:dist": "node dist/src/db/run-seeders.js --demo",
     "showcase:create": "ts-node -r tsconfig-paths/register src/db/showcase/showcase.ts create",
+    "showcase:refresh": "ts-node -r tsconfig-paths/register src/db/showcase/showcase.ts refresh",
     "showcase:remove": "ts-node -r tsconfig-paths/register src/db/showcase/showcase.ts remove",
     "airports:build-db": "ts-node --transpile-only scripts/build-airport-db.ts",
     "navdata:build": "ts-node --transpile-only scripts/navdata.ts build",
