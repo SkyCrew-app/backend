@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.23.1](https://github.com/SkyCrew-app/backend/compare/2.23.0...2.23.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **flights:** :bug: keep the booking category as the flight type and refresh the showcase ([#237](https://github.com/SkyCrew-app/backend/issues/237)) ([fd7530c](https://github.com/SkyCrew-app/backend/commit/fd7530ccc60342292d7bf6e207c707e459b23216))
+
 ## [2.23.0](https://github.com/SkyCrew-app/backend/compare/2.22.0...2.23.0) (2026-10-21)
 
 
