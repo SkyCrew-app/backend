@@ -41,6 +41,7 @@ export class InvoicesService {
           invoice_number: await nextInvoiceNumber(
             manager,
             fields.invoice_date ? new Date(fields.invoice_date) : new Date(),
+            user_id,
           ),
         }),
       ),

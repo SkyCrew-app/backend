@@ -125,7 +125,11 @@ export class PaymentsService {
     const invoiceDate = new Date();
     const invoice = await manager.save(Invoice, {
       user: { id: charge.userId },
-      invoice_number: await nextInvoiceNumber(manager, invoiceDate),
+      invoice_number: await nextInvoiceNumber(
+        manager,
+        invoiceDate,
+        charge.userId,
+      ),
       invoice_date: invoiceDate,
       amount,
       payment_status: 'completed',
@@ -495,7 +499,11 @@ export class PaymentsService {
       };
       const invoice = await manager.save(Invoice, {
         user: { id: payment.user.id },
-        invoice_number: await nextInvoiceNumber(manager, invoiceDate),
+        invoice_number: await nextInvoiceNumber(
+          manager,
+          invoiceDate,
+          payment.user.id,
+        ),
         invoice_date: invoiceDate,
         amount: payment.amount,
         payment_status: 'completed',
