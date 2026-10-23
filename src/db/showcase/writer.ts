@@ -13,7 +13,7 @@ import {
   DraftPayment,
   ROLE_OF,
 } from './model';
-import { DraftExpense } from './activity';
+import { DraftExpense, DraftIncident, DraftMaintenance } from './activity';
 import { performanceSource, DEMO_DATA_WARNING, FleetAircraft } from './fleet';
 import { BASE } from './content';
 import {
@@ -136,10 +136,7 @@ export const writeShowcase = async (
   };
   // Members without a presentation account cannot sign in: their hash is of
   // a secret nobody keeps.
-  const lockedHash = await bcrypt.hash(
-    randomBytes(32).toString('hex'),
-    BCRYPT_ROUNDS,
-  );
+  const lockedHash = await unusableHash();
   const credentials: Credential[] = [];
   const memberRows: Partial<User>[] = [];
   for (const member of plan.members) {
@@ -154,30 +151,14 @@ export const writeShowcase = async (
         password: clear,
       });
     }
-    memberRows.push({
-      first_name: member.first_name,
-      last_name: member.last_name,
-      email: member.email,
-      password,
-      is2FAEnabled: false,
-      isEmailConfirmed: true,
-      is_active: true,
-      phone_number: member.phone,
-      address: member.address,
-      date_of_birth: member.birth,
-      total_flight_hours: round2(member.priorHours + member.closedHours),
-      user_account_balance: member.balanceCents / 100,
-      email_notifications_enabled: true,
-      sms_notifications_enabled: false,
-      newsletter_subscribed: rng.chance(0.7),
-      language: 'fr',
-      speed_unit: 'kt',
-      distance_unit: 'nm',
-      timezone: 'Europe/Paris',
-      preferred_aerodrome: BASE.icao,
-      role: { id: roleId(ROLE_OF[member.kind]) } as Role,
-      dashboard_widgets: dashboardWidgets,
-    });
+    memberRows.push(
+      memberRow(
+        member,
+        password,
+        roleId(ROLE_OF[member.kind]),
+        rng.chance(0.7),
+      ),
+    );
   }
   const memberIds = await tracker.insert(User, memberRows);
   plan.members.forEach((m, i) => (m.id = memberIds[i]));
@@ -266,19 +247,9 @@ export const writeShowcase = async (
     })),
   );
 
-  await tracker.insert(
-    Maintenance,
-    plan.maintenances.map((m) => ({
-      aircraft: { id: aircraftId(m.aircraft) } as Aircraft,
-      technician: ref(m.technician),
-      start_date: m.start,
-      end_date: m.endDate,
-      status: m.status,
-      maintenance_type: m.type,
-      description: m.description,
-      parts_changed: m.parts,
-      maintenance_cost: m.cost,
-    })),
+  await writeMaintenances(
+    { manager, tracker, rng, aircraftId },
+    plan.maintenances,
   );
 
   // ---- Bookings, their flights and the courses ----
@@ -290,28 +261,7 @@ export const writeShowcase = async (
   await writeCourses(ctx, plan.courses);
 
   // ---- Incidents ----
-  const incidentIds = await tracker.insert(
-    Incident,
-    plan.incidents.map((x) => ({
-      aircraft: { id: aircraftId(x.aircraft) } as Aircraft,
-      flight: x.booking.flight?.id
-        ? ({ id: x.booking.flight.id } as Flight)
-        : null,
-      user: ref(x.author),
-      incident_date: x.date,
-      description: x.description,
-      damage_report: x.damage,
-      corrective_actions: x.actions,
-      severity_level: x.severity,
-      status: x.status,
-      priority: x.priority,
-      category: x.category,
-      resolution_note: x.resolutionNote,
-      resolved_at: x.resolvedAt,
-      resolved_by: ref(x.resolvedBy),
-    })),
-  );
-  plan.incidents.forEach((x, i) => (x.id = incidentIds[i]));
+  await writeIncidents(ctx, plan.incidents);
 
   // ---- Money: invoices, then the lines of the accounts ----
   await writeMoney(ctx, plan.invoices, plan.payments);
@@ -601,6 +551,40 @@ export const writeShowcase = async (
 export const memberRef = (member: DraftMember | null | undefined) =>
   member ? ({ id: member.id } as User) : null;
 
+// The hash of a secret nobody keeps: the member cannot sign in.
+export const unusableHash = (): Promise<string> =>
+  bcrypt.hash(randomBytes(32).toString('hex'), BCRYPT_ROUNDS);
+
+export const memberRow = (
+  member: DraftMember,
+  passwordHash: string,
+  roleId: number,
+  newsletter: boolean,
+): Partial<User> => ({
+  first_name: member.first_name,
+  last_name: member.last_name,
+  email: member.email,
+  password: passwordHash,
+  is2FAEnabled: false,
+  isEmailConfirmed: true,
+  is_active: true,
+  phone_number: member.phone,
+  address: member.address,
+  date_of_birth: member.birth,
+  total_flight_hours: round2(member.priorHours + member.closedHours),
+  user_account_balance: member.balanceCents / 100,
+  email_notifications_enabled: true,
+  sms_notifications_enabled: false,
+  newsletter_subscribed: newsletter,
+  language: 'fr',
+  speed_unit: 'kt',
+  distance_unit: 'nm',
+  timezone: 'Europe/Paris',
+  preferred_aerodrome: BASE.icao,
+  role: { id: roleId } as Role,
+  dashboard_widgets: dashboardWidgets,
+});
+
 // What the writing steps share.
 export interface WriteContext {
   manager: EntityManager;
@@ -818,6 +802,56 @@ export const writeChecklists = async (
       };
     }) as never,
   );
+};
+
+export const writeMaintenances = async (
+  ctx: WriteContext,
+  maintenances: DraftMaintenance[],
+): Promise<void> => {
+  const ids = await ctx.tracker.insert(
+    Maintenance,
+    maintenances.map((m) => ({
+      aircraft: { id: ctx.aircraftId(m.aircraft) } as Aircraft,
+      technician: memberRef(m.technician),
+      start_date: m.start,
+      end_date: m.endDate,
+      status: m.status,
+      maintenance_type: m.type,
+      description: m.description,
+      parts_changed: m.parts,
+      maintenance_cost: m.cost,
+    })),
+  );
+  maintenances.forEach((m, i) => (m.id = ids[i]));
+};
+
+// Incidents, on the flight they happened on (written before).
+export const writeIncidents = async (
+  ctx: WriteContext,
+  incidents: DraftIncident[],
+): Promise<void> => {
+  const ids = await ctx.tracker.insert(
+    Incident,
+    incidents.map((x) => ({
+      aircraft: { id: ctx.aircraftId(x.aircraft) } as Aircraft,
+      flight: x.booking.flight?.id
+        ? ({ id: x.booking.flight.id } as Flight)
+        : null,
+      user: memberRef(x.author),
+      incident_date: x.date,
+      description: x.description,
+      damage_report: x.damage,
+      corrective_actions: x.actions,
+      severity_level: x.severity,
+      status: x.status,
+      priority: x.priority,
+      category: x.category,
+      resolution_note: x.resolutionNote,
+      resolved_at: x.resolvedAt,
+      resolved_by: memberRef(x.resolvedBy),
+    })),
+  );
+  incidents.forEach((x, i) => (x.id = ids[i]));
 };
 
 export const writeExpenses = async (

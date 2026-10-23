@@ -8,7 +8,8 @@ import { DAY } from './calendar';
 import { buildFleet, FleetAircraft } from './fleet';
 import { HISTORY_DAYS, ShowcaseSettings } from './build';
 import { DraftMaintenance } from './activity';
-import { DESTINATIONS, LESSONS } from './content';
+import { DESTINATIONS, LESSONS, SHOWCASE_EMAIL_DOMAIN } from './content';
+import { instructorFor } from './roster';
 import { DraftBooking, DraftCourse, DraftMember, MemberKind } from './model';
 import { Window } from './schedule';
 import { ChecklistsByModel } from './writer';
@@ -45,8 +46,10 @@ export interface ShowcaseWorld {
   fleet: ShowcaseAircraft[];
   // Every maintenance of the showcase's aircraft, as periods.
   maintenance: Map<string, Window[]>;
-  // The showcase's maintenances still in progress.
-  inProgress: DraftMaintenance[];
+  // The showcase's own maintenances (cancelled ones aside), oldest first.
+  visits: DraftMaintenance[];
+  // The showcase's incidents not resolved yet.
+  openIncidents: OpenIncident[];
   // The showcase's bookings (confirmed), with their flight and course.
   bookings: DraftBooking[];
   // Bookings someone else has flown or planned a flight on: left alone.
@@ -59,6 +62,23 @@ export interface ShowcaseWorld {
   articles: { id: number; title: string }[];
   checklists: ChecklistsByModel;
   treasurer: DraftMember;
+  // Students who joined after the showcase was made (by refreshes).
+  newcomers: number;
+  // The hash the members without a presentation account share: a secret
+  // nobody keeps.
+  lockedHash: string | null;
+  // The e-mails taken at the showcase's domain (lower case), whoever has
+  // them.
+  emails: Set<string>;
+}
+
+// An incident of the showcase still open or being dealt with.
+export interface OpenIncident {
+  id: number;
+  aircraft: ShowcaseAircraft;
+  date: Date;
+  description: string;
+  status: 'Ouvert' | 'En cours';
 }
 
 export const expenseKey = (
@@ -131,7 +151,7 @@ const loadMembers = async (
   manager: EntityManager,
   ids: Ids,
   since: Date,
-): Promise<DraftMember[]> => {
+): Promise<{ members: DraftMember[]; lockedHash: string | null }> => {
   const users: Record<string, unknown>[] = await manager.query(
     `SELECT u."id", u."first_name", u."last_name", u."email", u."password",
             u."total_flight_hours", u."user_account_balance", r."role_name",
@@ -151,6 +171,9 @@ const loadMembers = async (
     [ids.of('instruction_courses')],
   );
   const studentIds = new Set(students.map((s) => Number(s.id)));
+  // Every pilot of the showcase holds a licence: one without is a student
+  // who has just joined.
+  const licensed = new Set(licences.map((l) => Number(l.userId)));
   // Members without a presentation account share one password hash.
   const hashes = new Map<string, number>();
   for (const u of users) {
@@ -159,11 +182,12 @@ const loadMembers = async (
   }
   const locked = [...hashes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 
-  return users.map((u) => {
+  const members = users.map((u) => {
     const id = Number(u.id);
     const role = String(u.role_name ?? '');
     const kind: MemberKind =
-      KIND_OF_ROLE[role] ?? (studentIds.has(id) ? 'student' : 'pilot');
+      KIND_OF_ROLE[role] ??
+      (studentIds.has(id) || !licensed.has(id) ? 'student' : 'pilot');
     const hours = Number(u.total_flight_hours ?? 0);
     const lastLine = dateOrNull(u.last_line);
     const member: DraftMember = {
@@ -212,6 +236,7 @@ const loadMembers = async (
       }));
     return member;
   });
+  return { members, lockedHash: locked ?? null };
 };
 
 const loadFleet = async (
@@ -258,7 +283,10 @@ const loadMaintenances = async (manager: EntityManager, lookup: Lookup) => {
     [fleetIds],
   );
   const maintenance = new Map<string, Window[]>();
-  const inProgress: DraftMaintenance[] = [];
+  const visits: DraftMaintenance[] = [];
+  const someTechnician = [...memberById.values()].find(
+    (m) => m.kind === 'technician',
+  );
   for (const row of maintenanceRows) {
     const aircraft = aircraftById.get(Number(row.aircraftId))!;
     const status = String(row.status ?? '').toUpperCase();
@@ -275,18 +303,19 @@ const loadMaintenances = async (manager: EntityManager, lookup: Lookup) => {
         ]);
       }
     }
-    const technician = memberById.get(Number(row.technicianId));
+    const technician =
+      memberById.get(Number(row.technicianId)) ?? someTechnician;
     if (
       ids.has('maintenance', row.id) &&
-      status === 'IN_PROGRESS' &&
+      ['COMPLETED', 'IN_PROGRESS', 'PLANNED'].includes(status) &&
       technician
     ) {
-      inProgress.push({
+      visits.push({
         aircraft,
         technician,
         start: date(row.start_date),
         endDate: date(row.end_date),
-        status: 'IN_PROGRESS',
+        status: status as DraftMaintenance['status'],
         type: row.maintenance_type as MaintenanceType,
         description: String(row.description ?? ''),
         parts: (row.parts_changed as string | null) ?? null,
@@ -296,7 +325,8 @@ const loadMaintenances = async (manager: EntityManager, lookup: Lookup) => {
     }
   }
 
-  return { maintenance, inProgress };
+  visits.sort((a, b) => a.start.getTime() - b.start.getTime());
+  return { maintenance, visits };
 };
 
 // The busy keys (aircraft, members of the showcase) of someone else's
@@ -513,6 +543,33 @@ const rateActivity = (
   }
 };
 
+// The showcase's incidents not resolved yet (those of aircraft it no longer
+// has aside).
+const loadOpenIncidents = async (
+  manager: EntityManager,
+  lookup: Lookup,
+): Promise<OpenIncident[]> => {
+  const rows: Record<string, unknown>[] = await manager.query(
+    `SELECT "id", "aircraftId", "incident_date", "description", "status"
+       FROM "incidents" WHERE "id" = ANY($1::int[]) AND "status" IN ('Ouvert', 'En cours')
+      ORDER BY "incident_date", "id"`,
+    [lookup.ids.of('incidents')],
+  );
+  return rows.flatMap((row) => {
+    const aircraft = lookup.aircraftById.get(Number(row.aircraftId));
+    if (!aircraft) return [];
+    return [
+      {
+        id: Number(row.id),
+        aircraft,
+        date: date(row.incident_date),
+        description: String(row.description ?? ''),
+        status: row.status as OpenIncident['status'],
+      },
+    ];
+  });
+};
+
 const loadChecklists = async (
   manager: EntityManager,
   ids: Ids,
@@ -543,6 +600,9 @@ export const loadWorld = async (
     since: Date;
     instruction: boolean;
     invoiceLastNumber: number;
+    // How many members `create` wrote; null when unknown (no student then
+    // joins: the count of those who did would be wrong).
+    createdMembers: number | null;
   },
 ): Promise<ShowcaseWorld> => {
   const { since } = input;
@@ -554,18 +614,29 @@ export const loadWorld = async (
     .getOne();
   if (!settings) throw new Error('The club settings are missing.');
 
-  const members = await loadMembers(manager, ids, since);
+  const { members, lockedHash } = await loadMembers(manager, ids, since);
   const fleet = await loadFleet(manager, ids);
   const lookup: Lookup = {
     ids,
     memberById: new Map(members.map((m) => [m.id!, m])),
     aircraftById: new Map(fleet.map((a) => [a.id, a])),
   };
-  const { maintenance, inProgress } = await loadMaintenances(manager, lookup);
+  const { maintenance, visits } = await loadMaintenances(manager, lookup);
   const { bookings, bookingById, busy } = await loadBookings(manager, lookup);
   const untouchable = await loadFlights(manager, lookup, bookingById);
   const courses = await loadCourses(manager, lookup, bookingById, busy);
+  // A student without any course yet goes to the instructor who has the
+  // fewest students, as when they joined.
+  for (const student of members.filter(
+    (m) => m.kind === 'student' && !m.instructor,
+  )) {
+    student.instructor = instructorFor(members);
+  }
   rateActivity(members, bookings, since);
+  const emails: { email: string }[] = await manager.query(
+    `SELECT lower("email") AS "email" FROM "users" WHERE lower("email") LIKE $1`,
+    [`%@${SHOWCASE_EMAIL_DOMAIN}`],
+  );
 
   const expenseRows: { category: string; sub: string | null; at: Date }[] =
     await manager.query(
@@ -596,7 +667,8 @@ export const loadWorld = async (
     members,
     fleet,
     maintenance,
-    inProgress,
+    visits,
+    openIncidents: await loadOpenIncidents(manager, lookup),
     bookings,
     untouchable,
     courses,
@@ -608,5 +680,11 @@ export const loadWorld = async (
     articles,
     checklists: await loadChecklists(manager, ids),
     treasurer: office[1] ?? office[0] ?? members[0],
+    newcomers:
+      input.createdMembers === null
+        ? Number.POSITIVE_INFINITY
+        : Math.max(0, members.length - input.createdMembers),
+    lockedHash,
+    emails: new Set(emails.map((e) => e.email)),
   };
 };

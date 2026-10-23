@@ -121,11 +121,17 @@ export const bookingProblem = (
   }
   if (instructor && instructor.key === pilot.key) return 'instructor is pilot';
   if (aircraft.advanced && !pilot.experienced && !instructor) return 'aircraft';
-  // The licence was active when booked: validity follows its dates.
+  // The licence was active when booked: validity follows its dates, those
+  // it had then when it was renewed since.
   const asBooked = (member: DraftMember) =>
     member.licences.map((licence) => ({
       license_type: licence.license_type,
-      expiration_date: licence.expiration_date,
+      expiration_date:
+        licence.renewedAt &&
+        licence.previousExpiry &&
+        booking.bookedAt.getTime() < licence.renewedAt.getTime()
+          ? licence.previousExpiry
+          : licence.expiration_date,
       is_valid: true,
       status: 'active',
     }));
