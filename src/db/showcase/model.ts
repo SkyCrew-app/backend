@@ -30,6 +30,10 @@ export interface DraftLicence {
   is_valid: boolean;
   // Reminders already sent (the step and the expiry date it was for).
   reminderDays: number | null;
+  // Renewed by a refresh: when, and the expiry it had before (a booking
+  // made before the renewal was checked against that one).
+  renewedAt?: Date;
+  previousExpiry?: Date;
   id?: number;
 }
 
