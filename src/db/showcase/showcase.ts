@@ -47,7 +47,8 @@ Usage:
       flown and closed (some cancelled), with their charges, invoices,
       hours and courses; three weeks of bookings ahead of now again, with
       flight plans and lessons; the club's expenses and notifications in
-      between. Running it again adds nothing. --dry-run says what it would
+      between; routine visits, a few incidents, licences renewed and new
+      students when others finish. Running it again adds nothing. --dry-run says what it would
       write and writes nothing.
   showcase remove [--dry-run] [--with-dependents]
       Deletes every row the showcase wrote, and nothing else. Refused when
@@ -325,7 +326,7 @@ export const refreshCommand = async (
     await source.transaction(async (tx) => {
       // One refresh at a time; the API's own showcase invoices wait.
       const [state] = await tx.query(
-        `SELECT "seed", "created_at", "refreshed_at", "invoice_last_number" FROM "showcase_state" WHERE "id" = 1 FOR UPDATE`,
+        `SELECT "seed", "created_at", "refreshed_at", "invoice_last_number", "summary"->>'members' AS "created_members" FROM "showcase_state" WHERE "id" = 1 FOR UPDATE`,
       );
       if (!state) return;
       const since = new Date(state.refreshed_at ?? state.created_at);
@@ -339,6 +340,8 @@ export const refreshCommand = async (
         since,
         instruction,
         invoiceLastNumber: Number(state.invoice_last_number),
+        createdMembers:
+          state.created_members == null ? null : Number(state.created_members),
       });
       const plan = planRefresh(world, now);
       const problems = refreshProblems(world, plan);
@@ -365,6 +368,9 @@ export const refreshCommand = async (
   );
   log(
     `  ${summary.bookings} new bookings (${summary.upcomingBookings} upcoming), ${summary.cancelledBookings} cancelled, ${summary.flightsFlown} flown and ${summary.flightsClosed} closed (${summary.hoursClosed} h), ${summary.newCourses} new courses, ${summary.coursesSettled} courses settled, ${summary.payments} account lines, ${summary.invoices} invoices, ${summary.expenses} expenses, ${summary.notifications} notifications, ${summary.maintenancesCompleted} maintenance(s) completed, ${summary.flightPlans} flight plan(s).`,
+  );
+  log(
+    `  ${summary.maintenancesPlanned} routine visit(s), ${summary.incidents} new incident(s), ${summary.incidentsResolved} resolved, ${summary.licencesRenewed} licence(s) renewed, ${summary.licencesLapsed} lapsed, ${summary.newStudents} new student(s).`,
   );
   const rows = Object.values(counts).reduce((a, b) => a + b, 0);
   log(

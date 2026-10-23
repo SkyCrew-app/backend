@@ -74,7 +74,16 @@ const worldFromPlan = (plan: ShowcasePlan): ShowcaseWorld => {
     members: plan.members,
     fleet: plan.fleet as ShowcaseWorld['fleet'],
     maintenance: plan.maintenance,
-    inProgress: plan.maintenances.filter((m) => m.status === 'IN_PROGRESS'),
+    visits: plan.maintenances,
+    openIncidents: plan.incidents
+      .filter((x) => x.status !== 'Résolu')
+      .map((x) => ({
+        id: next(),
+        aircraft: x.aircraft as ShowcaseWorld['fleet'][number],
+        date: x.date,
+        description: x.description,
+        status: x.status as 'Ouvert' | 'En cours',
+      })),
     bookings: active,
     untouchable: new Set(),
     courses: plan.courses,
@@ -86,6 +95,9 @@ const worldFromPlan = (plan: ShowcasePlan): ShowcaseWorld => {
     articles: ARTICLES.map((a) => ({ id: next(), title: a.title })),
     checklists: new Map(),
     treasurer: office[1] ?? office[0],
+    newcomers: 0,
+    lockedHash: null,
+    emails: new Set(plan.members.map((m) => m.email.toLowerCase())),
   };
 };
 
@@ -98,6 +110,10 @@ const applied = (world: ShowcaseWorld, plan: RefreshPlan): ShowcaseWorld => {
     if (!b.flight!.id) b.flight!.id = id++;
   }
   for (const c of plan.newCourses) c.id = id++;
+  for (const m of plan.newMembers) m.id = id++;
+  for (const m of plan.newMaintenances) m.id = id++;
+  for (const x of plan.newIncidents) x.id = id++;
+  const changed = new Map(plan.incidentChanges.map((c) => [c.incident, c]));
   // The flight plans written on the trips.
   for (const b of plan.trips) {
     b.flight = {
@@ -138,7 +154,29 @@ const applied = (world: ShowcaseWorld, plan: RefreshPlan): ShowcaseWorld => {
       ...plan.newBookings.filter((b) => !b.cancelledAt),
     ].sort((a, b) => a.start.getTime() - b.start.getTime()),
     courses: [...world.courses, ...plan.newCourses],
-    inProgress: world.inProgress.filter((m) => m.status === 'IN_PROGRESS'),
+    visits: [...world.visits, ...plan.newMaintenances].sort(
+      (a, b) => a.start.getTime() - b.start.getTime(),
+    ),
+    openIncidents: [
+      ...world.openIncidents.map((x) => ({
+        ...x,
+        status: changed.get(x)?.status ?? x.status,
+      })),
+      ...plan.newIncidents.map((x) => ({
+        id: x.id!,
+        aircraft: x.aircraft as ShowcaseWorld['fleet'][number],
+        date: x.date,
+        description: x.description,
+        status: x.status,
+      })),
+    ].filter((x): x is ShowcaseWorld['openIncidents'][number] =>
+      ['Ouvert', 'En cours'].includes(x.status),
+    ),
+    newcomers: world.newcomers + plan.newMembers.length,
+    emails: new Set([
+      ...world.emails,
+      ...plan.newMembers.map((m) => m.email.toLowerCase()),
+    ]),
     invoiceLastNumber: plan.invoiceLastNumber,
     expenseKeys: new Set([
       ...world.expenseKeys,
@@ -171,6 +209,12 @@ const added = (plan: RefreshPlan) =>
   plan.notifications.length +
   plan.expenses.length +
   plan.completedMaintenances.length +
+  plan.maintenanceChanges.length +
+  plan.newMaintenances.length +
+  plan.newIncidents.length +
+  plan.incidentChanges.length +
+  plan.licenceChanges.length +
+  plan.newMembers.length +
   plan.trips.length;
 
 describe('showcase refresh', () => {
@@ -269,7 +313,7 @@ describe('showcase refresh', () => {
     }
     for (const m of world.members) {
       expect(m.balanceCents).toBeGreaterThanOrEqual(0);
-      expect(m.balanceCents - balancesBefore.get(m)!).toBe(
+      expect(m.balanceCents - (balancesBefore.get(m) ?? 0)).toBe(
         balanceOfLines(plan.payments.filter((p) => p.member === m)),
       );
     }

@@ -5,7 +5,8 @@ import { INSTRUCTION_COUNTS_IN_INSTRUCTOR_TOTAL } from '../../modules/flights/fl
 import { CourseStatus } from '../../modules/instruction-courses/enum/course-status.enum';
 import { CourseCompetency } from '../../modules/instruction-courses/entity/course-competency.entity';
 import { CourseComment } from '../../modules/instruction-courses/entity/course-comment.entity';
-import { BASE, DESTINATIONS, LESSONS } from './content';
+import { BASE, DESTINATIONS, LESSONS, SHOWCASE_EMAIL_DOMAIN } from './content';
+import { maintenanceWindow } from '../../modules/maintenance/maintenance-rules';
 import { clubDays, ClubDay, DAY } from './calendar';
 import { feeDay, FUTURE_DAYS } from './build';
 import { randomFor } from './random';
@@ -20,10 +21,24 @@ import {
 import {
   bookingNotifications,
   DraftExpense,
+  DraftIncident,
   DraftMaintenance,
   NoticeParts,
   planExpenses,
 } from './activity';
+import {
+  bookingKey,
+  IncidentChange,
+  planIncidentsSince,
+  planVisits,
+  visitStatusAt,
+} from './refresh-fleet';
+import {
+  LicenceChange,
+  OPENING_TOP_UPS,
+  planLicences,
+  planNewcomers,
+} from './refresh-members';
 import { balanceSign } from '../../modules/payments/entity/payments.entity';
 import {
   instructorFeeCents,
@@ -47,7 +62,9 @@ import {
   DraftMember,
   DraftNotification,
   DraftPayment,
+  ROLE_OF,
 } from './model';
+import { User } from '../../modules/users/entity/users.entity';
 import { ARTICLES } from './library';
 import { expenseKey, ShowcaseAircraft, ShowcaseWorld } from './world';
 import { ShowcaseTracker } from './tracker';
@@ -56,8 +73,12 @@ import {
   courseCompetencyRows,
   tripBookings,
   WriteContext,
+  memberRow,
+  unusableHash,
   writeAdminActions,
   writeBookings,
+  writeIncidents,
+  writeMaintenances,
   writeChecklists,
   writeCourses,
   writeExpenses,
@@ -104,7 +125,18 @@ export interface RefreshPlan {
   adminActions: DraftAdminAction[];
   notifications: DraftNotification[];
   expenses: DraftExpense[];
+  // Maintenances of the showcase whose status moved on since (completed,
+  // or started).
+  maintenanceChanges: DraftMaintenance[];
+  // Those completed since, new ones included: their expense is written.
   completedMaintenances: DraftMaintenance[];
+  // Routine visits the hours or the calendar called for.
+  newMaintenances: DraftMaintenance[];
+  newIncidents: DraftIncident[];
+  incidentChanges: IncidentChange[];
+  licenceChanges: LicenceChange[];
+  // Students who joined since.
+  newMembers: DraftMember[];
   trips: DraftBooking[];
   articles: { id: number; createdAt: Date; eventDate: Date | null }[];
 }
@@ -205,10 +237,11 @@ const planLessons = (
   ctx: Context,
   plan: RefreshPlan,
   notices: Map<DraftBooking, NoticeParts>,
+  students: DraftMember[],
 ) => {
   const { world, now, scheduler, days } = ctx;
   const seed = world.seed;
-  for (const student of world.members.filter((m) => m.kind === 'student')) {
+  for (const student of students) {
     if (!student.instructor) continue;
     const own = world.courses
       .filter((c) => c.student === student)
@@ -305,11 +338,6 @@ const planDays = (ctx: Context) => {
     scheduler.fillDay(day, wanted);
   }
 };
-
-// A booking is known by its aircraft and start: the same from one refresh
-// to the next, whether it was written yet or not.
-const bookingKey = (b: DraftBooking) =>
-  `${b.aircraft.key}@${b.start.toISOString()}`;
 
 // When the pilot closes a flight: some time after landing, the most recent
 // flights not always yet (null). The same flight gets the same answer from
@@ -451,11 +479,22 @@ const planMoney = (ctx: Context, plan: RefreshPlan) => {
 
   for (const member of world.members) {
     const start = member.balanceCents;
+    let opening = 0;
+    let previous = member.bookableFrom!.getTime() - MINUTE;
+    // A new student opens their account on joining.
+    if (plan.newMembers.includes(member)) {
+      const at = new Date(member.joined.getTime() + 30 * MINUTE);
+      opening =
+        randomFor(world.seed, 'opening', member.key).pick(OPENING_TOP_UPS) *
+        100;
+      accounts.topUp(member, at, opening);
+      previous = at.getTime();
+    }
     let { balance } = accounts.post(
       member,
       events.get(member) ?? [],
-      start,
-      member.bookableFrom!.getTime() - MINUTE,
+      start + opening,
+      previous,
     );
     // Now and then a member tops up ahead of need: one chance per period.
     if (member.kind !== 'technician') {
@@ -485,6 +524,41 @@ const planMoney = (ctx: Context, plan: RefreshPlan) => {
   plan.notifications.push(...accounts.notifications);
 };
 
+// A planned maintenance starts on its first day, and is completed once its
+// last day is over.
+const advanceVisits = (world: ShowcaseWorld, plan: RefreshPlan, now: Date) => {
+  for (const m of world.visits) {
+    if (m.status === 'COMPLETED') continue;
+    const status = visitStatusAt(m, now);
+    if (status === m.status) continue;
+    m.status = status;
+    plan.maintenanceChanges.push(m);
+    if (status === 'COMPLETED') plan.completedMaintenances.push(m);
+  }
+};
+
+// The students' lessons; new students follow those who finished, and have
+// their first lessons.
+const planSchool = (
+  ctx: Context,
+  plan: RefreshPlan,
+  notices: Map<DraftBooking, NoticeParts>,
+) => {
+  const { world, now } = ctx;
+  planLessons(
+    ctx,
+    plan,
+    notices,
+    world.members.filter((m) => m.kind === 'student'),
+  );
+  plan.newMembers = planNewcomers(
+    world,
+    [...world.courses, ...plan.newCourses],
+    now,
+  );
+  planLessons(ctx, plan, notices, plan.newMembers);
+};
+
 export const planRefresh = (world: ShowcaseWorld, now: Date): RefreshPlan => {
   const since = world.since;
   const plan: RefreshPlan = {
@@ -505,19 +579,23 @@ export const planRefresh = (world: ShowcaseWorld, now: Date): RefreshPlan => {
     adminActions: [],
     notifications: [],
     expenses: [],
+    maintenanceChanges: [],
     completedMaintenances: [],
+    newMaintenances: [],
+    newIncidents: [],
+    incidentChanges: [],
+    licenceChanges: [],
+    newMembers: [],
     trips: [],
     articles: [],
   };
   if (now.getTime() <= since.getTime()) return plan;
 
-  // A maintenance whose last day is over is completed.
-  for (const m of world.inProgress) {
-    if (m.endDate.getTime() + DAY <= now.getTime()) {
-      m.status = 'COMPLETED';
-      plan.completedMaintenances.push(m);
-    }
-  }
+  advanceVisits(world, plan, now);
+
+  // Licences renewed (or let lapse) before anything is booked.
+  const licences = planLicences(world, now);
+  plan.licenceChanges = licences.changes;
 
   const agenda = new Agenda();
   for (const b of world.bookings) {
@@ -556,12 +634,28 @@ export const planRefresh = (world: ShowcaseWorld, now: Date): RefreshPlan => {
   const notices = new Map<DraftBooking, NoticeParts>();
 
   if (days.length > 0) {
-    if (world.instruction) planLessons(ctx, plan, notices);
+    if (world.instruction) planSchool(ctx, plan, notices);
     planTrips(ctx);
     planDays(ctx);
   }
   plan.newBookings = scheduler.bookings;
   settleBookings(ctx, plan);
+
+  // The routine visits, on days the aircraft is not booked; those over are
+  // completed (their expense follows).
+  plan.newMaintenances = planVisits(
+    world,
+    [...world.bookings, ...plan.newBookings],
+    now,
+    clubDayStart(now, FUTURE_DAYS),
+  );
+  plan.completedMaintenances.push(
+    ...plan.newMaintenances.filter((m) => m.status === 'COMPLETED'),
+  );
+  // Incidents on the flights flown, and those dealt with since.
+  const incidents = planIncidentsSince(world, plan.flown, now);
+  plan.newIncidents = incidents.incidents;
+  plan.incidentChanges = incidents.changes;
   for (const booking of plan.newBookings) {
     notices.set(booking, { booked: true, cancelled: true, course: true });
   }
@@ -571,6 +665,8 @@ export const planRefresh = (world: ShowcaseWorld, now: Date): RefreshPlan => {
     }
   }
   planMoney(ctx, plan);
+  plan.adminActions.push(...licences.adminActions, ...incidents.adminActions);
+  plan.notifications.push(...licences.notifications);
 
   // What the members were told about their bookings.
   const noticeRng = randomFor(world.seed, 'notices', minuteOf(now));
@@ -762,6 +858,80 @@ const writeFlown = async (ctx: WriteContext, plan: RefreshPlan) => {
   }
 };
 
+// New students: members of the school as the office creates them, who
+// cannot sign in (the hash the other members share, of a secret nobody
+// keeps). Their balance and hours follow from their lines and flights.
+const writeNewMembers = async (
+  ctx: WriteContext,
+  world: ShowcaseWorld,
+  members: DraftMember[],
+) => {
+  if (members.length === 0) return;
+  const { manager, tracker } = ctx;
+  const [role] = await manager.query(
+    `SELECT "id" FROM "roles" WHERE "role_name" = $1 ORDER BY "id" LIMIT 1`,
+    [ROLE_OF.student],
+  );
+  if (!role) throw new Error(`Showcase: role "${ROLE_OF.student}" is missing`);
+  const hash = world.lockedHash ?? (await unusableHash());
+  const ids = await tracker.insert(
+    User,
+    members.map((m) => ({
+      ...memberRow(m, hash, Number(role.id), ctx.rng.chance(0.7)),
+      total_flight_hours: 0,
+      user_account_balance: 0,
+    })),
+  );
+  members.forEach((m, i) => (m.id = ids[i]));
+};
+
+const writeLicences = async (
+  manager: EntityManager,
+  changes: LicenceChange[],
+) => {
+  for (const { licence, renewed } of changes) {
+    if (renewed) {
+      // Renewed: reminders start again for the new date.
+      await manager.query(
+        `UPDATE "licenses" SET "issue_date" = $2, "expiration_date" = $3, "status" = $4, "is_valid" = $5, "expiry_reminder_days" = NULL, "expiry_reminder_for" = NULL WHERE "id" = $1`,
+        [
+          licence.id,
+          licence.issue_date,
+          licence.expiration_date,
+          licence.status,
+          licence.is_valid,
+        ],
+      );
+    } else {
+      await manager.query(
+        `UPDATE "licenses" SET "status" = 'expired', "is_valid" = false WHERE "id" = $1`,
+        [licence.id],
+      );
+    }
+  }
+};
+
+const writeIncidentChanges = async (
+  manager: EntityManager,
+  world: ShowcaseWorld,
+  changes: IncidentChange[],
+) => {
+  const technician = world.members.find((m) => m.kind === 'technician');
+  for (const change of changes) {
+    const resolved = change.status === 'Résolu';
+    await manager.query(
+      `UPDATE "incidents" SET "status" = $2, "resolution_note" = $3, "resolved_at" = $4, "resolvedById" = $5 WHERE "id" = $1`,
+      [
+        change.incident.id,
+        change.status,
+        change.resolutionNote,
+        change.resolvedAt,
+        resolved ? (technician?.id ?? null) : null,
+      ],
+    );
+  }
+};
+
 export interface RefreshOutcome {
   counts: Record<string, number>;
   warnings: string[];
@@ -785,17 +955,22 @@ export const writeRefresh = async (
   };
   const warnings: string[] = [];
 
-  for (const m of plan.completedMaintenances) {
+  await writeNewMembers(ctx, world, plan.newMembers);
+  await writeLicences(manager, plan.licenceChanges);
+  for (const m of plan.maintenanceChanges) {
     await manager.query(
-      `UPDATE "maintenance" SET "status" = 'COMPLETED' WHERE "id" = $1`,
-      [m.id],
+      `UPDATE "maintenance" SET "status" = $2 WHERE "id" = $1`,
+      [m.id, m.status],
     );
   }
+  await writeMaintenances(ctx, plan.newMaintenances);
   await writeCancellations(manager, plan.cancelled);
   await writeBookings(ctx, plan.newBookings);
   await writeCourses(ctx, plan.newCourses);
   await writeChangedCourses(ctx, plan.changedCourses);
   await writeFlown(ctx, plan);
+  await writeIncidents(ctx, plan.newIncidents);
+  await writeIncidentChanges(manager, world, plan.incidentChanges);
   await writeMoney(ctx, plan.invoices, plan.payments);
   for (const [member, cents] of plan.balances) {
     await manager.query(
@@ -850,6 +1025,15 @@ export const refreshSummary = (plan: RefreshPlan) => {
     expenses: plan.expenses.length,
     notifications: plan.notifications.length,
     maintenancesCompleted: plan.completedMaintenances.length,
+    maintenancesPlanned: plan.newMaintenances.length,
+    incidents: plan.newIncidents.length,
+    incidentsResolved:
+      plan.incidentChanges.filter((c) => c.status === 'Résolu').length +
+      plan.newIncidents.filter((x) => x.status === 'Résolu').length,
+    licencesRenewed: plan.licenceChanges.filter((c) => c.renewed).length,
+    licencesLapsed: plan.licenceChanges.filter((c) => c.lapsed && !c.renewed)
+      .length,
+    newStudents: plan.newMembers.length,
     flightPlans: plan.trips.length,
   };
 };
@@ -983,6 +1167,109 @@ const moneyProblems = (world: ShowcaseWorld, plan: RefreshPlan, say: Say) => {
   }
 };
 
+// A routine visit holds its aircraft: no booking (of the showcase or of
+// someone else) nor another maintenance over it.
+const maintenanceProblems = (
+  world: ShowcaseWorld,
+  plan: RefreshPlan,
+  say: Say,
+) => {
+  const cancelled = new Set(plan.cancelled);
+  const bookings = [...world.bookings, ...plan.newBookings].filter(
+    (b) => !b.cancelledAt && !cancelled.has(b),
+  );
+  for (const visit of plan.newMaintenances) {
+    const window = maintenanceWindow({
+      start_date: visit.start,
+      end_date: visit.endDate,
+      status: visit.status,
+    })!;
+    const name = `maintenance ${visit.aircraft.registration} ${visit.start.toISOString()}`;
+    const over = (start: Date, end: Date) =>
+      start.getTime() < window.end.getTime() &&
+      window.start.getTime() < end.getTime();
+    if (
+      bookings.some(
+        (b) => b.aircraft.key === visit.aircraft.key && over(b.start, b.end),
+      )
+    ) {
+      say(`${name}: over a booking`);
+    }
+    if (
+      world.busy.some(
+        (s) =>
+          s.keys.includes(`aircraft:${visit.aircraft.key}`) &&
+          over(s.start, s.end),
+      )
+    ) {
+      say(`${name}: over a booking of someone else`);
+    }
+    const others = [...world.visits, ...plan.newMaintenances].filter(
+      (m) => m !== visit && m.aircraft.key === visit.aircraft.key,
+    );
+    if (
+      others.some((m) => over(m.start, new Date(m.endDate.getTime() + DAY)))
+    ) {
+      say(`${name}: over another maintenance`);
+    }
+    if (visit.start.getTime() <= plan.since.getTime()) {
+      say(`${name}: before the last refresh`);
+    }
+    if (visit.status !== visitStatusAt(visit, plan.now)) {
+      say(`${name}: status`);
+    }
+  }
+};
+
+// New students, renewed licences and new incidents as the API would have
+// them.
+const memberProblems = (world: ShowcaseWorld, plan: RefreshPlan, say: Say) => {
+  const emails = new Set<string>();
+  for (const member of plan.newMembers) {
+    const email = member.email.toLowerCase();
+    if (!email.endsWith(`@${SHOWCASE_EMAIL_DOMAIN}`)) {
+      say(`${member.key}: e-mail domain`);
+    }
+    if (world.emails.has(email) || emails.has(email)) {
+      say(`${member.key}: e-mail taken`);
+    }
+    emails.add(email);
+    if (member.kind !== 'student' || member.licences.length > 0) {
+      say(`${member.key}: not a student without licence`);
+    }
+    if (!member.instructor) say(`${member.key}: no instructor`);
+    if (outside(member.joined, plan)) {
+      say(`${member.key}: joined outside the refresh`);
+    }
+  }
+  for (const { licence, renewed } of plan.licenceChanges) {
+    const name = `licence ${licence.license_number}`;
+    if (
+      renewed &&
+      (licence.expiration_date.getTime() <= plan.now.getTime() ||
+        !licence.renewedAt ||
+        outside(licence.renewedAt, plan))
+    ) {
+      say(`${name}: renewal`);
+    }
+    if (
+      !renewed &&
+      (licence.status !== 'expired' ||
+        licence.expiration_date.getTime() > plan.now.getTime())
+    ) {
+      say(`${name}: lapse`);
+    }
+  }
+  for (const incident of plan.newIncidents) {
+    if (
+      !plan.flown.includes(incident.booking) ||
+      incident.date.getTime() > plan.now.getTime()
+    ) {
+      say(`incident ${incident.aircraft.registration}: flight`);
+    }
+  }
+};
+
 // Everything the API would refuse, looked for in a refresh. Empty when it
 // holds every rule; nothing is written otherwise.
 export const refreshProblems = (
@@ -996,5 +1283,7 @@ export const refreshProblems = (
   bookingProblems(world, plan, say);
   overlapProblems(world, plan, say);
   moneyProblems(world, plan, say);
+  maintenanceProblems(world, plan, say);
+  memberProblems(world, plan, say);
   return problems;
 };
