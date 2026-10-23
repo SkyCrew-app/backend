@@ -11,6 +11,16 @@
       {
         "include": "modules/flights/data/*.json",
         "watchAssets": true
+      },
+      {
+        "include": "modules/navplan/pdf/fonts/*",
+        "outDir": "dist",
+        "watchAssets": true
+      },
+      {
+        "include": "modules/navdata/data/*.{gz,sha256}",
+        "outDir": "dist",
+        "watchAssets": true
       }
     ],
     "deleteOutDir": true
