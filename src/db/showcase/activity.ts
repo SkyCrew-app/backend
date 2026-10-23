@@ -32,7 +32,7 @@ export interface DraftMaintenance {
   start: Date;
   // The last day of the work (the aircraft is held through it).
   endDate: Date;
-  status: 'COMPLETED' | 'IN_PROGRESS';
+  status: 'COMPLETED' | 'IN_PROGRESS' | 'PLANNED';
   type: MaintenanceType;
   description: string;
   parts: string | null;
@@ -40,7 +40,7 @@ export interface DraftMaintenance {
   id?: number;
 }
 
-const VISITS: [MaintenanceType, string, string | null, number][] = [
+export const VISITS: [MaintenanceType, string, string | null, number][] = [
   [
     MaintenanceType.INSPECTION,
     'Visite 50 heures : contrôle moteur, filtre et niveaux, essais au sol.',
@@ -77,6 +77,14 @@ const VISITS: [MaintenanceType, string, string | null, number][] = [
     null,
     240,
   ],
+];
+
+// The yearly visit, done with the 100-hour one.
+export const ANNUAL_VISIT: [MaintenanceType, string, string, number] = [
+  MaintenanceType.INSPECTION,
+  'Visite annuelle et 100 heures : inspection complète, remplacement des durites carburant, pesée de contrôle.',
+  'Durites carburant, bougies (8), huile moteur (6 L)',
+  2150,
 ];
 
 // The maintenances of the history (completed) and the one in progress. They
@@ -119,17 +127,17 @@ export const planMaintenances = (
       });
     }
   }
+  const [annualType, annualDescription, annualParts, annualCost] = ANNUAL_VISIT;
   result.push({
     aircraft: inMaintenance,
     technician,
     start: clubInstant(clubDayStart(now, -3), 8 * 60),
     endDate: clubDayStart(now, 4),
     status: 'IN_PROGRESS',
-    type: MaintenanceType.INSPECTION,
-    description:
-      'Visite annuelle et 100 heures : inspection complète, remplacement des durites carburant, pesée de contrôle.',
-    parts: 'Durites carburant, bougies (8), huile moteur (6 L)',
-    cost: 2150,
+    type: annualType,
+    description: annualDescription,
+    parts: annualParts,
+    cost: annualCost,
   });
   return result;
 };
@@ -178,6 +186,76 @@ export interface IncidentOutcome {
   adminActions: DraftAdminAction[];
   notifications: DraftNotification[];
 }
+
+// What happens now and then on a flight, as the pilot reports it, and what
+// the technician did about it. The last one is the small one still open in
+// a new showcase.
+export type IncidentStory = Omit<
+  DraftIncident,
+  | 'aircraft'
+  | 'booking'
+  | 'author'
+  | 'date'
+  | 'resolvedAt'
+  | 'resolvedBy'
+  | 'status'
+> & { resolutionNote: string };
+
+export const INCIDENT_STORIES: IncidentStory[] = [
+  {
+    description:
+      'Impact d’oiseau en courte finale, bord d’attaque de l’aile droite.',
+    damage: 'Légère déformation du bord d’attaque, pas de dommage structural.',
+    actions: 'Inspection par le technicien avant le vol suivant.',
+    severity: 'medium',
+    priority: 'medium',
+    category: 'other',
+    resolutionNote:
+      'Bord d’attaque contrôlé et redressé, avion remis en service.',
+  },
+  {
+    description:
+      'Perte de la radio COM1 pendant 5 minutes en vol, retour après réenclenchement du disjoncteur.',
+    damage: null,
+    actions: 'Passage sur COM2, vol poursuivi.',
+    severity: 'low',
+    priority: 'medium',
+    category: 'electrical',
+    resolutionNote:
+      'Connecteur du boîtier audio resserré, essais radio au sol satisfaisants.',
+  },
+  {
+    description:
+      'Crevaison du pneu gauche constatée au parking après l’atterrissage.',
+    damage: 'Pneu et chambre à air à remplacer.',
+    actions: 'Avion laissé au parking, technicien prévenu.',
+    severity: 'low',
+    priority: 'low',
+    category: 'mechanical',
+    resolutionNote: 'Pneu et chambre remplacés.',
+  },
+  {
+    description:
+      'Remise de gaz en finale : véhicule de l’aéroclub voisin engagé sur la piste sans autorisation.',
+    damage: null,
+    actions: 'Compte rendu transmis au gestionnaire de la plateforme.',
+    severity: 'medium',
+    priority: 'high',
+    category: 'human_error',
+    resolutionNote:
+      'Rappel des consignes de circulation côté piste fait aux usagers.',
+  },
+  {
+    description:
+      'Rail de réglage du siège avant droit dur à manœuvrer, le siège se bloque mal.',
+    damage: null,
+    actions: 'Siège vérifié verrouillé avant le vol.',
+    severity: 'low',
+    priority: 'low',
+    category: 'mechanical',
+    resolutionNote: 'Rail du siège nettoyé et graissé, verrouillage contrôlé.',
+  },
+];
 
 // The incidents of the history, and the one that grounds `grounded`: the
 // last flight made on it. Bookings of that aircraft after the grounding are
@@ -322,61 +400,7 @@ export const planIncidents = (
     }
   }
 
-  const resolvedStories: Omit<
-    DraftIncident,
-    | 'aircraft'
-    | 'booking'
-    | 'author'
-    | 'date'
-    | 'resolvedAt'
-    | 'resolvedBy'
-    | 'status'
-  >[] = [
-    {
-      description:
-        'Impact d’oiseau en courte finale, bord d’attaque de l’aile droite.',
-      damage:
-        'Légère déformation du bord d’attaque, pas de dommage structural.',
-      actions: 'Inspection par le technicien avant le vol suivant.',
-      severity: 'medium',
-      priority: 'medium',
-      category: 'other',
-      resolutionNote:
-        'Bord d’attaque contrôlé et redressé, avion remis en service.',
-    },
-    {
-      description:
-        'Perte de la radio COM1 pendant 5 minutes en vol, retour après réenclenchement du disjoncteur.',
-      damage: null,
-      actions: 'Passage sur COM2, vol poursuivi.',
-      severity: 'low',
-      priority: 'medium',
-      category: 'electrical',
-      resolutionNote:
-        'Connecteur du boîtier audio resserré, essais radio au sol satisfaisants.',
-    },
-    {
-      description:
-        'Crevaison du pneu gauche constatée au parking après l’atterrissage.',
-      damage: 'Pneu et chambre à air à remplacer.',
-      actions: 'Avion laissé au parking, technicien prévenu.',
-      severity: 'low',
-      priority: 'low',
-      category: 'mechanical',
-      resolutionNote: 'Pneu et chambre remplacés.',
-    },
-    {
-      description:
-        'Remise de gaz en finale : véhicule de l’aéroclub voisin engagé sur la piste sans autorisation.',
-      damage: null,
-      actions: 'Compte rendu transmis au gestionnaire de la plateforme.',
-      severity: 'medium',
-      priority: 'high',
-      category: 'human_error',
-      resolutionNote:
-        'Rappel des consignes de circulation côté piste fait aux usagers.',
-    },
-  ];
+  const resolvedStories = INCIDENT_STORIES.slice(0, 4);
   const candidates = rng.shuffle(
     flown.filter(
       (b) =>
@@ -428,14 +452,8 @@ export const planIncidents = (
       booking: open,
       author: open.pilot,
       date: open.flight!.arrival,
-      description:
-        'Rail de réglage du siège avant droit dur à manœuvrer, le siège se bloque mal.',
-      damage: null,
-      actions: 'Siège vérifié verrouillé avant le vol.',
-      severity: 'low',
+      ...INCIDENT_STORIES[4],
       status: 'Ouvert',
-      priority: 'low',
-      category: 'mechanical',
       resolutionNote: null,
       resolvedAt: null,
       resolvedBy: null,

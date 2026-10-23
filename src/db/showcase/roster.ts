@@ -256,3 +256,60 @@ export const buildRoster = (
   members.find((m) => m.kind === 'technician')!.login = 'technician';
   return members;
 };
+
+// A student who joins the school after the showcase was made (a refresh):
+// no licence yet, no flight hours, an e-mail no member has.
+export const buildNewcomer = (
+  rng: Random,
+  key: string,
+  joined: Date,
+  takenEmails: Set<string>,
+): DraftMember => {
+  let first = '';
+  let last = '';
+  let email = '';
+  for (let attempt = 0; !email || takenEmails.has(email); attempt++) {
+    const female = rng.chance(0.28);
+    first = rng.pick(female ? FIRST_NAMES_F : FIRST_NAMES_M);
+    last = rng.pick(LAST_NAMES);
+    const suffix = attempt >= 20 ? String(rng.int(2, 99)) : '';
+    email = `${ascii(first)}.${ascii(last)}${suffix}@${SHOWCASE_EMAIL_DOMAIN}`;
+  }
+  const [town, postcode] = rng.pick(TOWNS);
+  return {
+    key,
+    kind: 'student',
+    first_name: first,
+    last_name: last,
+    email,
+    phone: `+33 6 39 98 ${String(rng.int(0, 99)).padStart(2, '0')} ${String(rng.int(0, 99)).padStart(2, '0')}`,
+    address: `${rng.int(1, 140)} ${rng.pick(STREETS)}, ${postcode} ${town}`,
+    birth: yearsAgo(joined, rng.int(16, 48), rng),
+    joined,
+    priorHours: 0,
+    experienced: false,
+    activity: 0,
+    licences: [],
+    balanceCents: 0,
+    closedHours: 0,
+  };
+};
+
+// The instructor who takes a new student: the one with the fewest students
+// still in training (the first of them on a tie).
+export const instructorFor = (
+  members: DraftMember[],
+  inTraining: (student: DraftMember) => boolean = () => true,
+): DraftMember | undefined => {
+  const instructors = members.filter((m) => m.kind === 'instructor');
+  const load = (instructor: DraftMember) =>
+    members.filter(
+      (m) =>
+        m.kind === 'student' && m.instructor === instructor && inTraining(m),
+    ).length;
+  let best: DraftMember | undefined;
+  for (const instructor of instructors) {
+    if (!best || load(instructor) < load(best)) best = instructor;
+  }
+  return best;
+};
