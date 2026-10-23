@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.23.2](https://github.com/SkyCrew-app/backend/compare/2.23.1...2.23.2) (2026-10-23)
+
+
+### Bug Fixes
+
+* **build:** :wrench: copy the PDF fonts and navigation data in watch mode too ([#242](https://github.com/SkyCrew-app/backend/issues/242)) ([dfe97d9](https://github.com/SkyCrew-app/backend/commit/dfe97d90943caa32111deca154633102e8e52d91))
+* **demo:** :bug: keep maintenance, incidents, licences and students alive in the showcase ([#241](https://github.com/SkyCrew-app/backend/issues/241)) ([93a04c3](https://github.com/SkyCrew-app/backend/commit/93a04c34a7f9410205dcafb6f38c76f2c0ddfa09))
+
 ## [2.23.1](https://github.com/SkyCrew-app/backend/compare/2.23.0...2.23.1) (2026-10-21)
 
 
